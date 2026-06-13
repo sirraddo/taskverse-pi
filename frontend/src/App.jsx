@@ -64,6 +64,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(user)]);
 
+  // Poll /api/me every 30s while logged in — notifies on new payouts
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(async () => {
+      try {
+        const me = await fetchMe();
+        const prevApproved = user.approvedCount ?? 0;
+        if (me.approvedCount > prevApproved) {
+          const earned = (me.approvedCount - prevApproved);
+          triggerNotification(
+            'Payout received! ' + earned + ' task' + (earned > 1 ? 's' : '') + ' approved. Balance: ' + Number(me.balance).toFixed(2) + ' pi'
+          );
+        }
+        setUser(prev => ({ ...prev, ...me }));
+      } catch (_) { /* silent — don't interrupt UX on network hiccup */ }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [Boolean(user)]);
+
   const handleSubmitted = (result) => {
     setView('feed');
     if (result.status === 'auto_approved') triggerNotification(t.alertAutoApproved);
