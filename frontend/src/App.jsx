@@ -11,6 +11,11 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import Leaderboard from './Leaderboard';
 import PayoutHistory from './PayoutHistory';
+import HowItWorks from './HowItWorks';
+import PrivacyPolicy from './PrivacyPolicy';
+import TermsOfService from './TermsOfService';
+import Leaderboard from './Leaderboard';
+import PayoutHistory from './PayoutHistory';
 
 /**
  * PRODUCTION App.jsx
@@ -38,6 +43,9 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [tasks, setTasks] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [screen, setScreen] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const [screen, setScreen] = useState(null); // 'how'|'privacy'|'terms'|'leaderboard'|'history'
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
