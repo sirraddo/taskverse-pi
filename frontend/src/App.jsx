@@ -5,62 +5,65 @@ import PiDisputes from './PiDisputes';
 import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
-import { fetchTasks, fetchMe } from './piClient';
+import { fetchTasks, fetchMe, initPi } from './piClient';
 
 /**
  * PRODUCTION App.jsx
  *
  * Architectural rules applied throughout:
- *  - The server is the only source of truth. No local balance math,
- *    no local queue mutation. Every action = API call → refetch.
- *  - The admin button only renders for user.isAdmin (server-verified);
- *    the backend enforces it regardless, the UI just stops advertising it.
- *  - Auto-review verdicts from the server drive the notifications.
+ * - The server is the only source of truth. No local balance math,
+ *   no local queue mutation. Every action = API call -> refetch.
+ * - The admin button only renders for user.isAdmin (server-verified);
+ *   the backend enforces it regardless, the UI just stops advertising it.
+ * - Auto-review verdicts from the server drive the notifications.
  */
 
 const translations = {
-  en: { title: "TaskVerse Pi", wallet: "Wallet", availableGigs: "Available Micro-Gigs", profile: "👤 Profile", postTask: "+ Post Task", openTask: "Open Task", full: "Full", adminBtn: "⚙️ Open Moderation Queue", alertSubmit: "✓ Proof sent to TaskVerse review system!", alertAutoApproved: "⚡ Auto-approved! Payout queued to your wallet.", alertRejected: "✕ Submission failed quality check:", alertPublish: "🚀 Gig listed on global feed!", loading: "Loading gigs…", empty: "No open gigs right now — check back soon or post one!", slotsLeft: "slots left" },
-  es: { title: "TaskVerse Pi", wallet: "Billetera", availableGigs: "Microtareas Disponibles", profile: "👤 Perfil", postTask: "+ Publicar Tarea", openTask: "Abrir Tarea", full: "Completo", adminBtn: "⚙️ Abrir Cola de Moderación", alertSubmit: "✓ ¡Prueba enviada al sistema de revisión!", alertAutoApproved: "⚡ ¡Aprobado automáticamente! Pago en camino.", alertRejected: "✕ El envío no pasó el control de calidad:", alertPublish: "🚀 ¡Tarea publicada!", loading: "Cargando tareas…", empty: "No hay tareas abiertas ahora — ¡vuelve pronto o publica una!", slotsLeft: "cupos" },
-  vi: { title: "TaskVerse Pi", wallet: "Ví điện tử", availableGigs: "Việc Nhỏ Có Sẵn", profile: "👤 Hồ sơ", postTask: "+ Đăng Việc", openTask: "Mở Việc", full: "Đã đủ", adminBtn: "⚙️ Mở Hàng Đợi Kiểm Duyệt", alertSubmit: "✓ Minh chứng đã gửi đến hệ thống duyệt!", alertAutoApproved: "⚡ Tự động duyệt! Thanh toán đang được gửi.", alertRejected: "✕ Bài nộp không đạt kiểm tra chất lượng:", alertPublish: "🚀 Việc nhỏ đã được đăng!", loading: "Đang tải việc…", empty: "Chưa có việc nào — quay lại sau hoặc đăng một việc!", slotsLeft: "chỗ trống" }
+  en: { title: "TaskVerse Pi", wallet: "Wallet", availableGigs: "Available Micro-Gigs", profile: "Profile", postTask: "+ Post Task", openTask: "Open Task", full: "Full", adminBtn: "Open Moderation Queue", alertSubmit: "Proof sent to TaskVerse review system!", alertAutoApproved: "Auto-approved! Payout queued to your wallet.", alertRejected: "Submission failed quality check:", alertPublish: "Gig listed on global feed!", loading: "Loading gigs...", empty: "No open gigs right now - check back soon or post one!", slotsLeft: "slots left" },
+  es: { title: "TaskVerse Pi", wallet: "Billetera", availableGigs: "Microtareas Disponibles", profile: "Perfil", postTask: "+ Publicar Tarea", openTask: "Abrir Tarea", full: "Completo", adminBtn: "Abrir Cola de Moderacion", alertSubmit: "Prueba enviada al sistema de revision!", alertAutoApproved: "Aprobado automaticamente! Pago en camino.", alertRejected: "El envio no paso el control de calidad:", alertPublish: "Tarea publicada!", loading: "Cargando tareas...", empty: "No hay tareas abiertas ahora - vuelve pronto o publica una!", slotsLeft: "cupos" },
+  vi: { title: "TaskVerse Pi", wallet: "Vi dien tu", availableGigs: "Viec Nho Co San", profile: "Ho so", postTask: "+ Dang Viec", openTask: "Mo Viec", full: "Da du", adminBtn: "Mo Hang Doi Kiem Duyet", alertSubmit: "Minh chung da gui den he thong duyet!", alertAutoApproved: "Tu dong duyet! Thanh toan dang duoc gui.", alertRejected: "Bai nop khong dat kiem tra chat luong:", alertPublish: "Viec nho da duoc dang!", loading: "Dang tai viec...", empty: "Chua co viec nao - quay lai sau hoac dang mot viec!", slotsLeft: "cho trong" }
 };
 
 export default function App() {
   const [lang, setLang] = useState('en');
   const t = translations[lang];
 
-  const [user, setUser] = useState(null);          // from /api/auth/verify
+  const [user, setUser] = useState(null);
   const [view, setView] = useState('feed');
   const [selectedTask, setSelectedTask] = useState(null);
-  const [tasks, setTasks] = useState(null);        // null = loading
+  const [tasks, setTasks] = useState(null);
   const [notification, setNotification] = useState(null);
+
+  // Initialise the Pi SDK as soon as the page loads so it is ready
+  // before the user taps "Authenticate with Pi Browser"
+  useEffect(() => {
+    try { initPi(); } catch (_) { /* not running inside Pi Browser - ignore */ }
+  }, []);
 
   const triggerNotification = useCallback((msg) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  /* Single refresh path: feed + my profile (balance, KYC, history) */
   const refresh = useCallback(async () => {
     try {
       const [feed, me] = await Promise.all([fetchTasks(), fetchMe()]);
       setTasks(feed);
       setUser((prev) => ({ ...prev, ...me }));
     } catch (err) {
-      triggerNotification(`⚠️ ${err.message}`);
+      triggerNotification('Warning: ' + err.message);
     }
   }, [triggerNotification]);
 
   useEffect(() => {
     if (!user) return;
     refresh();
-    // Re-sync when the Pi Browser tab regains focus
     const onFocus = () => refresh();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(user)]);
 
-  /* Submission result comes from the server's auto-review engine */
   const handleSubmitted = (result) => {
     setView('feed');
     if (result.status === 'auto_approved') triggerNotification(t.alertAutoApproved);
@@ -69,7 +72,7 @@ export default function App() {
   };
 
   const handleSubmitRejected = (reasons) => {
-    triggerNotification(`${t.alertRejected} ${reasons?.[0] || ''}`);
+    triggerNotification(t.alertRejected + ' ' + (reasons?.[0] || ''));
   };
 
   if (!user) {
@@ -131,23 +134,20 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#4a5568', fontWeight: 'bold' }}>{t.profile}</button>
             <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ padding: '5px 10px', borderRadius: '20px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: 'bold', color: '#4a5568' }}>
-              <option value="en">🇺🇸 English</option>
-              <option value="es">🇪🇸 Español</option>
-              <option value="vi">🇻🇳 Tiếng Việt</option>
+              <option value="en">English</option>
+              <option value="es">Espanol</option>
+              <option value="vi">Tieng Viet</option>
             </select>
             <button onClick={() => setView('create')} style={{ backgroundColor: '#764ba2', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>{t.postTask}</button>
           </div>
 
           <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', position: 'relative' }}>
             <span style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.75rem', opacity: 0.9, backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-              👤 {user.username} {user.isKycVerified && '✓'}
+              {user.username} {user.isKycVerified && 'KYC'}
             </span>
             <h1 style={{ margin: '20px 0 5px 0', fontSize: '1.8rem' }}>{t.title}</h1>
-            {/* Balance is server truth from GET /api/me — never computed locally */}
-            <p style={{ fontSize: '1.1rem', margin: 0 }}>{t.wallet}: <strong>{Number(user.balance ?? 0).toFixed(2)} π</strong></p>
+            <p style={{ fontSize: '1.1rem', margin: 0 }}>{t.wallet}: <strong>{Number(user.balance ?? 0).toFixed(2)} pi</strong></p>
           </div>
-
-          {/* Ad slot #1 would go here — see README §5 (Pi Ad Network) */}
 
           <h2>{t.availableGigs}</h2>
 
@@ -161,7 +161,7 @@ export default function App() {
                 <div>
                   <h3 style={{ margin: '0 0 5px 0', fontSize: '1rem' }}>{task.title}</h3>
                   <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>
-                    Reward: {task.reward} π · {task.slotsLeft} {t.slotsLeft}
+                    Reward: {task.reward} pi - {task.slotsLeft} {t.slotsLeft}
                   </span>
                 </div>
                 <button
@@ -184,4 +184,4 @@ export default function App() {
       )}
     </div>
   );
-}
+        }
