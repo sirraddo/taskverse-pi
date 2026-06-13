@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes } from './piClient';
 
 /**
- * PRODUCTION VERSION — the queue lives on the server.
+ * PRODUCTION VERSION - the queue lives on the server.
  * Every action calls the API then refetches; nothing is mutated locally.
  * Shows the auto-review reason trail so you can audit why a submission
  * reached the manual queue, plus a live platform-revenue counter.
@@ -20,7 +20,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       setRevenue(rev);
       setDisputeCount(disputes.length);
     } catch (err) {
-      notify(`⚠️ ${err.message}`);
+      notify('Warning: ' + err.message);
     }
   }, [notify]);
 
@@ -33,7 +33,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       notify(successMsg);
       await load();
     } catch (err) {
-      notify(`⚠️ ${err.message}`);
+      notify('Warning: ' + err.message);
     } finally {
       setBusyId(null);
     }
@@ -41,52 +41,73 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#f7fafc', minHeight: '100vh' }}>
-      <button onClick={onBack}>← Back</button>
-      <h2>🛡️ Admin Moderation Center</h2>
+      <button onClick={onBack}>Back</button>
+      <h2>Admin Moderation Center</h2>
 
       {revenue && (
         <div style={{ backgroundColor: '#2d3748', color: 'white', padding: '12px 16px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.9rem' }}>
-          💼 Platform revenue: <strong>{revenue.totalFeesPi.toFixed(2)} π</strong> from {revenue.fundedTasks} funded campaigns
+          Platform revenue: <strong>{revenue.totalFeesPi.toFixed(2)} pi</strong> from {revenue.fundedTasks} funded campaigns
         </div>
       )}
 
-      {queue === null && <p style={{ color: '#718096' }}>Loading queue…</p>}
-      {queue?.length === 0 && <p style={{ color: '#718096' }}>Queue is empty — the auto-review engine is handling the rest. 🎉</p>}
+      {queue === null && <p style={{ color: '#718096' }}>Loading queue...</p>}
+      {queue?.length === 0 && <p style={{ color: '#718096' }}>Queue is empty - the auto-review engine is handling the rest.</p>}
 
       {queue?.map((sub) => (
         <div key={sub._id} style={{ backgroundColor: 'white', padding: '20px', marginBottom: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
           <h4 style={{ margin: '0 0 5px 0' }}>
-            {sub.task?.title} · {(sub.task?.rewardMicroPi / 1e6).toFixed(2)} π
+            {sub.task?.title} - {(sub.task?.rewardMicroPi / 1e6).toFixed(2)} pi
           </h4>
           <p style={{ fontSize: '0.85rem', color: '#4a5568', margin: '0 0 8px 0' }}>
-            👤 {sub.worker?.username} {sub.worker?.isKycVerified && '✓'} · {sub.worker?.approvedCount ?? 0} prior approvals
+            {sub.worker?.username} {sub.worker?.isKycVerified && 'KYC'} - {sub.worker?.approvedCount ?? 0} prior approvals
           </p>
           <p style={{ backgroundColor: '#f7fafc', padding: '10px', borderRadius: '6px', fontSize: '0.9rem' }}>
-            {sub.proofText || <em>(file-only submission)</em>}
+            {sub.proofText || '(file-only submission)'}
           </p>
+
+          {sub.proofFileUrl && (
+            <div style={{ margin: '10px 0' }}>
+              <img
+                src={sub.proofFileUrl}
+                alt="Proof screenshot"
+                style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'block' }}
+                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
+              />
+              <p style={{ display: 'none', fontSize: '0.75rem', color: '#e53e3e' }}>Image failed to load</p>
+              <a
+                href={sub.proofFileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.8rem', color: '#667eea', textDecoration: 'none' }}
+              >
+                Open full image
+              </a>
+            </div>
+          )}
+
           {sub.autoReview?.reasons?.length > 0 && (
             <p style={{ fontSize: '0.75rem', color: '#a0aec0' }}>
-              Auto-review: {sub.autoReview.reasons.join(' · ')}
+              Auto-review: {sub.autoReview.reasons.join(' - ')}
             </p>
           )}
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               disabled={busyId === sub._id}
-              onClick={() => act(approveSubmission, sub._id, '💰 Approved — payout sent via A2U.')}
+              onClick={() => act(approveSubmission, sub._id, 'Approved - payout sent via A2U.')}
               style={{ flex: 1, backgroundColor: '#48bb78', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-            >✓ Approve & Pay</button>
+            >Approve and Pay</button>
             <button
               disabled={busyId === sub._id}
-              onClick={() => act(rejectSubmission, sub._id, '✕ Rejected — moved to Appeals.')}
+              onClick={() => act(rejectSubmission, sub._id, 'Rejected - moved to Appeals.')}
               style={{ flex: 1, backgroundColor: '#e53e3e', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-            >✕ Reject</button>
+            >Reject</button>
           </div>
         </div>
       ))}
 
       <button onClick={onOpenDisputes} style={{ width: '100%', marginTop: '15px', backgroundColor: '#c53030', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-        ⚖️ Open Dispute Appeals Board ({disputeCount})
+        Open Dispute Appeals Board ({disputeCount})
       </button>
     </div>
   );
-}
+                }
