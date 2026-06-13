@@ -277,9 +277,13 @@ async function settleApproval(submissionId) {
   const { task, worker } = sub;
 
   if (task.escrowRemainingMicroPi < sub.rewardMicroPi) {
-    sub.status = 'pending';
-    sub.autoReview.reasons.push('Escrow exhausted — held for admin');
+    // Escrow ran out — reject the submission and tell the worker clearly
+    sub.status = 'escrow_exhausted';
+    sub.autoReview.reasons.push('Task escrow exhausted — no funds remaining');
     await sub.save();
+    // Increment rejected count so the worker's stats stay accurate
+    await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
+    console.warn('Escrow exhausted for task', task._id, '- submission', sub._id, 'rejected');
     return;
   }
 
