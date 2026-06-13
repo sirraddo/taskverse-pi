@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PiLogin from './PiLogin';
 import PiAdmin from './PiAdmin';
 import PiDisputes from './PiDisputes';
@@ -64,22 +64,43 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(user)]);
 
-  // Poll /api/me every 30s while logged in — notifies on new payouts
+  // Ref tracks last-known approved count so the interval closure
+  // never reads a stale value — fixes the repeated notification bug.
+  const lastApprovedRef = useRef(null);
+
+  // Poll /api/me every 30s — fire notification ONLY when count truly rises
+  useEffect(() => {
+    if (!user) return;
+    if (lastApprovedRef.current === null) {
+      lastApprovedRef.current = user.approvedCount ?? 0;
+    }
+    const interval = setInterval(async () => {
+      try {
+        const me = await fetchMe();
+        const prev = lastApprovedRef.current;
+        if (me.approvedCount > prev) {
+          const earned = me.approvedCount - prev;
+          triggerNotification(
+            'Payout received! ' + earned + ' task' + (earned > 1 ? 's' : '') +
+            ' approved. Balance: ' + Number(me.balance).toFixed(2) + ' pi'
+          );
+          lastApprovedRef.current = me.approvedCount;
+        }
+        setUser(prev => ({ ...prev, ...me }));
+      } catch (_) {}
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [Boolean(user)]);
+
+  // Auto-refresh task feed every 60s so new listings appear without reload
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(async () => {
       try {
-        const me = await fetchMe();
-        const prevApproved = user.approvedCount ?? 0;
-        if (me.approvedCount > prevApproved) {
-          const earned = (me.approvedCount - prevApproved);
-          triggerNotification(
-            'Payout received! ' + earned + ' task' + (earned > 1 ? 's' : '') + ' approved. Balance: ' + Number(me.balance).toFixed(2) + ' pi'
-          );
-        }
-        setUser(prev => ({ ...prev, ...me }));
-      } catch (_) { /* silent — don't interrupt UX on network hiccup */ }
-    }, 30_000);
+        const feed = await fetchTasks();
+        setTasks(feed);
+      } catch (_) {}
+    }, 60_000);
     return () => clearInterval(interval);
   }, [Boolean(user)]);
 
