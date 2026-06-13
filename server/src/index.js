@@ -227,9 +227,20 @@ app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
     if (task.poster.equals(worker._id)) return res.status(400).json({ error: 'Cannot work your own task' });
     if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
 
+    // Duplicate-image checks: flag if same URL already used on this task
+    // or if this worker has reused the same screenshot from a past task
+    const [isDuplicateImage, isRecycledImage] = proofFileUrl
+      ? await Promise.all([
+          Submission.exists({ task: task._id, proofFileUrl }),
+          Submission.exists({ worker: worker._id, proofFileUrl }),
+        ])
+      : [false, false];
+
     const { verdict, reasons } = evaluateSubmission({
       proofText,
-      hasProofFile: Boolean(proofFileUrl),
+      proofFileUrl,
+      isDuplicateImage: Boolean(isDuplicateImage),
+      isRecycledImage:  Boolean(isRecycledImage),
       worker,
       rewardMicroPi: task.rewardMicroPi,
     });
