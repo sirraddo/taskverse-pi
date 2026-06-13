@@ -424,6 +424,45 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
 app.use((err, req, res, _next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+/* ════════════════════════════════════════════════════════════════
+   6. SEED — one-shot feed populate (protected by SEED_SECRET header)
+════════════════════════════════════════════════════════════════ */
+app.post('/api/seed', async (req, res, next) => {
+  const key = req.headers['x-seed-key'];
+  if (!process.env.SEED_SECRET || key !== process.env.SEED_SECRET) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const existing = await Task.countDocuments({ status: 'live' });
+    if (existing > 0) return res.json({ skipped: true, message: `${existing} live tasks already exist.` });
+    const SEED_TASKS = [
+      { title: 'Follow TaskVerse on Pi Browser', description: 'Open the Pi Browser app store, find TaskVerse Pi and tap Follow/Favorite. Screenshot your followed apps list as proof.', rewardPi: 0.2, slots: 50 },
+      { title: 'Share TaskVerse link in a Pi community', description: 'Post https://taskverse-pi.vercel.app in any Pi Network Telegram group, forum, or chat. Screenshot showing your post with the link as proof.', rewardPi: 0.25, slots: 30 },
+      { title: 'Write a short review of TaskVerse', description: 'Write at least 3 sentences about your experience using TaskVerse Pi and post it anywhere (Telegram, Twitter/X, forum). Share a screenshot or link as proof.', rewardPi: 0.3, slots: 20 },
+      { title: 'Invite a friend to join TaskVerse', description: 'Send the TaskVerse Pi link to a friend and get them to sign up. Screenshot the conversation where you shared the link.', rewardPi: 0.35, slots: 25 },
+      { title: 'Translate one TaskVerse UI string to your language', description: 'Find a UI text in the app that is not yet in your language. Post the original English text and your translation in the proof box.', rewardPi: 0.2, slots: 40 },
+      { title: 'Report a bug or suggest a feature', description: 'Found something that does not work right, or have an idea to improve the app? Describe it clearly in the proof text. Best reports earn a bonus.', rewardPi: 0.15, slots: 100 },
+      { title: 'Like or upvote TaskVerse on PiApps directory', description: 'Find TaskVerse Pi on any Pi app directory or listing site and give it a like/upvote/rating. Screenshot as proof.', rewardPi: 0.1, slots: 100 },
+      { title: 'Create a short video showing the TaskVerse app', description: 'Record a 30-60 second screen recording walking through TaskVerse Pi. Upload to YouTube, TikTok, or any platform and paste the link as proof.', rewardPi: 0.5, slots: 10 },
+    ];
+    const systemId = new mongoose.Types.ObjectId('000000000000000000000000');
+    const created = [];
+    for (const t of SEED_TASKS) {
+      const rewardMicro = microPi(t.rewardPi);
+      const rewardPool = rewardMicro * t.slots;
+      const fee = Math.round(rewardPool * FEE_RATE);
+      const task = await Task.create({
+        title: t.title, description: t.description,
+        rewardMicroPi: rewardMicro, slots: t.slots, poster: systemId,
+        grossDepositMicroPi: rewardPool + fee, platformFeeMicroPi: fee,
+        escrowRemainingMicroPi: rewardPool, status: 'live',
+      });
+      created.push({ id: task._id, title: t.title });
+    }
+    res.json({ created: created.length, tasks: created });
+  } catch (err) { next(err); }
+});
+
 });
 
 const PORT = process.env.PORT || 8000;
