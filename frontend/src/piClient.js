@@ -1,4 +1,5 @@
 /**
+export const API = import.meta.env.VITE_API_URL || 'https://taskverse-pi.onrender.com';
  * piClient.js — the only frontend module that touches window.Pi.
  * Prerequisite: index.html loads https://sdk.minepi.com/pi-sdk.js
  */
