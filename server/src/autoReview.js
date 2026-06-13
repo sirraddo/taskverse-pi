@@ -1,21 +1,22 @@
 /**
- * autoReview.js — automated moderation for the submission queue.
+ * autoReview.js - automated moderation for the submission queue.
  *
- * Pipeline: every submission runs hard validation first (instant reject
- * for gibberish), then policy checks decide auto-approve vs manual queue.
+ * NEW POLICY (auto-approve first):
+ *  1. Hard validation  -> auto_reject immediately for gibberish / empty
+ *  2. Suspicious flags -> manual queue (duplicate image, recycled screenshot,
+ *                         high rejection rate, banned worker)
+ *  3. Everything else  -> auto_approve
+ *
+ * This means legitimate first-time workers, high-value tasks, and
+ * file-only proofs all auto-approve as long as no red flags fire.
  *
  * Verdicts:
- *   'auto_reject'  — failed text-quality validation
- *   'auto_approve' — small reward + trusted, verified worker
- *   'manual'       — everything else goes to the human admin queue
+ *   'auto_reject'  - failed text-quality check (instant, no payout)
+ *   'manual'       - flagged as suspicious, needs human review
+ *   'auto_approve' - passes all checks, payout queued immediately
  */
 
-const MAX_REWARD_MICRO = Math.round(
-  Number(process.env.AUTO_APPROVE_MAX_REWARD || 0.25) * 1_000_000
-);
-const MIN_PRIOR_APPROVALS = Number(process.env.AUTO_APPROVE_MIN_USER_APPROVALS || 3);
-
-/* ── Text-quality rules (Regex pattern validation) ───────────────*/
+/* ── Text-quality rules ──────────────────────────────────────── */
 
 const RULES = [
   {
@@ -25,35 +26,30 @@ const RULES = [
   },
   {
     name: 'has_letters',
-    // Unicode-aware: accepts Latin, Vietnamese diacritics, Spanish, etc.
     test: (t) => /\p{L}{3,}/u.test(t),
     reason: 'No recognizable words found',
   },
   {
     name: 'no_keyboard_mash',
-    // 5+ consecutive consonants with no vowels strongly suggests mashing
     test: (t) => !/[bcdfghjklmnpqrstvwxz]{6,}/i.test(t.replace(/\s/g, '')),
     reason: 'Keyboard-mash pattern detected',
   },
   {
     name: 'no_char_flooding',
-    // Same character repeated 5+ times ("aaaaa", "!!!!!!")
     test: (t) => !/(.)\1{4,}/.test(t),
     reason: 'Repeated-character flooding detected',
   },
   {
     name: 'no_word_flooding',
-    // Same word 4+ times in a row ("done done done done")
     test: (t) => !/\b(\w+)(?:\s+\1\b){3,}/i.test(t),
     reason: 'Repeated-word flooding detected',
   },
   {
     name: 'vowel_ratio',
-    // Real language has vowels. Pure consonant soup fails.
     test: (t) => {
       const letters = (t.match(/\p{L}/gu) || []).length;
-      if (letters < 12) return true; // handled by min_length
-      const vowels = (t.match(/[aeiouáéíóúàèìòùâêîôûăơưyế]/giu) || []).length;
+      if (letters < 12) return true;
+      const vowels = (t.match(/[aeiouaeiouaeiouaeouy]/giu) || []).length;
       return vowels / letters > 0.15;
     },
     reason: 'Vowel ratio inconsistent with natural language',
@@ -70,53 +66,77 @@ export function validateProofText(proofText = '') {
   return { passed: failures.length === 0, failures };
 }
 
-/* ── Policy decision ─────────────────────────────────────────────*/
+/* ── Policy decision ─────────────────────────────────────────── */
 
 /**
  * @param {object} args
- * @param {string} args.proofText
- * @param {boolean} args.hasProofFile
- * @param {object} args.worker        Mongoose User doc (server-verified)
- * @param {number} args.rewardMicroPi
+ * @param {string}  args.proofText
+ * @param {string|null} args.proofFileUrl
+ * @param {boolean} args.isDuplicateImage  - same URL already used on THIS task
+ * @param {boolean} args.isRecycledImage   - this worker reused a URL from a past task
+ * @param {object}  args.worker            - Mongoose User doc
+ * @param {number}  args.rewardMicroPi
  */
-export function evaluateSubmission({ proofText, hasProofFile, worker, rewardMicroPi }) {
+export function evaluateSubmission({
+  proofText,
+  proofFileUrl,
+  isDuplicateImage = false,
+  isRecycledImage  = false,
+  worker,
+  rewardMicroPi,
+}) {
   const reasons = [];
+  const flags   = [];
 
-  // 1. Hard validation — instant rejection for gibberish text proof.
-  //    (File-only submissions skip text rules but never auto-approve.)
-  if (proofText && proofText.trim().length > 0) {
+  /* STEP 1 — Hard text validation (instant reject for gibberish) */
+  const hasText = proofText && proofText.trim().length > 0;
+  const hasFile = Boolean(proofFileUrl);
+
+  if (!hasText && !hasFile) {
+    return { verdict: 'auto_reject', reasons: ['Empty submission — provide text or a screenshot'] };
+  }
+
+  if (hasText) {
     const { passed, failures } = validateProofText(proofText);
-    if (!passed) {
-      return { verdict: 'auto_reject', reasons: failures };
-    }
+    if (!passed) return { verdict: 'auto_reject', reasons: failures };
     reasons.push('Text validation passed');
-  } else if (!hasProofFile) {
-    return { verdict: 'auto_reject', reasons: ['Empty submission'] };
   }
 
-  // 2. Auto-approve policy — micro-gigs from trusted, verified workers.
-  const rejectionRate =
-    worker.approvedCount + worker.rejectedCount === 0
-      ? 0
-      : worker.rejectedCount / (worker.approvedCount + worker.rejectedCount);
+  if (hasFile) reasons.push('Screenshot attached');
 
-  const eligible =
-    rewardMicroPi <= MAX_REWARD_MICRO &&
-    worker.isKycVerified === true && // server-verified flag only
-    worker.approvedCount >= MIN_PRIOR_APPROVALS &&
-    rejectionRate < 0.2 &&
-    !worker.isBanned &&
-    proofText && proofText.trim().length > 0; // file-only proofs always go to manual review
+  /* STEP 2 — Suspicious-signal checks (flag -> manual queue) */
 
-  if (eligible) {
-    reasons.push(
-      `Reward ≤ ${MAX_REWARD_MICRO / 1e6}π`,
-      'Worker KYC verified (server-side)',
-      `Worker has ${worker.approvedCount} prior approvals, rejection rate ${(rejectionRate * 100).toFixed(0)}%`
-    );
-    return { verdict: 'auto_approve', reasons };
+  if (isDuplicateImage) {
+    flags.push('DUPLICATE IMAGE: same screenshot already submitted for this task by another worker');
   }
 
-  reasons.push('Did not meet auto-approve policy — routed to manual queue');
-  return { verdict: 'manual', reasons };
+  if (isRecycledImage) {
+    flags.push('RECYCLED IMAGE: this screenshot was used in a previous task submission');
+  }
+
+  if (worker.isBanned) {
+    flags.push('Worker account is currently banned or flagged');
+  }
+
+  const total = worker.approvedCount + worker.rejectedCount;
+  const rejectionRate = total === 0 ? 0 : worker.rejectedCount / total;
+  if (rejectionRate >= 0.35 && total >= 5) {
+    flags.push('High rejection rate (' + (rejectionRate * 100).toFixed(0) + '%) — ' + total + ' total decisions');
+  }
+
+  // Very short text with no screenshot on a new account — low-effort check
+  if (hasText && !hasFile && proofText.trim().length < 20 && worker.approvedCount === 0) {
+    flags.push('Very short proof text from a new worker with no screenshot — may be low-effort');
+  }
+
+  if (flags.length > 0) {
+    return { verdict: 'manual', reasons: [...reasons, ...flags, 'Flagged for human review'] };
+  }
+
+  /* STEP 3 — Auto-approve everything that passes */
+  reasons.push(
+    'No suspicious signals detected',
+    'Auto-approved — payout queued'
+  );
+  return { verdict: 'auto_approve', reasons };
 }
