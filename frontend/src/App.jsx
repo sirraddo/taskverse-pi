@@ -42,8 +42,6 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Initialise the Pi SDK as soon as the page loads so it is ready
-  // before the user taps "Authenticate with Pi Browser"
   useEffect(() => {
     try { initPi(); } catch (_) { /* not running inside Pi Browser - ignore */ }
   }, []);
@@ -72,11 +70,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(user)]);
 
-  // Ref tracks last-known approved count so the interval closure
-  // never reads a stale value — fixes the repeated notification bug.
   const lastApprovedRef = useRef(null);
 
-  // Poll /api/me every 30s — fire notification ONLY when count truly rises
   useEffect(() => {
     if (!user) return;
     if (lastApprovedRef.current === null) {
@@ -100,7 +95,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [Boolean(user)]);
 
-  // Auto-refresh task feed every 60s so new listings appear without reload
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(async () => {
@@ -136,6 +130,17 @@ export default function App() {
       {notification && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#2d3748', color: 'white', padding: '12px 24px', borderRadius: '30px', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontWeight: 'bold', fontSize: '0.9rem', width: '80%', textAlign: 'center' }}>
           {notification}
+        </div>
+      )}
+
+      {/* Overlay screens rendered on top of whatever view is active */}
+      {screen && (
+        <div style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', bottom: 0, backgroundColor: '#f9f9f9', zIndex: 500, overflowY: 'auto' }}>
+          {screen === 'history'     && <PayoutHistory  onBack={() => setScreen(null)} />}
+          {screen === 'leaderboard' && <Leaderboard    onBack={() => setScreen(null)} />}
+          {screen === 'privacy'     && <PrivacyPolicy  onBack={() => setScreen(null)} />}
+          {screen === 'terms'       && <TermsOfService onBack={() => setScreen(null)} />}
+          {screen === 'howitworks'  && <HowItWorks     onBack={() => setScreen(null)} />}
         </div>
       )}
 
@@ -232,8 +237,18 @@ export default function App() {
               {t.adminBtn}
             </button>
           )}
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            <button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '10px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#667eea', fontSize: '0.85rem' }}>🏆 Leaderboard</button>
+            <button onClick={() => setScreen('history')} style={{ flex: 1, padding: '10px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#667eea', fontSize: '0.85rem' }}>📜 History</button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '12px', paddingBottom: '20px', fontSize: '0.75rem', color: '#a0aec0' }}>
+            <span onClick={() => setScreen('howitworks')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>How It Works</span>
+            <span onClick={() => setScreen('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy</span>
+            <span onClick={() => setScreen('terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>
+          </div>
         </div>
       )}
     </div>
   );
-        }
+}
