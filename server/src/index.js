@@ -428,7 +428,41 @@ app.use((err, req, res, _next) => {
 
 const PORT = process.env.PORT || 8000;
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-  app.listen(PORT, () => console.log(`TaskVerse Pi server listening on :${PORT}`));
+  // Leaderboard endpoint
+app.get('/api/leaderboard', requireAuth, async (req, res) => {
+  try {
+    const { period = 'week' } = req.query;
+    const now = new Date();
+    let since = new Date(0);
+    if (period === 'week')  since = new Date(now - 7  * 86400000);
+    if (period === 'month') since = new Date(now - 30 * 86400000);
+    const results = await Submission.aggregate([
+      { $match: { status: { $in: ['auto_approved','approved'] }, updatedAt: { $gte: since } } },
+      { $group: { _id: '$worker', tasksCompleted: { $sum: 1 }, totalMicroPi: { $sum: '$rewardMicroPi' } } },
+      { $sort: { totalMicroPi: -1 } },
+      { $limit: 20 },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      { $project: { username: '$user.username', approvedCount: '$user.approvedCount', tasksCompleted: 1, totalEarned: { $divide: ['$totalMicroPi', 1000000] } } },
+    ]);
+    res.json(results);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Payout history endpoint
+app.get('/api/me/history', requireAuth, async (req, res) => {
+  try {
+    const submissions = await Submission.find({ worker: req.user._id })
+      .sort({ createdAt: -1 }).limit(100)
+      .populate('task', 'title rewardMicroPi').lean();
+    const totalEarned = submissions
+      .filter(s => ['auto_approved','approved'].includes(s.status))
+      .reduce((sum, s) => sum + (s.rewardMicroPi || 0), 0) / 1e6;
+    res.json({ submissions, totalEarned });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.listen(PORT, () => console.log(`TaskVerse Pi server listening on :${PORT}`));
 }).catch((e) => {
   console.error('MongoDB connection failed:', e.message);
   process.exit(1);
