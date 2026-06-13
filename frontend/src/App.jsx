@@ -6,6 +6,11 @@ import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import { fetchTasks, fetchMe, initPi } from './piClient';
+import HowItWorks from './HowItWorks';
+import PrivacyPolicy from './PrivacyPolicy';
+import TermsOfService from './TermsOfService';
+import Leaderboard from './Leaderboard';
+import PayoutHistory from './PayoutHistory';
 
 /**
  * PRODUCTION App.jsx
@@ -33,6 +38,9 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [tasks, setTasks] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [screen, setScreen] = useState(null); // 'how'|'privacy'|'terms'|'leaderboard'|'history'
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Initialise the Pi SDK as soon as the page loads so it is ready
   // before the user taps "Authenticate with Pi Browser"
@@ -171,6 +179,7 @@ export default function App() {
 
       {view === 'feed' && (
         <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+          {/* Top nav */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#4a5568', fontWeight: 'bold' }}>{t.profile}</button>
             <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ padding: '5px 10px', borderRadius: '20px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: 'bold', color: '#4a5568' }}>
@@ -181,33 +190,75 @@ export default function App() {
             <button onClick={() => setView('create')} style={{ backgroundColor: '#764ba2', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>{t.postTask}</button>
           </div>
 
-          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', position: 'relative' }}>
+          {/* Hero wallet card */}
+          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '16px', textAlign: 'center', position: 'relative' }}>
             <span style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.75rem', opacity: 0.9, backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
               {user.username} {user.isKycVerified && 'KYC'}
             </span>
             <h1 style={{ margin: '20px 0 5px 0', fontSize: '1.8rem' }}>{t.title}</h1>
             <p style={{ fontSize: '1.1rem', margin: 0 }}>{t.wallet}: <strong>{Number(user.balance ?? 0).toFixed(2)} pi</strong></p>
+            {/* Quick links */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '12px' }}>
+              <button onClick={() => setScreen('history')} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '20px', padding: '4px 12px', fontSize: '0.75rem', cursor: 'pointer' }}>📜 History</button>
+              <button onClick={() => setScreen('leaderboard')} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '20px', padding: '4px 12px', fontSize: '0.75rem', cursor: 'pointer' }}>🏆 Leaderboard</button>
+            </div>
           </div>
 
-          <h2>{t.availableGigs}</h2>
+          {/* Search bar */}
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.9rem', boxSizing: 'border-box', marginBottom: '10px' }}
+          />
 
-          {tasks === null && <p style={{ color: '#718096' }}>{t.loading}</p>}
-          {tasks?.length === 0 && <p style={{ color: '#718096' }}>{t.empty}</p>}
+          {/* Category pills */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '14px' }}>
+            {['All','Follow','Share','Review','Create','Other'].map(cat => (
+              <button key={cat} onClick={() => setCategoryFilter(cat)} style={{ flexShrink: 0, padding: '5px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: categoryFilter === cat ? 'bold' : 'normal', backgroundColor: categoryFilter === cat ? '#667eea' : '#edf2f7', color: categoryFilter === cat ? 'white' : '#4a5568', fontSize: '0.8rem' }}>
+                {cat}
+              </button>
+            ))}
+          </div>
 
-          {tasks?.map((task) => {
+          <h2 style={{ margin: '0 0 12px' }}>{t.availableGigs}</h2>
+
+          {/* Skeleton loading */}
+          {tasks === null && [1,2,3].map(i => (
+            <div key={i} style={{ height: '72px', backgroundColor: '#edf2f7', borderRadius: '10px', marginBottom: '10px', animation: 'pulse 1.5s infinite' }} />
+          ))}
+
+          {/* Empty state */}
+          {tasks?.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: '#a0aec0' }}>
+              <div style={{ fontSize: '3rem' }}>📭</div>
+              <p style={{ marginTop: '10px', fontWeight: 'bold', color: '#4a5568' }}>No tasks yet</p>
+              <p style={{ fontSize: '0.85rem' }}>Be the first to post a micro-gig!</p>
+              <button onClick={() => setView('create')} style={{ marginTop: '12px', backgroundColor: '#667eea', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>+ Post a Task</button>
+            </div>
+          )}
+
+          {/* Task cards */}
+          {tasks?.filter(task => {
+            const matchCat = categoryFilter === 'All' || (task.category || 'Other') === categoryFilter;
+            const matchSearch = !searchQuery || task.title.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchCat && matchSearch;
+          }).map((task) => {
             const isFull = task.slotsLeft <= 0;
             return (
-              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white', borderRadius: '8px', marginBottom: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <div>
-                  <h3 style={{ margin: '0 0 5px 0', fontSize: '1rem' }}>{task.title}</h3>
-                  <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>
-                    Reward: {task.reward} pi - {task.slotsLeft} {t.slotsLeft}
+              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white', borderRadius: '10px', marginBottom: '10px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ flex: 1, marginRight: '10px' }}>
+                  {task.category && <span style={{ fontSize: '0.7rem', backgroundColor: '#edf2f7', color: '#718096', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>{task.category}</span>}
+                  <h3 style={{ margin: '4px 0 4px', fontSize: '0.95rem', color: '#2d3748' }}>{task.title}</h3>
+                  <span style={{ color: '#4a5568', fontSize: '0.85rem' }}>
+                    {task.reward} pi · {task.slotsLeft} {t.slotsLeft}
                   </span>
                 </div>
                 <button
                   onClick={() => { setSelectedTask(task); setView('submit'); }}
                   disabled={isFull}
-                  style={{ backgroundColor: isFull ? '#cbd5e0' : '#48bb78', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '6px', cursor: isFull ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                  style={{ backgroundColor: isFull ? '#cbd5e0' : '#48bb78', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: isFull ? 'not-allowed' : 'pointer', fontWeight: 'bold', flexShrink: 0 }}
                 >
                   {isFull ? t.full : t.openTask}
                 </button>
@@ -216,7 +267,7 @@ export default function App() {
           })}
 
           {user.isAdmin && (
-            <button onClick={() => setView('admin')} style={{ width: '100%', marginTop: '40px', backgroundColor: '#e2e8f0', border: 'none', padding: '10px', borderRadius: '6px', color: '#718096', cursor: 'pointer', fontSize: '0.85rem' }}>
+            <button onClick={() => setView('admin')} style={{ width: '100%', marginTop: '30px', backgroundColor: '#e2e8f0', border: 'none', padding: '10px', borderRadius: '6px', color: '#718096', cursor: 'pointer', fontSize: '0.85rem' }}>
               {t.adminBtn}
             </button>
           )}
