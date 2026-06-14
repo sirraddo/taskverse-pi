@@ -375,6 +375,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     ]);
     res.json({
       username: user.username,
+      isAdmin: ADMINS.includes(user.username),
       isKycVerified: user.isKycVerified,
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
