@@ -1,103 +1,132 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import CaptchaVerify from './CaptchaVerify';
 import { submitProof } from './piClient';
 
 /**
- * PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
- * Three server outcomes are handled:
- *   201 status:'pending'       -> onSubmitted (manual review queue)
- *   201 status:'auto_approved' -> onSubmitted (payout queued)
- *   422 + reasons[]            -> onRejected  (regex quality check failed)
- *
- * NOTE on the file input: proofFileUrl expects a URL from your upload
- * provider (ImgBB). The label wrapper is required for Pi Browser's
- * Android WebView - programmatic .click() is blocked there.
- */
+* PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
+* Three server outcomes are handled:
+*   201 status:'pending'        -> onSubmitted (manual review queue)
+*   201 status:'auto_approved'  -> onSubmitted (payout queued)
+*   422 + reasons[]             -> onRejected (regex quality check failed)
+*
+* NOTE on file input: proofFileUrl expects a URL from ImgBB.
+* The label wrapper is required for Pi Browser's Android WebView —
+* programmatic .click() is blocked there.
+*/
 export default function TaskSubmit({ activeTask, onBack, onSubmitted, onRejected }) {
-  const [proofText, setProofText] = useState('');
-  const [isHuman, setIsHuman] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState(null);
-  const [proofFileUrl, setProofFileUrl] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [fileName, setFileName] = useState('');
+const [proofText, setProofText] = useState('');
+const [isHuman, setIsHuman] = useState(false);
+const [sending, setSending] = useState(false);
+const [error, setError] = useState(null);
+const [proofFileUrl, setProofFileUrl] = useState('');
+const [uploading, setUploading] = useState(false);
+const [fileName, setFileName] = useState('');
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setFileName(file.name);
-    const key = import.meta.env.VITE_IMGBB_API_KEY;
-    if (!key) return;
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const form = new FormData();
-        form.append('image', reader.result.split(',')[1]);
-        const res = await fetch('https://api.imgbb.com/1/upload?key=' + key, { method: 'POST', body: form });
-        const data = await res.json();
-        if (data.success) setProofFileUrl(data.data.url);
-      } catch (err) {
-        setError('Upload failed - paste a URL below instead.');
-      } finally { setUploading(false); }
-    };
-    reader.readAsDataURL(file);
-  };
+const handleFileChange = (e) => {
+const file = e.target.files[0];
+if (!file) return;
+setFileName(file.name);
+const key = import.meta.env.VITE_IMGBB_API_KEY;
+if (!key) { setProofFileUrl(''); return; }
+setUploading(true);
+const reader = new FileReader();
+reader.onloadend = async () => {
+try {
+const form = new FormData();
+form.append('image', reader.result.split(',')[1]);
+const res = await fetch('https://api.imgbb.com/1/upload?key=' + key, { method: 'POST', body: form });
+const data = await res.json();
+if (data.success) setProofFileUrl(data.data.url);
+else throw new Error('Upload failed');
+} catch (err) {
+setError('Image upload failed — paste a URL below instead.');
+} finally { setUploading(false); }
+};
+reader.readAsDataURL(file);
+};
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    if (!proofText.trim()) return setError('Please describe your proof of work.');
-    if (!isHuman) return setError('Please complete the security check.');
+const handleSubmit = async () => {
+setError(null);
+if (!proofText.trim()) return setError('Please describe your proof of work.');
+if (!isHuman) return setError('Please complete the security check.');
+setSending(true);
+try {
+const result = await submitProof(activeTask.id, {
+proofText,
+...(proofFileUrl.trim() ? { proofFileUrl: proofFileUrl.trim() } : {}),
+});
+onSubmitted(result);
+} catch (err) {
+const reasons = err.reasons || [err.message];
+setError(reasons.join(' — '));
+onRejected?.(reasons);
+} finally {
+setSending(false);
+}
+};
 
-    setSending(true);
-    try {
-      const result = await submitProof(activeTask.id, { proofText, ...(proofFileUrl.trim() ? { proofFileUrl: proofFileUrl.trim() } : {}) });
-      onSubmitted(result);
-    } catch (err) {
-      const reasons = err.reasons || [err.message];
-      setError(reasons.join(' - '));
-      onRejected?.(reasons);
-    } finally {
-      setSending(false);
-    }
-  };
+return (
+<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
 
-  return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '12px' }}>
-      <button onClick={onBack}>Back</button>
-      <h3>{activeTask.title}</h3>
-      <p style={{ color: '#4a5568', fontSize: '0.9rem' }}>Reward: {activeTask.reward} pi</p>
+{/* Header */}
+<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+<button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
+<h3 style={{ margin: 0, fontWeight: '700', fontSize: '0.97rem', color: '#1a202c', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTask.title}</h3>
+</div>
 
-      <form onSubmit={handleSubmit}>
-        <textarea
-          rows="4"
-          value={proofText}
-          onChange={(e) => setProofText(e.target.value)}
-          placeholder="Describe exactly what you did (links, details)..."
-          maxLength={4000}
-          style={{ width: '100%', padding: '10px', boxSizing: 'border-box' }}
-        />
-        <label style={{ display: 'inline-block', padding: '8px 14px', backgroundColor: '#edf2f7', borderRadius: '6px', cursor: uploading ? 'wait' : 'pointer', fontSize: '0.85rem' }}>
-          {uploading ? 'Uploading...' : (fileName || 'Choose screenshot')}
-          <input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} style={{ display: 'none' }} />
-        </label>
-        <input type="url" value={proofFileUrl} onChange={(e) => setProofFileUrl(e.target.value)} placeholder="or paste image URL (e.g. from Imgur)..." style={{ display: 'block', width: '100%', marginTop: '6px', padding: '8px', fontSize: '0.8rem', boxSizing: 'border-box', borderRadius: '6px', border: '1px solid #cbd5e0' }} />
+{/* Task reward badge */}
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+<span style={{ fontSize: '0.82rem', color: '#4a5568', flex: 1 }}>{activeTask.description || 'Complete the task and submit your proof below.'}</span>
+<span style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>{activeTask.reward} π</span>
+</div>
 
-        <CaptchaVerify onVerifySuccess={(val) => setIsHuman(val)} />
+{/* Proof text */}
+<div style={{ marginBottom: '12px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '5px' }}>YOUR PROOF OF WORK</label>
+<textarea
+rows={4}
+value={proofText}
+onChange={(e) => setProofText(e.target.value)}
+placeholder="Describe exactly what you did (include links, usernames, screenshots)..."
+maxLength={4000}
+style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', color: '#2d3748', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none', lineHeight: 1.5 }}
+/>
+<div style={{ fontSize: '0.65rem', color: '#a0aec0', textAlign: 'right', marginTop: '3px' }}>{proofText.length}/4000</div>
+</div>
 
-        {error && (
-          <p style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px', borderRadius: '8px', fontSize: '0.85rem' }}>{error}</p>
-        )}
+{/* Screenshot upload */}
+<div style={{ marginBottom: '14px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '5px' }}>SCREENSHOT (OPTIONAL)</label>
+<label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1.5px dashed #cbd5e0', cursor: uploading ? 'wait' : 'pointer', fontSize: '0.82rem', color: '#4a5568' }}>
+<span style={{ fontSize: '1.1rem' }}>{uploading ? '⏳' : '📷'}</span>
+<span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+{uploading ? 'Uploading…' : (fileName || 'Choose screenshot to upload')}
+</span>
+<input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} style={{ display: 'none' }} />
+</label>
+<input type="url" value={proofFileUrl} onChange={(e) => setProofFileUrl(e.target.value)}
+placeholder="or paste image URL (Imgur, ImgBB, etc.)"
+style={{ width: '100%', marginTop: '7px', padding: '8px 12px', boxSizing: 'border-box', fontSize: '0.79rem', borderRadius: '8px', border: '1.5px solid #e2e8f0', color: '#4a5568', outline: 'none' }} />
+{proofFileUrl.trim() && (
+<div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#667eea', fontWeight: '600' }}>✓ Image URL set</div>
+)}
+</div>
 
-        <button
-          type="submit"
-          disabled={!isHuman || sending}
-          style={{ width: '100%', marginTop: '20px', backgroundColor: '#667eea', color: 'white', padding: '12px', border: 'none', borderRadius: '8px', fontWeight: 'bold', opacity: !isHuman || sending ? 0.6 : 1, cursor: 'pointer' }}
-        >
-          {sending ? 'Submitting...' : 'Submit Work'}
-        </button>
-      </form>
-    </div>
-  );
-      }
+<CaptchaVerify onVerifySuccess={(val) => setIsHuman(val)} />
+
+{error && (
+<div style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px 12px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '12px', border: '1px solid #fed7d7' }}>
+⚠️ {error}
+</div>
+)}
+
+<button
+onClick={handleSubmit}
+disabled={!isHuman || sending}
+style={{ width: '100%', marginTop: '6px', backgroundColor: (!isHuman || sending) ? '#a0aec0' : '#667eea', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: (!isHuman || sending) ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}
+>
+{sending ? '⏳ Submitting…' : '✓ Submit Work'}
+</button>
+</div>
+);
+}
