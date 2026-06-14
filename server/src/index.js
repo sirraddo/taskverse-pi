@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
+User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { evaluateSubmission } from './autoReview.js';
@@ -22,366 +22,383 @@ app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
 function requireAuth(req, res, next) {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  try {
-    req.session = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired session' });
-  }
+const token = (req.headers.authorization || '').replace('Bearer ', '');
+try {
+req.session = jwt.verify(token, process.env.JWT_SECRET);
+next();
+} catch {
+res.status(401).json({ error: 'Invalid or expired session' });
+}
 }
 
 function requireAdmin(req, res, next) {
-  if (!ADMINS.includes(req.session.username)) {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
+if (!ADMINS.includes(req.session.username)) {
+return res.status(403).json({ error: 'Admin access required' });
+}
+next();
 }
 
 async function currentUser(req) {
-  const user = await User.findById(req.session.userId);
-  if (!user || user.isBanned) throw Object.assign(new Error('Account unavailable'), { status: 403 });
-  return user;
+const user = await User.findById(req.session.userId);
+if (!user || user.isBanned) throw Object.assign(new Error('Account unavailable'), { status: 403 });
+return user;
 }
 
 app.post('/api/auth/verify', async (req, res, next) => {
-  try {
-    const { accessToken } = req.body;
-    if (!accessToken) return res.status(400).json({ error: 'accessToken required' });
-    const me = await pi.verifyAccessToken(accessToken);
-    const user = await User.findOneAndUpdate(
-      { piUid: me.uid },
-      { username: me.username, lastLoginAt: new Date() },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    const sessionToken = jwt.sign(
-      { userId: user._id.toString(), piUid: user.piUid, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    res.json({
-      sessionToken,
-      user: {
-        username: user.username,
-        balance: toPi(user.balanceMicroPi),
-        isKycVerified: user.isKycVerified,
-        isAdmin: ADMINS.includes(user.username),
-      },
-    });
-  } catch (err) {
-    if (err.response?.status === 401) return res.status(401).json({ error: 'Pi token invalid' });
-    next(err);
-  }
+try {
+const { accessToken } = req.body;
+if (!accessToken) return res.status(400).json({ error: 'accessToken required' });
+const me = await pi.verifyAccessToken(accessToken);
+const user = await User.findOneAndUpdate(
+{ piUid: me.uid },
+{ username: me.username, lastLoginAt: new Date() },
+{ new: true, upsert: true, setDefaultsOnInsert: true }
+);
+const sessionToken = jwt.sign(
+{ userId: user._id.toString(), piUid: user.piUid, username: user.username },
+process.env.JWT_SECRET,
+{ expiresIn: '7d' }
+);
+res.json({
+sessionToken,
+user: {
+username: user.username,
+balance: toPi(user.balanceMicroPi),
+isKycVerified: user.isKycVerified,
+isAdmin: ADMINS.includes(user.username),
+},
+});
+} catch (err) {
+if (err.response?.status === 401) return res.status(401).json({ error: 'Pi token invalid' });
+next(err);
+}
 });
 
 app.post('/api/tasks', requireAuth, async (req, res, next) => {
-  try {
-    const user = await currentUser(req);
-    const { title, description = '', rewardPi, slots } = req.body;
-    const rewardMicro = microPi(rewardPi);
-    const slotCount = parseInt(slots, 10);
-    if (!title?.trim() || !(rewardMicro >= 10_000) || !(slotCount >= 1)) {
-      return res.status(400).json({ error: 'Valid title, reward (>=0.01pi) and slots required' });
-    }
-    const rewardPool = rewardMicro * slotCount;
-    const fee = Math.round(rewardPool * FEE_RATE);
-    const gross = rewardPool + fee;
-    const task = await Task.create({
-      title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
-      poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
-      escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
-    });
-    res.status(201).json({
-      taskId: task._id, amountToPay: toPi(gross),
-      breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: FEE_RATE },
-    });
-  } catch (err) { next(err); }
+try {
+const user = await currentUser(req);
+const { title, description = '', rewardPi, slots } = req.body;
+const rewardMicro = microPi(rewardPi);
+const slotCount = parseInt(slots, 10);
+if (!title?.trim() || !(rewardMicro >= 10_000) || !(slotCount >= 1)) {
+return res.status(400).json({ error: 'Valid title, reward (>=0.01pi) and slots required' });
+}
+const rewardPool = rewardMicro * slotCount;
+const fee = Math.round(rewardPool * FEE_RATE);
+const gross = rewardPool + fee;
+const task = await Task.create({
+title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
+poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
+escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
+});
+res.status(201).json({
+taskId: task._id, amountToPay: toPi(gross),
+breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: FEE_RATE },
+});
+} catch (err) { next(err); }
 });
 
+// Fix #2 (slotsFilled in response), Fix #3 (exclude poster's own tasks), Fix #4 (userDone flag)
 app.get('/api/tasks', requireAuth, async (req, res, next) => {
-  try {
-    const tasks = await Task.find({ status: 'live' }).sort({ createdAt: -1 }).limit(100).lean();
-    res.json(tasks.map((t) => ({
-      id: t._id, title: t.title, description: t.description,
-      reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
-    })));
-  } catch (err) { next(err); }
+try {
+const tasks = await Task.find({ status: 'live', poster: { $ne: req.session.userId } })
+.sort({ createdAt: -1 }).limit(100).lean();
+const doneSet = new Set(
+(await Submission.find(
+{ worker: req.session.userId, task: { $in: tasks.map(t => t._id) } }, 'task'
+).lean()).map(s => s.task.toString())
+);
+res.json(tasks.map((t) => ({
+id: t._id, title: t.title, description: t.description,
+reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
+slotsFilled: t.slotsFilled, slots: t.slots,
+userDone: doneSet.has(t._id.toString()),
+})));
+} catch (err) { next(err); }
 });
 
 app.post('/api/payments/approve', requireAuth, async (req, res, next) => {
-  try {
-    const { paymentId } = req.body;
-    const user = await currentUser(req);
-    const record = await pi.getPayment(paymentId);
-    const taskId = record?.metadata?.taskId;
-    const task = await Task.findOne({ _id: taskId, poster: user._id, status: 'awaiting_funding' });
-    if (!task) return res.status(400).json({ error: 'No matching unfunded task for this payment' });
-    if (microPi(record.amount) !== task.grossDepositMicroPi) {
-      return res.status(400).json({ error: 'Payment amount mismatch' });
-    }
-    await Payment.findOneAndUpdate(
-      { piPaymentId: paymentId },
-      { direction: 'U2A', purpose: 'task_funding', user: user._id, task: task._id,
-        amountMicroPi: task.grossDepositMicroPi, status: 'approved' },
-      { upsert: true, setDefaultsOnInsert: true }
-    );
-    await pi.approvePayment(paymentId);
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+try {
+const { paymentId } = req.body;
+const user = await currentUser(req);
+const record = await pi.getPayment(paymentId);
+const taskId = record?.metadata?.taskId;
+const task = await Task.findOne({ _id: taskId, poster: user._id, status: 'awaiting_funding' });
+if (!task) return res.status(400).json({ error: 'No matching unfunded task for this payment' });
+if (microPi(record.amount) !== task.grossDepositMicroPi) {
+return res.status(400).json({ error: 'Payment amount mismatch' });
+}
+await Payment.findOneAndUpdate(
+{ piPaymentId: paymentId },
+{ direction: 'U2A', purpose: 'task_funding', user: user._id, task: task._id,
+amountMicroPi: task.grossDepositMicroPi, status: 'approved' },
+{ upsert: true, setDefaultsOnInsert: true }
+);
+await pi.approvePayment(paymentId);
+res.json({ ok: true });
+} catch (err) { next(err); }
 });
 
 app.post('/api/payments/complete', requireAuth, async (req, res, next) => {
-  try {
-    const { paymentId, txid } = req.body;
-    const user = await currentUser(req);
-    const payment = await Payment.findOne({ piPaymentId: paymentId, user: user._id });
-    if (!payment) return res.status(404).json({ error: 'Unknown payment' });
-    if (payment.status === 'completed') return res.json({ ok: true, idempotent: true });
-    await pi.completePayment(paymentId, txid);
-    payment.status = 'completed';
-    payment.txid = txid;
-    await payment.save();
-    const task = await Task.findByIdAndUpdate(payment.task,
-      { status: 'live', fundingPaymentId: paymentId }, { new: true });
-    await PlatformLedger.create({ task: task._id, feeMicroPi: task.platformFeeMicroPi, sourcePaymentId: paymentId });
-    if (!user.isKycVerified) { user.isKycVerified = true; await user.save(); }
-    res.json({ ok: true, taskStatus: 'live' });
-  } catch (err) { next(err); }
+try {
+const { paymentId, txid } = req.body;
+const user = await currentUser(req);
+const payment = await Payment.findOne({ piPaymentId: paymentId, user: user._id });
+if (!payment) return res.status(404).json({ error: 'Unknown payment' });
+if (payment.status === 'completed') return res.json({ ok: true, idempotent: true });
+await pi.completePayment(paymentId, txid);
+payment.status = 'completed';
+payment.txid = txid;
+await payment.save();
+const task = await Task.findByIdAndUpdate(payment.task,
+{ status: 'live', fundingPaymentId: paymentId }, { new: true });
+await PlatformLedger.create({ task: task._id, feeMicroPi: task.platformFeeMicroPi, sourcePaymentId: paymentId });
+if (!user.isKycVerified) { user.isKycVerified = true; await user.save(); }
+res.json({ ok: true, taskStatus: 'live' });
+} catch (err) { next(err); }
 });
 
 app.post('/api/payments/incomplete', requireAuth, async (req, res, next) => {
-  try {
-    const { payment } = req.body;
-    const paymentId = payment?.identifier;
-    const txid = payment?.transaction?.txid;
-    if (!paymentId) return res.status(400).json({ error: 'payment.identifier required' });
-    if (txid) {
-      await pi.completePayment(paymentId, txid);
-      await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'completed', txid });
-    } else {
-      await pi.cancelPayment(paymentId);
-      await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'cancelled' });
-    }
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+try {
+const { payment } = req.body;
+const paymentId = payment?.identifier;
+const txid = payment?.transaction?.txid;
+if (!paymentId) return res.status(400).json({ error: 'payment.identifier required' });
+if (txid) {
+await pi.completePayment(paymentId, txid);
+await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'completed', txid });
+} else {
+await pi.cancelPayment(paymentId);
+await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'cancelled' });
+}
+res.json({ ok: true });
+} catch (err) { next(err); }
 });
 
 app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
-  try {
-    const worker = await currentUser(req);
-    const { proofText = '', proofFileUrl = null } = req.body;
-    const task = await Task.findOne({ _id: req.params.id, status: 'live' });
-    if (!task) return res.status(404).json({ error: 'Task not available' });
-    if (task.poster.equals(worker._id)) return res.status(400).json({ error: 'Cannot work your own task' });
-    if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
-    const [isDuplicateImage, isRecycledImage] = proofFileUrl
-      ? await Promise.all([
-          Submission.exists({ task: task._id, proofFileUrl }),
-          Submission.exists({ worker: worker._id, proofFileUrl }),
-        ])
-      : [false, false];
-    const { verdict, reasons } = evaluateSubmission({
-      proofText, proofFileUrl,
-      isDuplicateImage: Boolean(isDuplicateImage),
-      isRecycledImage: Boolean(isRecycledImage),
-      worker, rewardMicroPi: task.rewardMicroPi,
-    });
-    if (verdict === 'auto_reject') {
-      return res.status(422).json({ error: 'Submission rejected by quality check', reasons });
-    }
-    const submission = await Submission.create({
-      task: task._id, worker: worker._id, proofText, proofFileUrl,
-      rewardMicroPi: task.rewardMicroPi,
-      status: verdict === 'auto_approve' ? 'auto_approved' : 'pending',
-      autoReview: { evaluated: true, verdict, reasons },
-    });
-    if (verdict === 'auto_approve') {
-      await settleApproval(submission._id);
-      return res.status(201).json({ status: 'auto_approved', message: 'Payout queued' });
-    }
-    res.status(201).json({ status: 'pending', message: 'Sent to review queue' });
-  } catch (err) {
-    if (err.code === 11000) return res.status(409).json({ error: 'Already submitted to this task' });
-    next(err);
-  }
+try {
+const worker = await currentUser(req);
+const { proofText = '', proofFileUrl = null } = req.body;
+const task = await Task.findOne({ _id: req.params.id, status: 'live' });
+if (!task) return res.status(404).json({ error: 'Task not available' });
+if (task.poster.equals(worker._id)) return res.status(400).json({ error: 'Cannot work your own task' });
+if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
+const [isDuplicateImage, isRecycledImage] = proofFileUrl
+? await Promise.all([
+Submission.exists({ task: task._id, proofFileUrl }),
+Submission.exists({ worker: worker._id, proofFileUrl }),
+])
+: [false, false];
+const { verdict, reasons } = evaluateSubmission({
+proofText, proofFileUrl,
+isDuplicateImage: Boolean(isDuplicateImage),
+isRecycledImage: Boolean(isRecycledImage),
+worker, rewardMicroPi: task.rewardMicroPi,
+});
+if (verdict === 'auto_reject') {
+return res.status(422).json({ error: 'Submission rejected by quality check', reasons });
+}
+const submission = await Submission.create({
+task: task._id, worker: worker._id, proofText, proofFileUrl,
+rewardMicroPi: task.rewardMicroPi,
+status: verdict === 'auto_approve' ? 'auto_approved' : 'pending',
+autoReview: { evaluated: true, verdict, reasons },
+});
+if (verdict === 'auto_approve') {
+await settleApproval(submission._id);
+return res.status(201).json({ status: 'auto_approved', message: 'Payout queued' });
+}
+res.status(201).json({ status: 'pending', message: 'Sent to review queue' });
+} catch (err) {
+if (err.code === 11000) return res.status(409).json({ error: 'Already submitted to this task' });
+next(err);
+}
 });
 
 async function settleApproval(submissionId) {
-  const sub = await Submission.findById(submissionId).populate('worker task');
-  const { task, worker } = sub;
-  if (task.escrowRemainingMicroPi < sub.rewardMicroPi) {
-    sub.status = 'escrow_exhausted';
-    sub.autoReview.reasons.push('Task escrow exhausted — no funds remaining');
-    await sub.save();
-    await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
-    console.warn('Escrow exhausted for task', task._id, '- submission', sub._id, 'rejected');
-    return;
-  }
-  task.escrowRemainingMicroPi -= sub.rewardMicroPi;
-  task.slotsFilled += 1;
-  if (task.slotsFilled >= task.slots) task.status = 'exhausted';
-  await task.save();
-  worker.approvedCount += 1;
-  worker.balanceMicroPi += sub.rewardMicroPi;
-  await worker.save();
-  try {
-    const a2u = await pi.createA2UPayment({
-      uid: worker.piUid,
-      amountPi: toPi(sub.rewardMicroPi),
-      memo: ('TaskVerse reward: ' + task.title).slice(0, 100),
-      metadata: { submissionId: sub._id.toString() },
-    });
-    const payment = await Payment.create({
-      piPaymentId: a2u.identifier, direction: 'A2U', purpose: 'worker_payout',
-      user: worker._id, task: task._id, amountMicroPi: sub.rewardMicroPi, status: 'created',
-    });
-    sub.payout = payment._id;
-    const record = await pi.getPayment(a2u.identifier);
-    if (record?.transaction?.txid) {
-      await pi.completeA2UPayment(a2u.identifier, record.transaction.txid);
-      payment.status = 'completed';
-      payment.txid = record.transaction.txid;
-      await payment.save();
-      worker.balanceMicroPi -= sub.rewardMicroPi;
-      await worker.save();
-    }
-  } catch (e) {
-    console.error('A2U payout pending/failed, balance retained in escrow:', e.message);
-  }
-  await sub.save();
+const sub = await Submission.findById(submissionId).populate('worker task');
+const { task, worker } = sub;
+if (task.escrowRemainingMicroPi < sub.rewardMicroPi) {
+sub.status = 'escrow_exhausted';
+sub.autoReview.reasons.push('Task escrow exhausted — no funds remaining');
+await sub.save();
+await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
+console.warn('Escrow exhausted for task', task._id, '- submission', sub._id, 'rejected');
+return;
+}
+task.escrowRemainingMicroPi -= sub.rewardMicroPi;
+task.slotsFilled += 1;
+if (task.slotsFilled >= task.slots) task.status = 'exhausted';
+await task.save();
+worker.approvedCount += 1;
+worker.balanceMicroPi += sub.rewardMicroPi;
+await worker.save();
+try {
+const a2u = await pi.createA2UPayment({
+uid: worker.piUid,
+amountPi: toPi(sub.rewardMicroPi),
+memo: ('TaskVerse reward: ' + task.title).slice(0, 100),
+metadata: { submissionId: sub._id.toString() },
+});
+const payment = await Payment.create({
+piPaymentId: a2u.identifier, direction: 'A2U', purpose: 'worker_payout',
+user: worker._id, task: task._id, amountMicroPi: sub.rewardMicroPi, status: 'created',
+});
+sub.payout = payment._id;
+const record = await pi.getPayment(a2u.identifier);
+if (record?.transaction?.txid) {
+await pi.completeA2UPayment(a2u.identifier, record.transaction.txid);
+payment.status = 'completed';
+payment.txid = record.transaction.txid;
+await payment.save();
+worker.balanceMicroPi -= sub.rewardMicroPi;
+await worker.save();
+}
+} catch (e) {
+console.error('A2U payout pending/failed, balance retained in escrow:', e.message);
+}
+await sub.save();
 }
 
 app.get('/api/admin/queue', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const queue = await Submission.find({ status: 'pending' })
-      .populate('worker', 'username isKycVerified approvedCount')
-      .populate('task', 'title rewardMicroPi')
-      .sort({ createdAt: 1 }).lean();
-    res.json(queue);
-  } catch (err) { next(err); }
+try {
+const queue = await Submission.find({ status: 'pending' })
+.populate('worker', 'username isKycVerified approvedCount')
+.populate('task', 'title rewardMicroPi')
+.sort({ createdAt: 1 }).lean();
+res.json(queue);
+} catch (err) { next(err); }
 });
 
 app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const sub = await Submission.findOneAndUpdate(
-      { _id: req.params.id, status: 'pending' }, { status: 'approved' }, { new: true });
-    if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
-    await settleApproval(sub._id);
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+try {
+const sub = await Submission.findOneAndUpdate(
+{ _id: req.params.id, status: 'pending' }, { status: 'approved' }, { new: true });
+if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
+await settleApproval(sub._id);
+res.json({ ok: true });
+} catch (err) { next(err); }
 });
 
 app.post('/api/admin/submissions/:id/reject', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const sub = await Submission.findOneAndUpdate(
-      { _id: req.params.id, status: 'pending' }, { status: 'disputed' }, { new: true });
-    if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
-    await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
-    await Dispute.create({ submission: sub._id, openedBy: sub.worker });
-    res.json({ ok: true, movedTo: 'disputes' });
-  } catch (err) { next(err); }
+try {
+const sub = await Submission.findOneAndUpdate(
+{ _id: req.params.id, status: 'pending' }, { status: 'disputed' }, { new: true });
+if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
+await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
+await Dispute.create({ submission: sub._id, openedBy: sub.worker });
+res.json({ ok: true, movedTo: 'disputes' });
+} catch (err) { next(err); }
 });
 
 app.get('/api/admin/disputes', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const disputes = await Dispute.find({ status: 'open' })
-      .populate({ path: 'submission', populate: ['worker', 'task'] }).lean();
-    res.json(disputes);
-  } catch (err) { next(err); }
+try {
+const disputes = await Dispute.find({ status: 'open' })
+.populate({ path: 'submission', populate: ['worker', 'task'] }).lean();
+res.json(disputes);
+} catch (err) { next(err); }
 });
 
 app.post('/api/admin/disputes/:id/resolve', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { decision, note = '' } = req.body;
-    const dispute = await Dispute.findOne({ _id: req.params.id, status: 'open' });
-    if (!dispute) return res.status(404).json({ error: 'Dispute not open' });
-    const sub = await Submission.findById(dispute.submission);
-    if (decision === 'overturn') {
-      sub.status = 'approved';
-      await sub.save();
-      await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: -1 } });
-      await settleApproval(sub._id);
-      dispute.status = 'overturned';
-    } else {
-      sub.status = 'rejected';
-      await sub.save();
-      dispute.status = 'upheld';
-    }
-    dispute.resolvedBy = (await currentUser(req))._id;
-    dispute.resolutionNote = note;
-    await dispute.save();
-    res.json({ ok: true, status: dispute.status });
-  } catch (err) { next(err); }
+try {
+const { decision, note = '' } = req.body;
+const dispute = await Dispute.findOne({ _id: req.params.id, status: 'open' });
+if (!dispute) return res.status(404).json({ error: 'Dispute not open' });
+const sub = await Submission.findById(dispute.submission);
+if (decision === 'overturn') {
+sub.status = 'approved';
+await sub.save();
+await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: -1 } });
+await settleApproval(sub._id);
+dispute.status = 'overturned';
+} else {
+sub.status = 'rejected';
+await sub.save();
+dispute.status = 'upheld';
+}
+dispute.resolvedBy = (await currentUser(req))._id;
+dispute.resolutionNote = note;
+await dispute.save();
+res.json({ ok: true, status: dispute.status });
+} catch (err) { next(err); }
 });
 
 app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const [agg] = await PlatformLedger.aggregate([
-      { $group: { _id: null, totalFeeMicroPi: { $sum: '$feeMicroPi' }, entries: { $sum: 1 } } },
-    ]);
-    res.json({ totalFeesPi: toPi(agg?.totalFeeMicroPi || 0), fundedTasks: agg?.entries || 0 });
-  } catch (err) { next(err); }
+try {
+const [agg] = await PlatformLedger.aggregate([
+{ $group: { _id: null, totalFeeMicroPi: { $sum: '$feeMicroPi' }, entries: { $sum: 1 } } },
+]);
+res.json({ totalFeesPi: toPi(agg?.totalFeeMicroPi || 0), fundedTasks: agg?.entries || 0 });
+} catch (err) { next(err); }
 });
 
+// Fix #5 — add postedTasks to /api/me response
 app.get('/api/me', requireAuth, async (req, res, next) => {
-  try {
-    const user = await currentUser(req);
-    const history = await Submission.find({ worker: user._id })
-      .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean();
-    res.json({
-      username: user.username,
-      isKycVerified: user.isKycVerified,
-      balance: toPi(user.balanceMicroPi),
-      approvedCount: user.approvedCount,
-      history: history.map((h) => ({
-        title: h.task?.title, reward: toPi(h.rewardMicroPi), status: h.status, date: h.createdAt,
-      })),
-    });
-  } catch (err) { next(err); }
+try {
+const user = await currentUser(req);
+const [history, postedTasks] = await Promise.all([
+Submission.find({ worker: user._id })
+.populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
+Task.find({ poster: user._id }).sort({ createdAt: -1 }).limit(50).lean(),
+]);
+res.json({
+username: user.username,
+isKycVerified: user.isKycVerified,
+balance: toPi(user.balanceMicroPi),
+approvedCount: user.approvedCount,
+history: history.map((h) => ({
+title: h.task?.title, reward: toPi(h.rewardMicroPi), status: h.status, date: h.createdAt,
+})),
+postedTasks: postedTasks.map((t) => ({
+id: t._id, title: t.title, slots: t.slots, slotsFilled: t.slotsFilled,
+status: t.status, reward: toPi(t.rewardMicroPi), createdAt: t.createdAt,
+})),
+});
+} catch (err) { next(err); }
 });
 
 /* ── Error handler & boot ───────────────────────────────────────*/
 app.use((err, req, res, _next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+console.error(err);
+res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 8000;
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-  app.get('/api/leaderboard', requireAuth, async (req, res) => {
-    try {
-      const { period = 'week' } = req.query;
-      const now = new Date();
-      let since = new Date(0);
-      if (period === 'week') since = new Date(now - 7 * 86400000);
-      if (period === 'month') since = new Date(now - 30 * 86400000);
-      const results = await Submission.aggregate([
-        { $match: { status: { $in: ['auto_approved','approved'] }, updatedAt: { $gte: since } } },
-        { $group: { _id: '$worker', tasksCompleted: { $sum: 1 }, totalMicroPi: { $sum: '$rewardMicroPi' } } },
-        { $sort: { totalMicroPi: -1 } },
-        { $limit: 20 },
-        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
-        { $unwind: '$user' },
-        { $project: { username: '$user.username', approvedCount: '$user.approvedCount', tasksCompleted: 1, totalEarned: { $divide: ['$totalMicroPi', 1000000] } } },
-      ]);
-      res.json(results);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
+app.get('/api/leaderboard', requireAuth, async (req, res) => {
+try {
+const { period = 'week' } = req.query;
+const now = new Date();
+let since = new Date(0);
+if (period === 'week') since = new Date(now - 7 * 86400000);
+if (period === 'month') since = new Date(now - 30 * 86400000);
+const results = await Submission.aggregate([
+{ $match: { status: { $in: ['auto_approved','approved'] }, updatedAt: { $gte: since } } },
+{ $group: { _id: '$worker', tasksCompleted: { $sum: 1 }, totalMicroPi: { $sum: '$rewardMicroPi' } } },
+{ $sort: { totalMicroPi: -1 } },
+{ $limit: 20 },
+{ $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+{ $unwind: '$user' },
+{ $project: { username: '$user.username', approvedCount: '$user.approvedCount', tasksCompleted: 1, totalEarned: { $divide: ['$totalMicroPi', 1000000] } } },
+]);
+res.json(results);
+} catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-  app.get('/api/me/history', requireAuth, async (req, res) => {
-    try {
-      const submissions = await Submission.find({ worker: req.session.userId })
-        .sort({ createdAt: -1 }).limit(100)
-        .populate('task', 'title rewardMicroPi').lean();
-      const totalEarned = submissions
-        .filter(s => ['auto_approved','approved'].includes(s.status))
-        .reduce((sum, s) => sum + (s.rewardMicroPi || 0), 0) / 1e6;
-      res.json({ submissions, totalEarned });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
+app.get('/api/me/history', requireAuth, async (req, res) => {
+try {
+const submissions = await Submission.find({ worker: req.session.userId })
+.sort({ createdAt: -1 }).limit(100)
+.populate('task', 'title rewardMicroPi').lean();
+const totalEarned = submissions
+.filter(s => ['auto_approved','approved'].includes(s.status))
+.reduce((sum, s) => sum + (s.rewardMicroPi || 0), 0) / 1e6;
+res.json({ submissions, totalEarned });
+} catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-  app.listen(PORT, () => console.log('TaskVerse Pi server listening on :' + PORT));
+app.listen(PORT, () => console.log('TaskVerse Pi server listening on :' + PORT));
 }).catch((e) => {
-  console.error('MongoDB connection failed:', e.message);
-  process.exit(1);
+console.error('MongoDB connection failed:', e.message);
+process.exit(1);
 });
