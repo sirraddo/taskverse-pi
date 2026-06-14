@@ -75,3 +75,5 @@ export const fetchDisputes = () => api('/api/admin/disputes');
 export const resolveDispute = (id, decision, note = '') =>
   api(`/api/admin/disputes/${id}/resolve`, { decision, note });
 export const fetchRevenue = () => api('/api/admin/revenue');
+export const fetchPayoutHistory = () => api('/api/me/history');
+export const fetchLeaderboard = () => api('/api/leaderboard');
