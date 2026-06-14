@@ -98,7 +98,6 @@ breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: FEE_
 } catch (err) { next(err); }
 });
 
-// Fix #2 (slotsFilled in response), Fix #3 (exclude poster's own tasks), Fix #4 (userDone flag)
 app.get('/api/tasks', requireAuth, async (req, res, next) => {
 try {
 const tasks = await Task.find({ status: 'live', poster: { $ne: req.session.userId } })
@@ -332,14 +331,17 @@ res.json({ totalFeesPi: toPi(agg?.totalFeeMicroPi || 0), fundedTasks: agg?.entri
 } catch (err) { next(err); }
 });
 
-// Fix #5 — add postedTasks to /api/me response
+/* ── /api/me — full profile including posted tasks + open disputes ── */
 app.get('/api/me', requireAuth, async (req, res, next) => {
 try {
 const user = await currentUser(req);
-const [history, postedTasks] = await Promise.all([
+const [history, postedTasks, openDisputes] = await Promise.all([
 Submission.find({ worker: user._id })
 .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
 Task.find({ poster: user._id }).sort({ createdAt: -1 }).limit(50).lean(),
+Dispute.find({ openedBy: user._id, status: 'open' })
+.populate({ path: 'submission', populate: { path: 'task', select: 'title' } })
+.sort({ createdAt: -1 }).lean(),
 ]);
 res.json({
 username: user.username,
@@ -353,7 +355,30 @@ postedTasks: postedTasks.map((t) => ({
 id: t._id, title: t.title, slots: t.slots, slotsFilled: t.slotsFilled,
 status: t.status, reward: toPi(t.rewardMicroPi), createdAt: t.createdAt,
 })),
+openDisputes: openDisputes.map((d) => ({
+id: d._id,
+taskTitle: d.submission?.task?.title || 'Unknown task',
+proofText: d.submission?.proofText || '',
+hasStatement: Boolean(d.workerStatement),
+workerStatement: d.workerStatement || '',
+createdAt: d.createdAt,
+})),
 });
+} catch (err) { next(err); }
+});
+
+/* ── Worker appeal — submit statement on an open dispute ── */
+app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) => {
+try {
+const { statement } = req.body;
+if (!statement?.trim()) return res.status(400).json({ error: 'Statement text required' });
+const dispute = await Dispute.findOneAndUpdate(
+{ _id: req.params.id, openedBy: req.session.userId, status: 'open' },
+{ workerStatement: statement.trim().slice(0, 2000) },
+{ new: true }
+);
+if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
+res.json({ ok: true });
 } catch (err) { next(err); }
 });
 
