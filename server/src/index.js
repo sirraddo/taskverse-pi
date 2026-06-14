@@ -17,7 +17,18 @@ const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim());
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }));
+// Support comma-separated origins (e.g. "https://a.vercel.app,https://b.vercel.app")
+const _allowedOrigins = (process.env.CLIENT_ORIGIN || '')
+  .split(',').map(o => o.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);                       // curl / same-origin
+    if (_allowedOrigins.length === 0) return cb(null, true); // no env = dev mode, allow all
+    if (_allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error('CORS: ' + origin + ' not in allowed list'));
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
@@ -410,6 +421,36 @@ app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) =
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: reconcile pending A2U payouts ── */
+app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const pendingA2U = await Payment.find({ direction: 'A2U', status: 'created' })
+      .populate('user', 'piUid balanceMicroPi').lean();
+
+    const results = { scanned: pendingA2U.length, completed: 0, stillPending: 0, failed: 0, errors: [] };
+
+    for (const payment of pendingA2U) {
+      try {
+        const record = await pi.getPayment(payment.piPaymentId);
+        if (record?.transaction?.txid) {
+          await pi.completeA2UPayment(payment.piPaymentId, record.transaction.txid);
+          await Payment.findByIdAndUpdate(payment._id, { status: 'completed', txid: record.transaction.txid });
+          // Deduct from worker balance — was credited in settleApproval but Pi just left escrow
+          await User.findByIdAndUpdate(payment.user._id, { $inc: { balanceMicroPi: -payment.amountMicroPi } });
+          results.completed++;
+        } else {
+          results.stillPending++;
+        }
+      } catch (err) {
+        results.failed++;
+        results.errors.push(payment.piPaymentId + ': ' + err.message);
+      }
+    }
+
+    res.json({ ok: true, ...results });
   } catch (err) { next(err); }
 });
 
