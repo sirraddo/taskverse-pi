@@ -36,7 +36,7 @@ export default function PiDisputes({ onBack, notify, onResolved }) {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', minHeight: '100vh', backgroundColor: '#f7fafc' }}>
-      <button onClick={onBack}>← Back to Moderation</button>
+      <button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' }}>← Back to Moderation</button>
       <h2>⚖️ Dispute Appeals Board</h2>
 
       {disputes === null && <p style={{ color: '#718096' }}>Loading disputes…</p>}
