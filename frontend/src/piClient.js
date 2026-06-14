@@ -81,3 +81,5 @@ export const resolveDispute   = (id, d, note='')=> api(`/api/admin/disputes/${id
 export const fetchRevenue     = ()              => api('/api/admin/revenue');
 /** Create a sponsored task (goes live instantly, no Pi payment) */
 export const createAdminTask  = (payload)       => api('/api/admin/tasks', payload);
+/** Scan and complete any pending A2U payouts whose txid is now available */
+export const reconcilePayouts = ()              => api('/api/admin/reconcile', {});
