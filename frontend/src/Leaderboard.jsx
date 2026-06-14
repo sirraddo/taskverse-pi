@@ -6,7 +6,16 @@ export default function Leaderboard({ onBack }) {
 
   useEffect(() => {
     fetchLeaderboard()
-      .then(data => setEntries(Array.isArray(data) ? data : []))
+      .then(data => {
+        if (!Array.isArray(data)) { setEntries([]); return; }
+        // Deduplicate by username — keeps highest tasksDone if duplicates exist
+        const map = new Map();
+        data.forEach(u => {
+          const existing = map.get(u.username);
+          if (!existing || u.tasksDone > existing.tasksDone) map.set(u.username, u);
+        });
+        setEntries([...map.values()].sort((a, b) => b.tasksDone - a.tasksDone));
+      })
       .catch(() => setEntries([]));
   }, []);
 
@@ -19,40 +28,29 @@ export default function Leaderboard({ onBack }) {
         <h2 style={{ margin: 0 }}>🏆 Leaderboard</h2>
       </div>
 
-      {entries === null && [1,2,3,4,5].map(i => (
+      {entries === null && [1,2,3].map(i => (
         <div key={i} style={{ height: '64px', backgroundColor: '#edf2f7', borderRadius: '10px', marginBottom: '10px' }} />
       ))}
 
-      {entries?.length === 0 && (
+      {entries !== null && entries.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px', color: '#a0aec0' }}>
           <p>No entries yet. Complete tasks to appear here!</p>
         </div>
       )}
 
-      {entries?.map((entry, index) => (
-        <div key={entry.userId || index} style={{
-          backgroundColor: 'white',
-          padding: '14px 16px',
-          borderRadius: '10px',
-          marginBottom: '8px',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
+      {(entries || []).map((entry, index) => (
+        <div key={entry.username} style={{ backgroundColor: 'white', padding: '14px 16px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontSize: '1.4rem', width: '32px', textAlign: 'center' }}>
             {index < 3 ? medals[index] : <span style={{ fontWeight: 'bold', color: '#a0aec0', fontSize: '1rem' }}>#{index + 1}</span>}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 'bold', color: '#2d3748', fontSize: '0.95rem' }}>
-              {entry.username || entry.userId?.slice(0, 8) || 'Anonymous'}
-            </div>
+            <div style={{ fontWeight: 'bold', color: '#2d3748', fontSize: '0.95rem' }}>{entry.username}</div>
             <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>
-              {entry.count || 0} task{entry.count !== 1 ? 's' : ''} completed
+              {entry.tasksDone || 0} task{entry.tasksDone !== 1 ? 's' : ''} completed
             </div>
           </div>
           <div style={{ fontWeight: 'bold', color: '#667eea', fontSize: '1rem' }}>
-            {Number((entry.totalEarned || 0) / 1e6).toFixed(2)} π
+            {Number(entry.earned || 0).toFixed(2)} π
           </div>
         </div>
       ))}
