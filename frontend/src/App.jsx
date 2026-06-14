@@ -230,7 +230,7 @@ style={{ width: '100%', boxSizing: 'border-box', padding: '9px 32px 9px 32px', b
 
 {/* Category pills */}
 {cats.length > 1 && (
-<div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '12px', scrollbarWidth: 'none' }}>
+<div className="no-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '12px', scrollbarWidth: 'none' }}>
 {cats.map(cat => {
 const m = CATEGORY_META[cat] || CATEGORY_META.Other;
 const active = categoryFilter === cat;
