@@ -3,78 +3,125 @@ import { createTask, payForTaskFunding } from './piClient';
 
 const FEE_RATE = 0.05; // display only — server recalculates authoritatively
 
+const inputStyle = {
+width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px',
+border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#2d3748',
+backgroundColor: 'white', outline: 'none', marginBottom: '10px',
+};
+
 /**
- * PRODUCTION VERSION — posting a task now:
- * 1. Creates the task server-side (status: awaiting_funding)
- * 2. Shows the poster a transparent breakdown: reward pool + 5% fee
- * 3. Opens the real Pi payment for the gross amount
- * 4. Task goes live only after on-chain completion
- */
+* PRODUCTION VERSION — posting a task now:
+* 1. Creates the task server-side (status: awaiting_funding)
+* 2. Shows the poster a transparent breakdown: reward pool + 5% fee
+* 3. Opens the real Pi payment for the gross amount
+* 4. Task goes live only after on-chain completion
+*/
 export default function CreateTask({ onPublished, onBack }) {
-  const [title, setTitle] = useState('');
-  const [reward, setReward] = useState('');
-  const [slots, setSlots] = useState('1');
-  const [phase, setPhase] = useState('form'); // form | paying | done
-  const [error, setError] = useState(null);
+const [title, setTitle] = useState('');
+const [description, setDescription] = useState('');
+const [reward, setReward] = useState('');
+const [slots, setSlots] = useState('1');
+const [phase, setPhase] = useState('form'); // form | paying | done
+const [error, setError] = useState(null);
 
-  const breakdown = useMemo(() => {
-    const r = parseFloat(reward) || 0;
-    const s = parseInt(slots, 10) || 0;
-    const pool = r * s;
-    const fee = pool * FEE_RATE;
-    return { pool, fee, total: pool + fee };
-  }, [reward, slots]);
+const breakdown = useMemo(() => {
+const r = parseFloat(reward) || 0;
+const s = parseInt(slots, 10) || 0;
+const pool = r * s;
+const fee = pool * FEE_RATE;
+return { pool, fee, total: pool + fee };
+}, [reward, slots]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setPhase('paying');
-    try {
-      // 1. Server creates the campaign and returns the exact amount due
-      const { taskId, amountToPay } = await createTask({
-        title,
-        rewardPi: parseFloat(reward),
-        slots: parseInt(slots, 10),
-      });
-      // 2. Real Pi wallet payment (rewards + platform fee → app wallet)
-      await payForTaskFunding({ taskId, amountToPay, title });
-      setPhase('done');
-      onPublished?.(); // parent refetches the feed
-    } catch (err) {
-      setError(err.message || 'Funding failed');
-      setPhase('form');
-    }
-  };
+const handleSubmit = async (e) => {
+e.preventDefault();
+setError(null);
+setPhase('paying');
+try {
+// 1. Server creates the campaign and returns the exact amount due
+const { taskId, amountToPay } = await createTask({
+title,
+description,
+rewardPi: parseFloat(reward),
+slots: parseInt(slots, 10),
+});
+// 2. Real Pi wallet payment (rewards + platform fee → app wallet)
+await payForTaskFunding({ taskId, amountToPay, title });
+setPhase('done');
+onPublished?.(); // parent refetches the feed
+} catch (err) {
+setError(err.message || 'Funding failed');
+setPhase('form');
+}
+};
 
-  return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '12px' }}>
-      <button onClick={onBack}>← Back</button>
-      <h3>Post a Micro-Gig Campaign</h3>
+return (
+<div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '12px' }}>
 
-      {phase === 'done' ? (
-        <p style={{ color: '#2f855a', fontWeight: 'bold' }}>🚀 Payment confirmed — your gig is live on the feed!</p>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title" required maxLength={120} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
-          <input type="number" step="0.01" min="0.01" value={reward} onChange={(e) => setReward(e.target.value)} placeholder="Reward per worker (π)" required style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
-          <input type="number" min="1" max="1000" value={slots} onChange={(e) => setSlots(e.target.value)} placeholder="Number of worker slots" required style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+{/* Header */}
+<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
+<button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
+<h3 style={{ margin: 0, fontWeight: '700', fontSize: '1rem', color: '#1a202c' }}>Post a Micro-Gig</h3>
+</div>
 
-          {breakdown.total > 0 && (
-            <div style={{ backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', fontSize: '0.9rem', marginBottom: '15px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Reward pool ({slots} × {reward}π)</span><strong>{breakdown.pool.toFixed(2)} π</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#718096' }}><span>Platform hosting fee (5%)</span><span>{breakdown.fee.toFixed(2)} π</span></div>
-              <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total deposit</span><strong>{breakdown.total.toFixed(2)} π</strong></div>
-            </div>
-          )}
+{phase === 'done' ? (
+<div style={{ textAlign: 'center', padding: '32px 20px' }}>
+<div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🚀</div>
+<p style={{ color: '#276749', fontWeight: '700', fontSize: '1rem', margin: 0 }}>Payment confirmed — your gig is live!</p>
+<p style={{ color: '#718096', fontSize: '0.82rem', marginTop: '6px' }}>Workers can find and start it right away.</p>
+</div>
+) : (
+<div>
+<input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+placeholder="Task title (e.g. Follow our Telegram channel)" required maxLength={120}
+style={inputStyle} />
 
-          {error && <p style={{ color: '#c53030', fontSize: '0.9rem' }}>{error}</p>}
+<textarea value={description} onChange={(e) => setDescription(e.target.value)}
+placeholder="Task description — tell workers exactly what to do and how to prove it…" maxLength={2000} rows={3}
+style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight: 1.45 }} />
 
-          <button type="submit" disabled={phase === 'paying'} style={{ width: '100%', backgroundColor: '#764ba2', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-            {phase === 'paying' ? 'Waiting for Pi Wallet…' : `🚀 Deposit & Publish (${breakdown.total.toFixed(2)} π)`}
-          </button>
-        </form>
-      )}
-    </div>
-  );
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
+<div>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>REWARD PER WORKER</label>
+<input type="number" step="0.01" min="0.01" value={reward} onChange={(e) => setReward(e.target.value)}
+placeholder="0.10 π" required style={inputStyle} />
+</div>
+<div>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>WORKER SLOTS</label>
+<input type="number" min="1" max="1000" value={slots} onChange={(e) => setSlots(e.target.value)}
+placeholder="10" required style={inputStyle} />
+</div>
+</div>
+
+{breakdown.total > 0 && (
+<div style={{ backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', fontSize: '0.85rem', marginBottom: '14px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+<span style={{ color: '#4a5568' }}>Reward pool ({slots} × {reward}π)</span>
+<strong style={{ color: '#2d3748' }}>{breakdown.pool.toFixed(4)} π</strong>
+</div>
+<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#718096', fontSize: '0.8rem' }}>
+<span>Platform hosting fee (5%)</span>
+<span>{breakdown.fee.toFixed(4)} π</span>
+</div>
+<div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '6px 0' }} />
+<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+<span style={{ fontWeight: '700', color: '#2d3748' }}>Total deposit</span>
+<strong style={{ color: '#764ba2', fontSize: '1rem' }}>{breakdown.total.toFixed(4)} π</strong>
+</div>
+</div>
+)}
+
+{error && (
+<div style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px 12px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '12px', border: '1px solid #fed7d7' }}>
+⚠️ {error}
+</div>
+)}
+
+<button onClick={handleSubmit} disabled={phase === 'paying' || !title.trim() || !reward || !slots}
+style={{ width: '100%', backgroundColor: (phase === 'paying' || !title.trim() || !reward) ? '#a0aec0' : '#764ba2', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: (phase === 'paying') ? 'wait' : 'pointer', fontSize: '0.9rem', transition: 'background 0.2s' }}>
+{phase === 'paying' ? '⏳ Waiting for Pi Wallet…' : '🚀 Deposit & Publish (' + breakdown.total.toFixed(4) + ' π)'}
+</button>
+</div>
+)}
+</div>
+);
 }
