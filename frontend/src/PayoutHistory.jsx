@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
+import { fetchPayoutHistory } from './piClient';
 
 export default function PayoutHistory({ onBack }) {
   const [history, setHistory] = useState(null);
   const [total, setTotal] = useState(0);
-  const API = import.meta.env.VITE_API_URL || 'https://taskverse-pi.onrender.com';
 
   useEffect(() => {
-    fetch(API + '/api/me/history', { credentials: 'include' })
-      .then(r => r.json())
+    fetchPayoutHistory()
       .then(data => { setHistory(data.submissions || []); setTotal(data.totalEarned || 0); })
       .catch(() => setHistory([]));
   }, []);
