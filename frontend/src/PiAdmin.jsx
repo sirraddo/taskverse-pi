@@ -41,7 +41,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#f7fafc', minHeight: '100vh' }}>
-      <button onClick={onBack}>Back</button>
+      <button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' }}>← Back</button>
       <h2>Admin Moderation Center</h2>
 
       {revenue && (
