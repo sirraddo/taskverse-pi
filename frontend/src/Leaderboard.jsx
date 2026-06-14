@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
+import { fetchLeaderboard } from './piClient';
 
 export default function Leaderboard({ onBack }) {
   const [entries, setEntries] = useState(null);
-  const API = import.meta.env.VITE_API_URL || 'https://taskverse-pi.onrender.com';
 
   useEffect(() => {
-    fetch(API + '/api/leaderboard', { credentials: 'include' })
-      .then(r => r.json())
+    fetchLeaderboard()
       .then(data => setEntries(Array.isArray(data) ? data : []))
       .catch(() => setEntries([]));
   }, []);
