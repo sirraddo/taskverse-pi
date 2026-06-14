@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -27,6 +27,16 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [taskReward, setTaskReward] = useState('');
   const [taskSlots, setTaskSlots] = useState('10');
   const [creating, setCreating] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+
+  const handleReconcile = async () => {
+    setReconciling(true);
+    try {
+      const res = await reconcilePayouts();
+      notify(`💸 Reconcile done: ${res.completed} completed, ${res.stillPending} still pending, ${res.failed} failed (scanned ${res.scanned})`);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setReconciling(false); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +132,13 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           </div>
         )}
       </div>
+
+      {/* Reconcile pending A2U payouts */}
+      <button onClick={handleReconcile} disabled={reconciling}
+        style={{ width: '100%', marginBottom: '14px', padding: '10px', backgroundColor: reconciling ? '#a0aec0' : '#2d3748', color: 'white', border: 'none', borderRadius: '10px', cursor: reconciling ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+        <span style={{ display: 'inline-block', animation: reconciling ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
+        {reconciling ? 'Checking pending payouts…' : 'Reconcile Pending A2U Payouts'}
+      </button>
 
       {/* Review queue */}
       <h3 style={{ margin: '0 0 10px', fontSize: '0.88rem', fontWeight: '700', color: '#4a5568' }}>
