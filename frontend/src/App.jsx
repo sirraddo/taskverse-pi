@@ -68,6 +68,7 @@ const [notification, setNotification] = useState(null);
 const [screen, setScreen] = useState(null);
 const [categoryFilter, setCategoryFilter] = useState('All');
 const [searchQuery, setSearchQuery] = useState('');
+const [refreshing, setRefreshing] = useState(false);
 
 useEffect(() => { try { initPi(); } catch (_) {} }, []);
 
@@ -83,6 +84,13 @@ setTasks(feed);
 setUser((prev) => ({ ...prev, ...me }));
 } catch (err) { triggerNotification('Warning: ' + err.message); }
 }, [triggerNotification]);
+
+const handleManualRefresh = useCallback(async () => {
+if (refreshing) return;
+setRefreshing(true);
+await refresh();
+setRefreshing(false);
+}, [refresh, refreshing]);
 
 useEffect(() => {
 if (!user) return;
@@ -145,9 +153,11 @@ const matchSearch = !q || (tk.title || '').toLowerCase().includes(q) || (tk.desc
 return matchCat && matchSearch;
 });
 
+const disputeCount = (user.openDisputes || []).length;
+
 return (
 <div style={{ maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: '#f4f6fb', position: 'relative', paddingBottom: '40px' }}>
-<style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}`}</style>
+<style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
 {notification && (
 <div style={{ position: 'fixed', top: '16px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#1a202c', color: 'white', padding: '11px 20px', borderRadius: '28px', zIndex: 1000, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', fontWeight: '700', fontSize: '0.85rem', maxWidth: '88%', textAlign: 'center' }}>
@@ -162,14 +172,17 @@ return (
 {screen === 'privacy' && <PrivacyPolicy onBack={() => setScreen(null)} />}
 {screen === 'terms' && <TermsOfService onBack={() => setScreen(null)} />}
 {screen === 'howitworks' && <HowItWorks onBack={() => setScreen(null)} />}
-{/* Fix #5: poster's own tasks progress view */}
 {screen === 'myTasks' && <MyPostedTasks tasks={user.postedTasks || []} onBack={() => setScreen(null)} />}
 </div>
 )}
 
 {view === 'admin' && user.isAdmin && <PiAdmin onBack={() => setView('feed')} onOpenDisputes={() => setView('disputes')} notify={triggerNotification} />}
 {view === 'disputes' && user.isAdmin && <PiDisputes onBack={() => setView('admin')} notify={triggerNotification} onResolved={refresh} />}
-{view === 'profile' && <div style={{ padding: '20px' }}><UserProfile user={user} onBack={() => setView('feed')} /></div>}
+{view === 'profile' && (
+<div style={{ padding: '20px' }}>
+<UserProfile user={user} onBack={() => setView('feed')} onRefresh={refresh} />
+</div>
+)}
 {view === 'create' && <div style={{ padding: '20px' }}><CreateTask onBack={() => setView('feed')} onPublished={() => { triggerNotification(t.alertPublish); setView('feed'); refresh(); }} /></div>}
 {view === 'submit' && selectedTask && (
 <div style={{ padding: '20px' }}>
@@ -181,7 +194,14 @@ return (
 <div style={{ padding: '16px' }}>
 {/* Nav */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-<button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.92rem', color: '#4a5568', fontWeight: '700' }}>👤 {t.profile}</button>
+<button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.92rem', color: '#4a5568', fontWeight: '700', position: 'relative' }}>
+👤 {t.profile}
+{disputeCount > 0 && (
+<span style={{ position: 'absolute', top: '-4px', right: '-10px', backgroundColor: '#c53030', color: 'white', borderRadius: '50%', width: '16px', height: '16px', fontSize: '0.55rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+{disputeCount}
+</span>
+)}
+</button>
 <select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: '600', color: '#4a5568', fontSize: '0.78rem' }}>
 <option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="vi">🇻🇳 VI</option>
 </select>
@@ -223,10 +243,16 @@ return (
 </div>
 )}
 
-{/* Section header */}
+{/* Section header with manual refresh */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
 <h2 style={{ margin: 0, fontSize: '0.97rem', fontWeight: '700', color: '#2d3748' }}>{t.availableGigs}</h2>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 {tasks !== null && <span style={{ fontSize: '0.72rem', color: '#a0aec0', fontWeight: '600' }}>{filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}</span>}
+<button onClick={handleManualRefresh} disabled={refreshing} title="Refresh tasks"
+style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', fontSize: '0.95rem', opacity: refreshing ? 0.4 : 0.6, padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s' }}>
+<span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
+</button>
+</div>
 </div>
 
 {/* Skeletons */}
@@ -282,7 +308,6 @@ return (
 </div>
 )}
 
-{/* Fix #4: show Done badge when user already completed this task */}
 <button
 onClick={() => { if (!isFull && !task.userDone) { setSelectedTask(task); setView('submit'); } }}
 disabled={isFull || task.userDone}
@@ -298,7 +323,7 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 <button onClick={() => setView('admin')} style={{ width: '100%', marginTop: '16px', backgroundColor: '#edf2f7', border: 'none', padding: '10px', borderRadius: '10px', color: '#718096', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600' }}>🔧 {t.adminBtn}</button>
 )}
 
-{/* Bottom nav — Fix #5: add My Tasks button */}
+{/* Bottom nav */}
 <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
 <button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#667eea', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>🏆 Board</button>
 <button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#667eea', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📜 History</button>
