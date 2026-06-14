@@ -68,7 +68,7 @@ export const fetchTasks        = ()         => api('/api/tasks');
 export const fetchMe           = ()         => api('/api/me');
 export const submitProof       = (id, p)    => api(`/api/tasks/${id}/submissions`, p);
 export const fetchPayoutHistory= ()         => api('/api/me/history');
-export const fetchLeaderboard  = ()         => api('/api/leaderboard');
+export const fetchLeaderboard  = (period = 'week') => api(`/api/leaderboard?period=${period}`);
 export const submitDisputeStatement = (id, statement) =>
   api(`/api/me/disputes/${id}/statement`, { statement });
 
