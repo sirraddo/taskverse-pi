@@ -83,3 +83,5 @@ export const fetchRevenue     = ()              => api('/api/admin/revenue');
 export const createAdminTask  = (payload)       => api('/api/admin/tasks', payload);
 /** Scan and complete any pending A2U payouts whose txid is now available */
 export const reconcilePayouts = ()              => api('/api/admin/reconcile', {});
+/** Cancel tasks that have been stuck in awaiting_funding longer than hoursOld (default 24) */
+export const cancelStaleFunding = (hoursOld = 24) => api('/api/admin/cancel-stale-funding', { hoursOld });
