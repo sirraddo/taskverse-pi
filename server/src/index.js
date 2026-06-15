@@ -175,12 +175,35 @@ app.post('/api/payments/incomplete', requireAuth, async (req, res, next) => {
     const paymentId = payment?.identifier;
     const txid = payment?.transaction?.txid;
     if (!paymentId) return res.status(400).json({ error: 'payment.identifier required' });
+
     if (txid) {
+      // Payment went through on-chain — complete it and activate the task
       await pi.completePayment(paymentId, txid);
-      await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'completed', txid });
+      const pmtDoc = await Payment.findOneAndUpdate(
+        { piPaymentId: paymentId }, { status: 'completed', txid }, { new: true }
+      );
+      if (pmtDoc?.task && pmtDoc.direction === 'U2A' && pmtDoc.purpose === 'task_funding') {
+        const task = await Task.findByIdAndUpdate(pmtDoc.task,
+          { status: 'live', fundingPaymentId: paymentId }, { new: true });
+        if (task) {
+          await PlatformLedger.findOneAndUpdate(
+            { task: task._id }, // avoid duplicate ledger entry
+            { feeMicroPi: task.platformFeeMicroPi, sourcePaymentId: paymentId, task: task._id },
+            { upsert: true, setDefaultsOnInsert: true }
+          );
+          console.log('Incomplete U2A recovered — task now live:', task._id.toString());
+        }
+      }
     } else {
+      // No on-chain record — Pi cancelled it; cancel our task too
       await pi.cancelPayment(paymentId);
-      await Payment.findOneAndUpdate({ piPaymentId: paymentId }, { status: 'cancelled' });
+      const pmtDoc = await Payment.findOneAndUpdate(
+        { piPaymentId: paymentId }, { status: 'cancelled' }, { new: true }
+      );
+      if (pmtDoc?.task && pmtDoc.direction === 'U2A' && pmtDoc.purpose === 'task_funding') {
+        await Task.findByIdAndUpdate(pmtDoc.task, { status: 'cancelled' });
+        console.log('Incomplete U2A cancelled — task marked cancelled:', pmtDoc.task.toString());
+      }
     }
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -421,6 +444,41 @@ app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) =
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: cancel tasks stuck in awaiting_funding > N hours ── */
+app.post('/api/admin/cancel-stale-funding', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const hoursOld = Math.max(1, parseInt(req.body.hoursOld ?? 24, 10));
+    const cutoff = new Date(Date.now() - hoursOld * 3600_000);
+
+    const staleTasks = await Task.find({
+      status: 'awaiting_funding',
+      createdAt: { $lt: cutoff },
+    }).lean();
+
+    let cancelled = 0;
+    const details = [];
+
+    for (const task of staleTasks) {
+      // Try to cancel the associated Pi payment if one exists
+      const pmt = await Payment.findOne({ task: task._id, direction: 'U2A', status: { $in: ['approved', 'created'] } });
+      if (pmt) {
+        try {
+          await pi.cancelPayment(pmt.piPaymentId);
+          await Payment.findByIdAndUpdate(pmt._id, { status: 'cancelled' });
+        } catch (piErr) {
+          // Pi may have already cancelled it — proceed to mark task anyway
+          console.warn('pi.cancelPayment failed (may already be cancelled):', piErr.message);
+        }
+      }
+      await Task.findByIdAndUpdate(task._id, { status: 'cancelled' });
+      cancelled++;
+      details.push({ taskId: task._id, title: task.title, age: Math.round((Date.now() - new Date(task.createdAt)) / 3600_000) + 'h' });
+    }
+
+    res.json({ ok: true, scanned: staleTasks.length, cancelled, details });
   } catch (err) { next(err); }
 });
 
