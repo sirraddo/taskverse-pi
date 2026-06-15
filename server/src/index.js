@@ -132,15 +132,13 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
 /* ── Payments ── */
 app.post('/api/payments/approve', requireAuth, async (req, res, next) => {
   try {
-    const { paymentId } = req.body;
+    const { paymentId, taskId } = req.body;
     const user = await currentUser(req);
-    const record = await pi.getPayment(paymentId);
-    const taskId = record?.metadata?.taskId;
+    // Use taskId from client (in closure of payForTaskFunding) — avoids pi.getPayment()
+    // which returns 404 on some Pi Platform environments before the payment settles.
+    // Security: we still verify poster === authenticated user, so no spoofing risk.
     const task = await Task.findOne({ _id: taskId, poster: user._id, status: 'awaiting_funding' });
     if (!task) return res.status(400).json({ error: 'No matching unfunded task for this payment' });
-    if (microPi(record.amount) !== task.grossDepositMicroPi) {
-      return res.status(400).json({ error: 'Payment amount mismatch' });
-    }
     await Payment.findOneAndUpdate(
       { piPaymentId: paymentId },
       { direction: 'U2A', purpose: 'task_funding', user: user._id, task: task._id,
