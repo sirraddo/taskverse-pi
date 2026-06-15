@@ -2,9 +2,11 @@ export default function MyPostedTasks({ tasks, onBack }) {
 if (!tasks) return null;
 
 const statusBadge = {
-live: { label: '🟢 Live', color: '#276749', bg: '#c6f6d5' },
-awaiting_funding: { label: '⏳ Pending Funding', color: '#744210', bg: '#fefcbf' },
-exhausted: { label: '✅ Completed', color: '#2c5282', bg: '#bee3f8' },
+live:             { label: '🟢 Live',            color: '#276749', bg: '#c6f6d5' },
+awaiting_funding: { label: '⏳ Pending Funding',   color: '#744210', bg: '#fefcbf' },
+exhausted:        { label: '✅ All Slots Filled',  color: '#2c5282', bg: '#bee3f8' },
+cancelled:        { label: '🚫 Cancelled',       color: '#742a2a', bg: '#fff5f5' },
+paused:           { label: '⏸️ Paused',        color: '#553c1a', bg: '#fef3c7' },
 };
 
 return (
