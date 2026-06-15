@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -28,6 +28,22 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [taskSlots, setTaskSlots] = useState('10');
   const [creating, setCreating] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [staleCutoff, setStaleCutoff] = useState('24');
+
+  const handleCancelStale = async () => {
+    if (!window.confirm(`Cancel all tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nThis will also attempt to cancel the associated Pi payments. This cannot be undone.`)) return;
+    setCancelling(true);
+    try {
+      const res = await cancelStaleFunding(parseInt(staleCutoff, 10));
+      if (res.cancelled === 0) {
+        notify(`✅ No stale tasks found older than ${staleCutoff}h.`);
+      } else {
+        notify(`🧹 Cancelled ${res.cancelled} stale task${res.cancelled !== 1 ? 's' : ''}: ${res.details.map(d => '"' + d.title + '" (' + d.age + ')').join(', ')}`);
+      }
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setCancelling(false); }
+  };
 
   const handleReconcile = async () => {
     setReconciling(true);
@@ -139,6 +155,30 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <span style={{ display: 'inline-block', animation: reconciling ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
         {reconciling ? 'Checking pending payouts…' : 'Reconcile Pending A2U Payouts'}
       </button>
+
+      {/* Cancel stale "awaiting_funding" tasks */}
+      <div style={{ backgroundColor: '#fff5f5', border: '1.5px solid #fed7d7', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>
+          🚫 Cancel Stale Pending-Funding Tasks
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 10px' }}>
+          Tasks stuck in "awaiting_funding" because the Pi payment never completed (e.g. testnet key switch, user closed wallet). Cancelling tells Pi to release the hold and removes the task from the poster's queue.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select value={staleCutoff} onChange={e => setStaleCutoff(e.target.value)}
+            style={{ padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #fed7d7', fontSize: '0.82rem', backgroundColor: 'white', color: '#2d3748', flex: 1 }}>
+            <option value="1">Older than 1 hour</option>
+            <option value="6">Older than 6 hours</option>
+            <option value="24">Older than 24 hours</option>
+            <option value="72">Older than 3 days</option>
+            <option value="168">Older than 7 days</option>
+          </select>
+          <button onClick={handleCancelStale} disabled={cancelling}
+            style={{ backgroundColor: cancelling ? '#a0aec0' : '#c53030', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '700', cursor: cancelling ? 'not-allowed' : 'pointer', fontSize: '0.82rem', flexShrink: 0 }}>
+            {cancelling ? 'Cancelling…' : '🚫 Cancel'}
+          </button>
+        </div>
+      </div>
 
       {/* Review queue */}
       <h3 style={{ margin: '0 0 10px', fontSize: '0.88rem', fontWeight: '700', color: '#4a5568' }}>
