@@ -52,7 +52,7 @@ export function payForTaskFunding({ taskId, amountToPay, title }) {
       { amount: amountToPay, memo: `TaskVerse campaign: ${title}`.slice(0, 100), metadata: { taskId } },
       {
         onReadyForServerApproval: (paymentId) =>
-          api('/api/payments/approve', { paymentId }).catch(reject),
+          api('/api/payments/approve', { paymentId, taskId }).catch(reject),
         onReadyForServerCompletion: (paymentId, txid) =>
           api('/api/payments/complete', { paymentId, txid }).then(resolve).catch(reject),
         onCancel: () => reject(new Error('Payment cancelled')),
