@@ -510,6 +510,63 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+/* ── Admin: deep stats for A2U requirement check ── */
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const [
+      totalUsers,
+      totalSubmissions,
+      submissionsByStatus,
+      approvedWorkers,
+      a2uPayments,
+      u2aPayments,
+      totalTasks,
+    ] = await Promise.all([
+      User.countDocuments(),
+      Submission.countDocuments(),
+      Submission.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Submission.aggregate([
+        { $match: { status: { $in: ['approved', 'auto_approved'] } } },
+        { $group: { _id: '$worker', tasksDone: { $sum: 1 }, totalMicroPi: { $sum: '$rewardMicroPi' } } },
+        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'u' } },
+        { $unwind: '$u' },
+        { $project: { username: '$u.username', piUid: '$u.piUid', tasksDone: 1, earnedPi: { $divide: ['$totalMicroPi', 1e6] } } },
+        { $sort: { tasksDone: -1 } }
+      ]),
+      Payment.countDocuments({ direction: 'A2U' }),
+      Payment.aggregate([
+        { $match: { direction: 'U2A' } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Task.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+    ]);
+
+    res.json({
+      users: { total: totalUsers },
+      submissions: {
+        total: totalSubmissions,
+        byStatus: Object.fromEntries(submissionsByStatus.map(s => [s._id, s.count])),
+      },
+      approvedWorkers: {
+        count: approvedWorkers.length,
+        workers: approvedWorkers,
+        distinctPiUids: [...new Set(approvedWorkers.map(w => w.piUid))].length,
+      },
+      payments: {
+        a2uTotal: a2uPayments,
+        u2aByStatus: Object.fromEntries(u2aPayments.map(p => [p._id, p.count])),
+      },
+      tasks: {
+        byStatus: Object.fromEntries(totalTasks.map(t => [t._id, t.count])),
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
