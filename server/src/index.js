@@ -510,6 +510,57 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+/* ── Admin: reconcile unpaid A2U — fires Testnet A2U for approved subs with no payout ── */
+app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const unpaid = await Submission.find({
+      status: { $in: ['approved', 'auto_approved'] },
+      payout: { $exists: false }
+    }).populate('worker').populate('task');
+
+    const results = [];
+    for (const sub of unpaid) {
+      if (!sub.worker?.piUid) {
+        results.push({ id: sub._id, error: 'no piUid', worker: sub.worker?.username });
+        continue;
+      }
+      try {
+        const a2u = await pi.createA2UPayment({
+          uid: sub.worker.piUid,
+          amountPi: sub.rewardMicroPi / 1e6,
+          memo: 'TaskVerse task reward',
+          metadata: { submissionId: sub._id.toString(), taskId: sub.task?._id?.toString() }
+        });
+        const payment = await Payment.create({
+          piPaymentId: a2u.identifier,
+          direction: 'A2U',
+          purpose: 'task_reward',
+          user: sub.worker._id,
+          task: sub.task?._id,
+          amountMicroPi: sub.rewardMicroPi,
+          status: 'pending',
+        });
+        sub.payout = payment._id;
+        await sub.save();
+        results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier });
+      } catch (e) {
+        results.push({ id: sub._id, worker: sub.worker?.username, error: e.message });
+      }
+    }
+
+    const paid = results.filter(r => r.paymentId);
+    const distinctWorkers = [...new Set(paid.map(r => r.worker))];
+    res.json({
+      total: unpaid.length,
+      succeeded: paid.length,
+      failed: results.filter(r => r.error).length,
+      distinctWorkersPaid: distinctWorkers.length,
+      workers: distinctWorkers,
+      results,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: deep stats for A2U requirement check ── */
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) => {
   try {
