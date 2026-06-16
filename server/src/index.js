@@ -650,7 +650,9 @@ app.post('/api/fire-a2u', async (req, res, next) => {
         await sub.save();
         results.push({ worker: sub.worker.username, pi: sub.rewardMicroPi/1e6, id: a2u.identifier });
       } catch(e) {
-        results.push({ worker: sub.worker?.username, error: e.message });
+        const piErr = e.response?.data;
+        const piStatus = e.response?.status;
+        results.push({ worker: sub.worker?.username, piUid: sub.worker?.piUid, error: e.message, piStatus, piError: piErr, amountPi: sub.rewardMicroPi/1e6 });
       }
     }
     const ok = results.filter(r => r.id);
