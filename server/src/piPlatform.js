@@ -1,5 +1,6 @@
 import axios from 'axios';
-import PiNetwork from 'pi-backend';
+import PiNetworkPkg from 'pi-backend';
+const PiNetwork = PiNetworkPkg.default ?? PiNetworkPkg;
 
 const BASE = process.env.PI_PLATFORM_API_URL || 'https://api.minepi.com/v2';
 
