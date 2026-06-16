@@ -567,39 +567,6 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
-/* ── Temporary diagnostic — remove after use ── */
-app.get('/api/diag', async (req, res, next) => {
-  if (req.query.secret !== 'tv_diag_2026') return res.status(403).end();
-  try {
-    const [subStats, userCount, payStats, taskStats] = await Promise.all([
-      Submission.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-      User.countDocuments(),
-      Payment.aggregate([{ $group: { _id: { dir: '$direction', status: '$status' }, count: { $sum: 1 } } }]),
-      Task.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
-    ]);
-    const approvedWorkers = await Submission.aggregate([
-      { $match: { status: { $in: ['approved', 'auto_approved'] } } },
-      { $group: { _id: '$worker' } },
-      { $count: 'distinctWorkers' }
-    ]);
-    const allWorkers = await Submission.aggregate([
-      { $match: { status: { $in: ['approved', 'auto_approved'] } } },
-      { $lookup: { from: 'users', localField: 'worker', foreignField: '_id', as: 'u' } },
-      { $unwind: '$u' },
-      { $group: { _id: '$u.username', tasks: { $sum: 1 }, pi: { $sum: '$rewardMicroPi' } } },
-      { $sort: { tasks: -1 } }
-    ]);
-    res.json({
-      users: userCount,
-      submissions: Object.fromEntries(subStats.map(s => [s._id || 'null', s.count])),
-      distinctApprovedWorkers: approvedWorkers[0]?.distinctWorkers || 0,
-      workers: allWorkers.map(w => ({ username: w._id, tasks: w.tasks, piEarned: (w.pi/1e6).toFixed(4) })),
-      payments: payStats.map(p => ({ dir: p._id.dir, status: p._id.status, count: p.count })),
-      tasks: Object.fromEntries(taskStats.map(t => [t._id, t.count])),
-    });
-  } catch (err) { next(err); }
-});
-
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
