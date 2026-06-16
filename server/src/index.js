@@ -274,8 +274,8 @@ async function settleApproval(submissionId) {
       metadata: { submissionId: sub._id.toString() },
     });
     const payment = await Payment.create({
-      piPaymentId: a2u.identifier, direction: 'A2U', purpose: 'worker_payout',
-      user: worker._id, task: task._id, amountMicroPi: sub.rewardMicroPi, status: 'created',
+      piPaymentId: a2u.identifier, txid: a2u.txid, direction: 'A2U', purpose: 'worker_payout',
+      user: worker._id, task: task._id, amountMicroPi: sub.rewardMicroPi, status: 'completed',
     });
     sub.payout = payment._id;
     const record = await pi.getPayment(a2u.identifier);
@@ -533,12 +533,13 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
         });
         const payment = await Payment.create({
           piPaymentId: a2u.identifier,
+          txid: a2u.txid,
           direction: 'A2U',
           purpose: 'task_reward',
           user: sub.worker._id,
           task: sub.task?._id,
           amountMicroPi: sub.rewardMicroPi,
-          status: 'pending',
+          status: 'completed',
         });
         sub.payout = payment._id;
         await sub.save();
