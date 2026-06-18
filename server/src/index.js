@@ -7,14 +7,15 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlathformLedger, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
-const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim());
+const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
+const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
 
 app.use(helmet());
 // Support comma-separated origins (e.g. "https://a.vercel.app,https://b.vercel.app")
@@ -43,7 +44,7 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!ADMINS.includes(req.session.username)) {
+    if (!isAdmin(req.session.username)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -77,7 +78,7 @@ app.post('/api/auth/verify', async (req, res, next) => {
         username: user.username,
         balance: toPi(user.balanceMicroPi),
         isKycVerified: user.isKycVerified,
-        isAdmin: ADMINS.includes(user.username),
+                isAdmin: isAdmin(user.username),
       },
     });
   } catch (err) {
