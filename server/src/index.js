@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlathformLedger, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { evaluateSubmission } from './autoReview.js';
@@ -281,7 +281,6 @@ async function settleApproval(submissionId) {
     sub.payout = payment._id;
     const record = await pi.getPayment(a2u.identifier);
     if (record?.transaction?.txid) {
-      await pi.completeA2UPayment(a2u.identifier, record.transaction.txid);
       payment.status = 'completed'; payment.txid = record.transaction.txid; await payment.save();
       worker.balanceMicroPi -= sub.rewardMicroPi; await worker.save();
     }
@@ -408,7 +407,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     ]);
     res.json({
       username: user.username,
-      isAdmin: ADMINS.includes(user.username),
+      isAdmin: isAdmin(user.username),
       isKycVerified: user.isKycVerified,
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
