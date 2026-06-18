@@ -3,7 +3,7 @@
  * Prerequisite: index.html loads https://sdk.minepi.com/pi-sdk.js
  */
 
-const API = import.meta.env.VITE_API_URL || 'https://taskverse-pi.onrender.com';
+const API = import.meta.env.VITE_API_URL || 'https://taskverse-pi-backend.onrender.com';
 let sessionToken = null;
 
 export const getSessionToken = () => sessionToken;
@@ -38,7 +38,7 @@ export async function authenticateWithPi() {
   initPi();
   const onIncompletePaymentFound = (payment) =>
     api('/api/payments/incomplete', { payment }).catch(console.error);
-  const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
+  const auth = await window.Pi.authenticate(['username', 'payments', 'wallet_address'], onIncompletePaymentFound);
   const { sessionToken: token, user } = await api('/api/auth/verify', {
     accessToken: auth.accessToken,
   });
@@ -63,25 +63,25 @@ export function payForTaskFunding({ taskId, amountToPay, title }) {
 }
 
 /* ── Worker API ── */
-export const createTask        = (payload) => api('/api/tasks', payload);
-export const fetchTasks        = ()         => api('/api/tasks');
-export const fetchMe           = ()         => api('/api/me');
-export const submitProof       = (id, p)    => api(`/api/tasks/${id}/submissions`, p);
-export const fetchPayoutHistory= ()         => api('/api/me/history');
-export const fetchLeaderboard  = (period = 'week') => api(`/api/leaderboard?period=${period}`);
+export const createTask = (payload) => api('/api/tasks', payload);
+export const fetchTasks = () => api('/api/tasks');
+export const fetchMe = () => api('/api/me');
+export const submitProof = (id, p) => api(`/api/tasks/${id}/submissions`, p);
+export const fetchPayoutHistory= () => api('/api/me/history');
+export const fetchLeaderboard = (period = 'week') => api(`/api/leaderboard?period=${period}`);
 export const submitDisputeStatement = (id, statement) =>
   api(`/api/me/disputes/${id}/statement`, { statement });
 
 /* ── Admin API ── */
-export const fetchAdminQueue  = ()              => api('/api/admin/queue');
-export const approveSubmission= (id)            => api(`/api/admin/submissions/${id}/approve`, {});
-export const rejectSubmission = (id)            => api(`/api/admin/submissions/${id}/reject`, {});
-export const fetchDisputes    = ()              => api('/api/admin/disputes');
-export const resolveDispute   = (id, d, note='')=> api(`/api/admin/disputes/${id}/resolve`, { decision: d, note });
-export const fetchRevenue     = ()              => api('/api/admin/revenue');
+export const fetchAdminQueue = () => api('/api/admin/queue');
+export const approveSubmission= (id) => api(`/api/admin/submissions/${id}/approve`, {});
+export const rejectSubmission = (id) => api(`/api/admin/submissions/${id}/reject`, {});
+export const fetchDisputes = () => api('/api/admin/disputes');
+export const resolveDispute = (id, d, note='')=> api(`/api/admin/disputes/${id}/resolve`, { decision: d, note });
+export const fetchRevenue = () => api('/api/admin/revenue');
 /** Create a sponsored task (goes live instantly, no Pi payment) */
-export const createAdminTask  = (payload)       => api('/api/admin/tasks', payload);
+export const createAdminTask = (payload) => api('/api/admin/tasks', payload);
 /** Scan and complete any pending A2U payouts whose txid is now available */
-export const reconcilePayouts = ()              => api('/api/admin/reconcile', {});
+export const reconcilePayouts = () => api('/api/admin/reconcile', {});
 /** Cancel tasks that have been stuck in awaiting_funding longer than hoursOld (default 24) */
 export const cancelStaleFunding = (hoursOld = 24) => api('/api/admin/cancel-stale-funding', { hoursOld });
