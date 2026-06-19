@@ -130,6 +130,25 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/* ── Admin: balance audit (READ-ONLY dry-run) ── */
+app.get('/api/admin/balance-audit', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const approved = await Submission.aggregate([{ $match: { status: { $in: ['approved', 'auto_approved'] } } }, { $group: { _id: '$worker', micro: { $sum: '$rewardMicroPi' } } }]);
+    const paid = await Payment.aggregate([{ $match: { direction: 'A2U', purpose: 'worker_payout', status: 'completed' } }, { $group: { _id: '$user', micro: { $sum: '$amountMicroPi' }, count: { $sum: 1 } } }]);
+    const aMap = new Map(approved.map((x) => [String(x._id), x.micro]));
+    const pMap = new Map(paid.map((x) => [String(x._id), x]));
+    const ids = [...new Set([...aMap.keys(), ...pMap.keys()])];
+    const targets = await User.find({ _id: { $in: ids } }).select('piUid username balanceMicroPi').lean();
+    const rows = targets.map((u) => {
+      const approvedMicro = aMap.get(String(u._id)) || 0;
+      const p = pMap.get(String(u._id)) || { micro: 0, count: 0 };
+      const correctMicro = approvedMicro - p.micro;
+      return { piUid: u.piUid, username: u.username, storedPi: toPi(u.balanceMicroPi), approvedPi: toPi(approvedMicro), paidOutPi: toPi(p.micro), payoutCount: p.count, correctPi: toPi(correctMicro), deltaPi: toPi(u.balanceMicroPi - correctMicro) };
+    }).filter((r) => r.deltaPi !== 0).sort((a, b) => b.deltaPi - a.deltaPi);
+    res.json({ dryRun: true, affectedWorkers: rows.length, totalDeltaPi: rows.reduce((s, r) => s + r.deltaPi, 0), rows });
+  } catch (err) { next(err); }
+});
+
 /* ── Payments ── */
 app.post('/api/payments/approve', requireAuth, async (req, res, next) => {
   try {
