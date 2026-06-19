@@ -103,6 +103,7 @@ app.post('/api/tasks', requireAuth, async (req, res, next) => {
     const gross = rewardPool + fee;
     const task = await Task.create({
       title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
+      link: /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '',
       poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
       escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
     });
@@ -124,6 +125,7 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
     );
     res.json(tasks.map((t) => ({
       id: t._id, title: t.title, description: t.description,
+      link: t.link,
       reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
       slotsFilled: t.slotsFilled, slots: t.slots,
       userDone: doneSet.has(t._id.toString()),
