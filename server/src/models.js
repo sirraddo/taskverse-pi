@@ -35,6 +35,7 @@ const taskSchema = new Schema(
 {
 title: { type: String, required: true, maxlength: 120 },
 description: { type: String, maxlength: 2000, default: '' },
+  link: { type: String, maxlength: 500, default: '' },
 rewardMicroPi: { type: Number, required: true, min: 10_000 }, // ≥ 0.01 π
 slots: { type: Number, required: true, min: 1, max: 1000 },
 slotsFilled: { type: Number, default: 0 },
