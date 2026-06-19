@@ -77,6 +77,7 @@ app.post('/api/auth/verify', async (req, res, next) => {
       user: {
         username: user.username,
         balance: toPi(user.balanceMicroPi),
+        approvedCount: user.approvedCount,
         isKycVerified: user.isKycVerified,
                 isAdmin: isAdmin(user.username),
       },
