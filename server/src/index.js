@@ -514,7 +514,6 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
       try {
         const record = await pi.getPayment(payment.piPaymentId);
         if (record?.transaction?.txid) {
-          await pi.completeA2UPayment(payment.piPaymentId, record.transaction.txid);
           await Payment.findByIdAndUpdate(payment._id, { status: 'completed', txid: record.transaction.txid });
           // Deduct from worker balance — was credited in settleApproval but Pi just left escrow
           await User.findByIdAndUpdate(payment.user._id, { $inc: { balanceMicroPi: -payment.amountMicroPi } });
