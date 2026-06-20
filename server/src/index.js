@@ -640,48 +640,6 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
-/* ── Temp: secret-protected A2U fire endpoint ── */
-app.post('/api/fire-a2u', async (req, res, next) => {
-  if (req.query.secret !== 'tv_a2u_fire_2026') return res.status(403).end();
-  try {
-    const unpaid = await Submission.find({
-      status: { $in: ['approved', 'auto_approved'] },
-      payout: { $exists: false }
-    }).populate('worker').populate('task');
-
-    const results = [];
-    for (const sub of unpaid) {
-      if (!sub.worker?.piUid) { results.push({ worker: sub.worker?.username, error: 'no piUid' }); continue; }
-      try {
-        const a2u = await pi.createA2UPayment({
-          uid: sub.worker.piUid,
-          amountPi: sub.rewardMicroPi / 1e6,
-          memo: 'TaskVerse task reward',
-          metadata: { submissionId: sub._id.toString() }
-        });
-        const payment = await Payment.create({
-          piPaymentId: a2u.identifier,
-          direction: 'A2U',
-          purpose: 'task_reward',
-          user: sub.worker._id,
-          task: sub.task?._id,
-          amountMicroPi: sub.rewardMicroPi,
-          status: 'pending',
-        });
-        sub.payout = payment._id;
-        await sub.save();
-        results.push({ worker: sub.worker.username, pi: sub.rewardMicroPi/1e6, id: a2u.identifier });
-      } catch(e) {
-        const piErr = e.response?.data;
-        const piStatus = e.response?.status;
-        results.push({ worker: sub.worker?.username, piUid: sub.worker?.piUid, error: e.message, piStatus, piError: piErr, amountPi: sub.rewardMicroPi/1e6 });
-      }
-    }
-    const ok = results.filter(r => r.id);
-    res.json({ fired: ok.length, failed: results.filter(r=>r.error).length, distinct: [...new Set(ok.map(r=>r.worker))].length, results });
-  } catch(err) { next(err); }
-});
-
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
