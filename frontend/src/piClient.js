@@ -33,7 +33,28 @@ export function initPi() {
   if (!window.Pi) throw new Error('Pi SDK not loaded — open this app inside the Pi Browser.');
   window.Pi.init({ version: '2.0', sandbox: import.meta.env.VITE_PI_SANDBOX === 'true' });
 }
-
+/**
+ * Open an external (non-TaskVerse) URL, e.g. a task's posted link.
+ * Inside Pi Browser, app content is rendered in an iframe, so a plain
+ * anchor with target=_blank can't reliably hand off to native apps via Android
+ * App Links / iOS Universal Links - it can fall through to a generic
+ * "open in store" resolution instead. Pi.openUrlInSystemBrowser() routes
+ * the URL through the OS system browser, where App Link handoff works
+ * normally (e.g. https://x.com/... opens directly in the X app).
+ * Falls back to window.open for non-Pi-Browser contexts (e.g. local dev)
+ * or older Pi Browser versions that don't support this SDK method.
+ */
+export async function openExternalLink(url) {
+  if (window.Pi && typeof window.Pi.openUrlInSystemBrowser === 'function') {
+    try {
+      await window.Pi.openUrlInSystemBrowser(url);
+      return;
+    } catch (err) {
+      console.warn('Pi.openUrlInSystemBrowser failed, falling back:', err?.message || err);
+    }
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 export async function authenticateWithPi() {
   initPi();
   const onIncompletePaymentFound = (payment) =>
