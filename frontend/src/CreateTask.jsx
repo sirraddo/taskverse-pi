@@ -19,6 +19,7 @@ backgroundColor: 'white', outline: 'none', marginBottom: '10px',
 export default function CreateTask({ onPublished, onBack }) {
 const [title, setTitle] = useState('');
 const [description, setDescription] = useState('');
+  const [link, setLink] = useState('');
 const [reward, setReward] = useState('');
 const [slots, setSlots] = useState('1');
 const [phase, setPhase] = useState('form'); // form | paying | done
@@ -41,6 +42,7 @@ try {
 const { taskId, amountToPay } = await createTask({
 title,
 description,
+  link,
 rewardPi: parseFloat(reward),
 slots: parseInt(slots, 10),
 });
@@ -78,6 +80,7 @@ style={inputStyle} />
 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
 placeholder="Task description — tell workers exactly what to do and how to prove it…" maxLength={2000} rows={3}
 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight: 1.45 }} />
+  <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link for workers to visit (optional)" maxLength={500} style={inputStyle} />
 
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
 <div>
