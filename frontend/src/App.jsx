@@ -11,7 +11,7 @@ import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
-import { fetchTasks, fetchMe, initPi } from './piClient';
+import { fetchTasks, fetchMe, initPi, openExternalLink } from './piClient';
 
 function inferCategory(title, description) {
 const s = ((title || '') + ' ' + (description || '')).toLowerCase();
@@ -289,7 +289,7 @@ return (
 </div>
 <h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', lineHeight: 1.3 }}>{task.title}</h3>
 {snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: '#718096', lineHeight: 1.4 }}>{snippet}</p>}
-              {task.link && /^https?:\/\//i.test(task.link) && <a href={task.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.74rem', color: '#667eea', fontWeight: '700', textDecoration: 'none' }}>🔗 Open task link</a>}
+{task.link && /^https?:\/\//i.test(task.link) && <a href={task.link} onClick={(e) => { e.preventDefault(); openExternalLink(task.link); }} style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.74rem', color: '#667eea', fontWeight: '700', textDecoration: 'none' }}>🔗 Open task link</a>}
 </div>
 <div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{task.reward}</div>
