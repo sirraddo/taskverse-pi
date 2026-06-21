@@ -479,26 +479,105 @@ app.post('/api/admin/cancel-stale-funding', requireAuth, requireAdmin, async (re
     }).lean();
 
     let cancelled = 0;
+    let recovered = 0;
+    let skipped = 0;
     const details = [];
 
     for (const task of staleTasks) {
-      // Try to cancel the associated Pi payment if one exists
+      const ageStr = Math.round((Date.now() - new Date(task.createdAt)) / 3600_000) + 'h';
       const pmt = await Payment.findOne({ task: task._id, direction: 'U2A', status: { $in: ['approved', 'created'] } });
+
+      // Before cancelling, check whether Pi shows the payment actually completed on-chain.
+      // The frontend onReadyForServerCompletion callback (which calls /payments/complete)
+      // can fail to fire (closed tab, dropped connection) even after the wallet confirmed,
+      // leaving the task in awaiting_funding while the payment genuinely succeeded.
       if (pmt) {
+        let record;
+        try {
+          record = await pi.getPayment(pmt.piPaymentId);
+        } catch (piErr) {
+          // Pi API unreachable/errored -- don't guess. Leave task as-is for a later run.
+          console.warn('cancel-stale: pi.getPayment failed, skipping task:', task._id.toString(), piErr.message);
+          skipped++;
+          details.push({ taskId: task._id, title: task.title, age: ageStr, action: 'skipped', reason: piErr.message });
+          continue;
+        }
+
+        if (record?.transaction?.txid) {
+          // Payment completed on-chain -- recover the task instead of cancelling.
+          // Mirrors the /payments/incomplete recovery path.
+          const txid = record.transaction.txid;
+          try {
+            if (!record.status?.developer_completed) {
+              await pi.completePayment(pmt.piPaymentId, txid);
+            }
+          } catch (completeErr) {
+            console.warn('cancel-stale: completePayment during recovery failed (continuing):', completeErr.message);
+          }
+          await Payment.findByIdAndUpdate(pmt._id, { status: 'completed', txid });
+          const liveTask = await Task.findByIdAndUpdate(task._id,
+            { status: 'live', fundingPaymentId: pmt.piPaymentId }, { new: true });
+          if (liveTask) {
+            await PlatformLedger.findOneAndUpdate(
+              { task: liveTask._id }, // avoid duplicate ledger entry
+              { feeMicroPi: liveTask.platformFeeMicroPi, sourcePaymentId: pmt.piPaymentId, task: liveTask._id },
+              { upsert: true, setDefaultsOnInsert: true }
+            );
+          }
+          recovered++;
+          details.push({ taskId: task._id, title: task.title, age: ageStr, action: 'recovered', txid });
+          continue;
+        }
+
+        // No on-chain transaction -- safe to cancel the Pi payment too.
         try {
           await pi.cancelPayment(pmt.piPaymentId);
           await Payment.findByIdAndUpdate(pmt._id, { status: 'cancelled' });
         } catch (piErr) {
-          // Pi may have already cancelled it — proceed to mark task anyway
+          // Pi may have already cancelled it -- proceed to mark task anyway
           console.warn('pi.cancelPayment failed (may already be cancelled):', piErr.message);
         }
       }
+
       await Task.findByIdAndUpdate(task._id, { status: 'cancelled' });
       cancelled++;
-      details.push({ taskId: task._id, title: task.title, age: Math.round((Date.now() - new Date(task.createdAt)) / 3600_000) + 'h' });
+      details.push({ taskId: task._id, title: task.title, age: ageStr, action: 'cancelled' });
     }
 
-    res.json({ ok: true, scanned: staleTasks.length, cancelled, details });
+    res.json({ ok: true, scanned: staleTasks.length, cancelled, recovered, skipped, details });
+  } catch (err) { next(err); }
+});
+
+/* -- TEMP/READ-ONLY diagnostic: find already-cancelled U2A task_funding payments
+   that Pi shows as actually completed on-chain (i.e. wrongly cancelled by the
+   pre-fix cancel-stale bug). Makes ZERO writes. Remove alongside the #12
+   balance-audit cleanup once it has been used. -- */
+app.get('/api/admin/verify-cancelled-payments', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const cancelledPmts = await Payment.find({
+      direction: 'U2A', purpose: 'task_funding', status: 'cancelled',
+    }).lean();
+
+    const results = { scanned: cancelledPmts.length, wronglyCancelled: 0, clean: 0, errored: 0, details: [] };
+
+    for (const pmt of cancelledPmts) {
+      try {
+        const record = await pi.getPayment(pmt.piPaymentId);
+        if (record?.transaction?.txid) {
+          results.wronglyCancelled++;
+          results.details.push({
+            paymentId: pmt.piPaymentId, task: pmt.task, txid: record.transaction.txid, verdict: 'WRONGLY_CANCELLED',
+          });
+        } else {
+          results.clean++;
+        }
+      } catch (err) {
+        results.errored++;
+        results.details.push({ paymentId: pmt.piPaymentId, task: pmt.task, error: err.message, verdict: 'ERROR' });
+      }
+    }
+
+    res.json({ ok: true, ...results });
   } catch (err) { next(err); }
 });
 
