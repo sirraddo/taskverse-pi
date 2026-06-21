@@ -39,7 +39,7 @@ export async function completePayment(paymentId, txid) {
 
 export async function cancelPayment(paymentId) {
   try {
-    const { data } = await serverClient.post(`/payments/${paymentId}/cancelled`);
+    const { data } = await serverClient.post(`/payments/${paymentId}/cancel`);
     return data;
   } catch (e) {
     console.error('cancelPayment failed (may already be cancelled):', e.message);
@@ -50,7 +50,7 @@ export async function cancelPayment(paymentId) {
 // TEMP: verbose cancel — surfaces Pi's full error response for debugging.
 export async function cancelPaymentVerbose(paymentId) {
   try {
-    const { data } = await serverClient.post(`/payments/${paymentId}/cancelled`);
+    const { data } = await serverClient.post(`/payments/${paymentId}/cancel`);
     return { ok: true, data };
   } catch (e) {
     return {
