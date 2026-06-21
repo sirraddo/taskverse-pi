@@ -110,3 +110,11 @@ export const cancelStaleFunding = (hoursOld = 24) => api('/api/admin/cancel-stal
 // Support: read-only payment lookup + payout wallet overview
 export const fetchWorkerPaymentLookup = (q) => api(`/api/admin/worker-payment-lookup?q=${encodeURIComponent(q)}`);
 export const fetchWalletOverview = () => api('/api/admin/wallet-overview');
+
+/**
+ * Flush backlogged A2U payouts. Fail-safe by design:
+ *  - {}                      → dry-run preview, pays nothing
+ *  - { submissionId }        → pays exactly that one submission
+ *  - { limit: N }            → pays at most N from the unpaid queue
+ */
+export const reconcileA2U = (opts = {}) => api('/api/admin/reconcile-a2u', opts);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -36,6 +36,14 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [lookingUp, setLookingUp] = useState(false);
   const [wallet, setWallet] = useState(null);
   const [walletLoading, setWalletLoading] = useState(false);
+
+  // A2U reconcile (backlog flush) — fail-safe, button-driven
+  const [a2uMode, setA2uMode] = useState('single'); // 'single' | 'batch'
+  const [a2uSubmissionId, setA2uSubmissionId] = useState('');
+  const [a2uLimit, setA2uLimit] = useState('3');
+  const [a2uPreview, setA2uPreview] = useState(null);
+  const [a2uResult, setA2uResult] = useState(null);
+  const [a2uBusy, setA2uBusy] = useState(false);
 
   const handleCancelStale = async () => {
     if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
@@ -95,6 +103,51 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       setWallet(res);
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setWalletLoading(false); }
+  };
+
+  // Dry-run preview — moves nothing, just lists the unpaid queue
+  const handleA2uPreview = async () => {
+    setA2uBusy(true);
+    setA2uResult(null);
+    try {
+      const res = await reconcileA2U({});
+      setA2uPreview(res);
+      notify(`👀 Preview: ${res.totalUnpaid} unpaid submission(s). Nothing was paid.`);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setA2uBusy(false); }
+  };
+
+  // Actually send — guarded by an explicit confirm dialog
+  const handleA2uSend = async () => {
+    let opts, label;
+    if (a2uMode === 'single') {
+      const id = a2uSubmissionId.trim();
+      if (!id) return notify('Enter a submissionId to pay.');
+      opts = { submissionId: id };
+      label = `submission ${id}`;
+    } else {
+      const n = parseInt(a2uLimit, 10);
+      if (!Number.isInteger(n) || n < 1) return notify('Enter a batch size of 1 or more.');
+      opts = { limit: n };
+      label = `up to ${n} submission(s)`;
+    }
+    const ok = window.confirm(
+      `Send REAL A2U testnet payout for ${label}?\n\n` +
+      `This signs blockchain transaction(s) and moves funds. Pi processes one A2U at a time.\n\nProceed?`
+    );
+    if (!ok) return;
+    setA2uBusy(true);
+    setA2uResult(null);
+    try {
+      const res = await reconcileA2U(opts);
+      setA2uResult(res);
+      if (res.dryRun) {
+        notify('⚠️ Nothing paid — backend treated this as a dry-run.');
+      } else {
+        notify(`✅ ${res.mode}: ${res.succeeded} paid, ${res.failed} failed (attempted ${res.attempted}).`);
+      }
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setA2uBusy(false); }
   };
 
   const load = useCallback(async () => {
@@ -221,6 +274,75 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             {cancelling ? 'Cancelling…' : '🚫 Cancel'}
           </button>
         </div>
+      </div>
+
+      {/* Admin: flush backlogged A2U payouts (fail-safe, button-driven) */}
+      <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ fontWeight: '700', color: '#b45309', fontSize: '0.85rem', marginBottom: '4px' }}>
+          🪙 Reconcile A2U Payouts
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 10px' }}>
+          Flushes approved submissions that were credited in-balance but never paid on-chain. Sends REAL testnet A2U (signs blockchain txns). Pi allows one A2U at a time — verify each completes before the next. Preview pays nothing.
+        </p>
+
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+          <button onClick={() => setA2uMode('single')}
+            style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1.5px solid #fde68a', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', backgroundColor: a2uMode === 'single' ? '#b45309' : 'white', color: a2uMode === 'single' ? 'white' : '#b45309' }}>
+            Single
+          </button>
+          <button onClick={() => setA2uMode('batch')}
+            style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1.5px solid #fde68a', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', backgroundColor: a2uMode === 'batch' ? '#b45309' : 'white', color: a2uMode === 'batch' ? 'white' : '#b45309' }}>
+            Batch
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          {a2uMode === 'single' ? (
+            <input value={a2uSubmissionId} onChange={e => setA2uSubmissionId(e.target.value)}
+              placeholder="submissionId"
+              style={{ padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #fde68a', fontSize: '0.82rem', backgroundColor: 'white', color: '#2d3748', flex: 1 }} />
+          ) : (
+            <input value={a2uLimit} onChange={e => setA2uLimit(e.target.value)}
+              type="number" min="1" placeholder="batch size"
+              style={{ padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #fde68a', fontSize: '0.82rem', backgroundColor: 'white', color: '#2d3748', width: '110px' }} />
+          )}
+          <button onClick={handleA2uPreview} disabled={a2uBusy}
+            style={{ backgroundColor: a2uBusy ? '#a0aec0' : '#0369a1', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: '700', cursor: a2uBusy ? 'not-allowed' : 'pointer', fontSize: '0.78rem', flexShrink: 0 }}>
+            👀 Preview
+          </button>
+          <button onClick={handleA2uSend} disabled={a2uBusy}
+            style={{ backgroundColor: a2uBusy ? '#a0aec0' : '#b45309', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: '700', cursor: a2uBusy ? 'not-allowed' : 'pointer', fontSize: '0.78rem', flexShrink: 0 }}>
+            {a2uBusy ? 'Working…' : '💸 Send'}
+          </button>
+        </div>
+
+        {a2uPreview && (
+          <div style={{ fontSize: '0.72rem', color: '#4a5568', backgroundColor: 'white', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px', marginTop: '4px' }}>
+            <b>{a2uPreview.totalUnpaid}</b> unpaid. Next up:
+            {(a2uPreview.preview || []).map((p, i) => (
+              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.68rem' }}>
+                @{p.worker} · {p.pi}π · <span style={{ color: '#b45309' }}>{p.id}</span>
+                {a2uMode === 'single' && (
+                  <button onClick={() => setA2uSubmissionId(p.id)}
+                    style={{ marginLeft: '6px', fontSize: '0.62rem', padding: '1px 5px', borderRadius: '5px', border: '1px solid #fde68a', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer' }}>
+                    use
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {a2uResult && !a2uResult.dryRun && (
+          <div style={{ fontSize: '0.72rem', color: '#166534', backgroundColor: 'white', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px', marginTop: '8px' }}>
+            <b>{a2uResult.mode}</b> — {a2uResult.succeeded} paid, {a2uResult.failed} failed (attempted {a2uResult.attempted}).
+            {(a2uResult.results || []).map((r, i) => (
+              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.error ? '#c53030' : '#166534' }}>
+                {r.error ? `✗ ${r.worker || r.id}: ${r.error}` : `✓ @${r.worker} ${r.pi}π · ${r.paymentId}`}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Support: worker payment lookup */}
