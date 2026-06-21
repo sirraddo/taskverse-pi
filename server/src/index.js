@@ -548,39 +548,6 @@ app.post('/api/admin/cancel-stale-funding', requireAuth, requireAdmin, async (re
   } catch (err) { next(err); }
 });
 
-/* -- TEMP/READ-ONLY diagnostic: find already-cancelled U2A task_funding payments
-   that Pi shows as actually completed on-chain (i.e. wrongly cancelled by the
-   pre-fix cancel-stale bug). Makes ZERO writes. Remove alongside the #12
-   balance-audit cleanup once it has been used. -- */
-app.get('/api/admin/verify-cancelled-payments', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const cancelledPmts = await Payment.find({
-      direction: 'U2A', purpose: 'task_funding', status: 'cancelled',
-    }).lean();
-
-    const results = { scanned: cancelledPmts.length, wronglyCancelled: 0, clean: 0, errored: 0, details: [] };
-
-    for (const pmt of cancelledPmts) {
-      try {
-        const record = await pi.getPayment(pmt.piPaymentId);
-        if (record?.transaction?.txid) {
-          results.wronglyCancelled++;
-          results.details.push({
-            paymentId: pmt.piPaymentId, task: pmt.task, txid: record.transaction.txid, verdict: 'WRONGLY_CANCELLED',
-          });
-        } else {
-          results.clean++;
-        }
-      } catch (err) {
-        results.errored++;
-        results.details.push({ paymentId: pmt.piPaymentId, task: pmt.task, error: err.message, verdict: 'ERROR' });
-      }
-    }
-
-    res.json({ ok: true, ...results });
-  } catch (err) { next(err); }
-});
-
 /* ── Admin: reconcile pending A2U payouts ── */
 app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, next) => {
   try {
