@@ -32,14 +32,30 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [staleCutoff, setStaleCutoff] = useState('24');
 
   const handleCancelStale = async () => {
-    if (!window.confirm(`Cancel all tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nThis will also attempt to cancel the associated Pi payments. This cannot be undone.`)) return;
+    if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
     setCancelling(true);
     try {
       const res = await cancelStaleFunding(parseInt(staleCutoff, 10));
-      if (res.cancelled === 0) {
+      const recovered = res.recovered || 0;
+      const skipped = res.skipped || 0;
+      if (res.scanned === 0) {
         notify(`✅ No stale tasks found older than ${staleCutoff}h.`);
       } else {
-        notify(`🧹 Cancelled ${res.cancelled} stale task${res.cancelled !== 1 ? 's' : ''}: ${res.details.map(d => '"' + d.title + '" (' + d.age + ')').join(', ')}`);
+        const parts = [];
+        parts.push(`🧹 Swept ${res.scanned} task${res.scanned !== 1 ? 's' : ''}`);
+        parts.push(`cancelled ${res.cancelled}`);
+        if (recovered) parts.push(`recovered ${recovered}`);
+        if (skipped) parts.push(`skipped ${skipped}`);
+        let msg = parts.join(', ') + '.';
+        if (recovered) {
+          const rec = res.details.filter(d => d.action === 'recovered');
+          msg += ` Recovered: ${rec.map(d => '"' + d.title + '"').join(', ')}.`;
+        }
+        if (skipped) {
+          const skp = res.details.filter(d => d.action === 'skipped');
+          msg += ` Skipped (Pi unreachable, will retry): ${skp.map(d => '"' + d.title + '"').join(', ')}.`;
+        }
+        notify(msg);
       }
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setCancelling(false); }
