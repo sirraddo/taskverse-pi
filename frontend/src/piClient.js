@@ -64,7 +64,10 @@ export async function authenticateWithPi() {
     accessToken: auth.accessToken,
   });
   sessionToken = token;
-  alert('TEMP DEBUG TOKEN:\n' + token); // TODO: remove after copying token
+  navigator.clipboard.writeText(token).then(
+      () => alert('Token copied to clipboard!'),
+      () => alert('Clipboard failed — token:\n' + token)
+        );
   return user;
 }
 
