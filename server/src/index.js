@@ -780,6 +780,37 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+/* ── TEMP/READ-ONLY: A2U payout diagnostic (remove after debugging) ──
+* Checks WHY worker payouts never complete. Attempts ZERO sends.
+* Reports: SDK init status, incomplete server payments (the classic
+* blocker — Pi refuses new A2U while any exist), and config presence.
+*/
+app.get('/api/admin/a2u-diagnostic', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const hasKey = !!process.env.PI_API_KEY;
+    const hasSeed = !!process.env.PI_WALLET_SEED;
+    let incomplete = null, incompleteError = null;
+    try {
+      const list = await pi.getIncompleteServerPayments();
+      incomplete = Array.isArray(list) ? list : (list?.incomplete_server_payments || []);
+    } catch (e) {
+      incompleteError = e.message;
+    }
+    const unpaidCount = await Submission.countDocuments({
+      status: { $in: ['approved', 'auto_approved'] }, payout: { $exists: false },
+    });
+    res.json({
+      config: { hasApiKey: hasKey, hasWalletSeed: hasSeed },
+      incompleteServerPayments: {
+        count: Array.isArray(incomplete) ? incomplete.length : null,
+        items: incomplete,
+        error: incompleteError,
+      },
+      approvedSubmissionsAwaitingPayout: unpaidCount,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
