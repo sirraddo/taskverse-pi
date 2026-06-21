@@ -152,6 +152,100 @@ app.get('/api/admin/balance-audit', requireAuth, requireAdmin, async (req, res, 
   } catch (err) { next(err); }
 });
 
+/* ── Support: worker payment lookup ──────────────────────────────
+* READ-ONLY. For "worker says I didn't get paid" support cases.
+* Cross-references three sources for a worker's payouts:
+*   1. MongoDB (our record: status, txid, amount)
+*   2. Pi Platform API (Pi's view of each payment) — pi.getPayment
+*   3. Horizon (on-chain truth) — by txid
+* Also surfaces approved submissions that have no linked payout
+* (the "approved but never paid" case). Writes nothing.
+*/
+app.get('/api/admin/worker-payment-lookup', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.status(400).json({ error: 'Provide ?q=<username|piUid>' });
+
+    const user = await User.findOne({ $or: [{ username: q }, { piUid: q }] })
+      .select('piUid username balanceMicroPi approvedCount rejectedCount isBanned').lean();
+    if (!user) return res.status(404).json({ error: 'No worker matches that username or piUid' });
+
+    const payouts = await Payment.find({ user: user._id, direction: 'A2U', purpose: 'worker_payout' })
+      .sort({ createdAt: -1 }).lean();
+
+    // Approved/auto-approved submissions and whether each has a linked payout
+    const submissions = await Submission.find({
+      worker: user._id, status: { $in: ['approved', 'auto_approved'] },
+    }).select('rewardMicroPi payout status updatedAt task').sort({ updatedAt: -1 }).lean();
+    const approvedNoPayout = submissions.filter((s) => !s.payout);
+
+    // Enrich each payout with Pi Platform + Horizon truth, then classify.
+    const rows = [];
+    for (const p of payouts) {
+      let piStatus = null, chain = null, note = null;
+      try { const pp = await pi.getPayment(p.piPaymentId); piStatus = pp && pp.status ? pp.status : null; }
+      catch (e) { note = `pi_api_error: ${e.message}`; }
+      if (p.txid) {
+        try { const tx = await pi.getHorizonTransaction(p.txid); chain = tx ? (tx.successful ? 'confirmed' : 'failed') : 'not_found'; }
+        catch (e) { note = (note ? note + '; ' : '') + `horizon_error: ${e.message}`; }
+      } else {
+        chain = 'no_txid';
+      }
+      // Verdict: agreement across the three sources
+      let verdict;
+      if (p.status === 'completed' && chain === 'confirmed') verdict = 'paid_confirmed';
+      else if (p.status === 'completed' && chain === 'not_found') verdict = 'db_says_paid_but_not_on_chain';
+      else if (p.status === 'completed' && chain === 'no_txid') verdict = 'db_says_paid_but_no_txid';
+      else if (p.status === 'cancelled' || p.status === 'failed') verdict = `not_paid_${p.status}`;
+      else verdict = `pending_${p.status}`;
+      rows.push({
+        piPaymentId: p.piPaymentId,
+        amountPi: toPi(p.amountMicroPi),
+        dbStatus: p.status,
+        piApiStatus: piStatus,
+        chain,
+        txid: p.txid || null,
+        verdict,
+        note,
+        createdAt: p.createdAt,
+      });
+    }
+
+    res.json({
+      worker: {
+        username: user.username, piUid: user.piUid,
+        storedBalancePi: toPi(user.balanceMicroPi),
+        approvedCount: user.approvedCount, rejectedCount: user.rejectedCount,
+        isBanned: user.isBanned,
+      },
+      payoutCount: rows.length,
+      payouts: rows,
+      approvedSubmissionsWithoutPayout: approvedNoPayout.length,
+      totalApprovedRewardPi: toPi(submissions.reduce((s, x) => s + (x.rewardMicroPi || 0), 0)),
+    });
+  } catch (err) { next(err); }
+});
+
+/* ── Support: payout wallet overview ─────────────────────────────
+* READ-ONLY. App payout wallet balance + recent on-chain payments,
+* from Horizon. Needs PI_WALLET_PUBLIC_KEY (public address, not the seed).
+*/
+app.get('/api/admin/wallet-overview', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const pk = process.env.PI_WALLET_PUBLIC_KEY;
+    if (!pk) return res.status(503).json({ error: 'PI_WALLET_PUBLIC_KEY not configured on server' });
+    const account = await pi.getHorizonAccount(pk);
+    if (!account) return res.json({ publicKey: pk, exists: false, balancePi: 0, recentPayments: [] });
+    const recentPayments = await pi.getHorizonPayments(pk, 10);
+    res.json({
+      publicKey: pk,
+      exists: true,
+      balancePi: account.balancePi,
+      recentPayments,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Payments ── */
 app.post('/api/payments/approve', requireAuth, async (req, res, next) => {
   try {

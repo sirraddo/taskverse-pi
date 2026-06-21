@@ -106,3 +106,7 @@ export const createAdminTask = (payload) => api('/api/admin/tasks', payload);
 export const reconcilePayouts = () => api('/api/admin/reconcile', {});
 /** Cancel tasks that have been stuck in awaiting_funding longer than hoursOld (default 24) */
 export const cancelStaleFunding = (hoursOld = 24) => api('/api/admin/cancel-stale-funding', { hoursOld });
+
+// Support: read-only payment lookup + payout wallet overview
+export const fetchWorkerPaymentLookup = (q) => api(`/api/admin/worker-payment-lookup?q=${encodeURIComponent(q)}`);
+export const fetchWalletOverview = () => api('/api/admin/wallet-overview');

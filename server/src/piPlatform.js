@@ -69,6 +69,69 @@ export async function createA2UPayment({ uid, amountPi, memo, metadata }) {
   return { identifier: paymentId, txid, completed };
 }
 
+/* ── Horizon (read-only blockchain reads) ────────────────────────
+* Pi runs its own Horizon instance. Base verified empirically against
+* testnet: https://api.testnet.minepi.com (/accounts/:pk returns the
+* standard Stellar account shape; /transactions/:hash for tx lookup).
+* These are READ-ONLY GETs — no seed, no signing, no fund movement.
+*/
+const HORIZON = (process.env.PI_HORIZON_URL || 'https://api.testnet.minepi.com').replace(/\/$/, '');
+
+const horizonClient = axios.create({ baseURL: HORIZON, timeout: 15_000 });
+
+// Account balance + sequence. Returns null if the account doesn't exist (404).
+export async function getHorizonAccount(publicKey) {
+  try {
+    const { data } = await horizonClient.get(`/accounts/${publicKey}`);
+    const native = (data.balances || []).find((b) => b.asset_type === 'native');
+    return {
+      accountId: data.account_id || publicKey,
+      balancePi: native ? Number(native.balance) : 0,
+      sequence: data.sequence,
+      balances: data.balances || [],
+    };
+  } catch (e) {
+    if (e.response && e.response.status === 404) return null;
+    throw e;
+  }
+}
+
+// Recent payments to/from an account (most recent first).
+export async function getHorizonPayments(publicKey, limit = 10) {
+  const { data } = await horizonClient.get(
+    `/accounts/${publicKey}/payments`,
+    { params: { order: 'desc', limit } },
+  );
+  const records = (data._embedded && data._embedded.records) || [];
+  return records.map((r) => ({
+    id: r.id,
+    type: r.type,
+    from: r.from,
+    to: r.to,
+    amount: r.amount,
+    txHash: r.transaction_hash,
+    createdAt: r.created_at,
+  }));
+}
+
+// Single transaction by hash (txid). Returns null if not found on-chain (404).
+export async function getHorizonTransaction(txid) {
+  try {
+    const { data } = await horizonClient.get(`/transactions/${txid}`);
+    return {
+      hash: data.hash,
+      successful: data.successful,
+      ledger: data.ledger,
+      createdAt: data.created_at,
+      sourceAccount: data.source_account,
+      feeCharged: data.fee_charged,
+    };
+  } catch (e) {
+    if (e.response && e.response.status === 404) return null;
+    throw e;
+  }
+}
+
 export async function getIncompleteServerPayments() {
   const sdk = getPiSdk();
   if (!sdk) return [];

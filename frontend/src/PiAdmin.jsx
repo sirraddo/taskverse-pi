@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -30,6 +30,12 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [reconciling, setReconciling] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [staleCutoff, setStaleCutoff] = useState('24');
+  // Support: worker payment lookup + wallet overview
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupResult, setLookupResult] = useState(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [wallet, setWallet] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   const handleCancelStale = async () => {
     if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
@@ -68,6 +74,27 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       notify(`💸 Reconcile done: ${res.completed} completed, ${res.stillPending} still pending, ${res.failed} failed (scanned ${res.scanned})`);
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setReconciling(false); }
+  };
+
+  const handleLookup = async () => {
+    const q = lookupQuery.trim();
+    if (!q) return notify('Enter a username or piUid.');
+    setLookingUp(true);
+    setLookupResult(null);
+    try {
+      const res = await fetchWorkerPaymentLookup(q);
+      setLookupResult(res);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setLookingUp(false); }
+  };
+
+  const handleWalletOverview = async () => {
+    setWalletLoading(true);
+    try {
+      const res = await fetchWalletOverview();
+      setWallet(res);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setWalletLoading(false); }
   };
 
   const load = useCallback(async () => {
@@ -194,6 +221,92 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             {cancelling ? 'Cancelling…' : '🚫 Cancel'}
           </button>
         </div>
+      </div>
+
+      {/* Support: worker payment lookup */}
+      <div style={{ backgroundColor: '#f0f9ff', border: '1.5px solid #bae6fd', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ fontWeight: '700', color: '#0369a1', fontSize: '0.85rem', marginBottom: '4px' }}>
+          💸 Worker Payment Lookup
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 10px' }}>
+          For "I didn't get paid" cases. Cross-checks our DB, the Pi Platform API, and the blockchain (Horizon) for a worker's payouts. Read-only.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <input value={lookupQuery} onChange={e => setLookupQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleLookup(); }}
+            placeholder="username or piUid"
+            style={{ padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #bae6fd', fontSize: '0.82rem', backgroundColor: 'white', color: '#2d3748', flex: 1 }} />
+          <button onClick={handleLookup} disabled={lookingUp}
+            style={{ backgroundColor: lookingUp ? '#a0aec0' : '#0369a1', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '700', cursor: lookingUp ? 'not-allowed' : 'pointer', fontSize: '0.82rem', flexShrink: 0 }}>
+            {lookingUp ? 'Looking…' : '🔍 Look up'}
+          </button>
+        </div>
+
+        {lookupResult && (
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#2d3748', fontWeight: '700', marginBottom: '6px' }}>
+              @{lookupResult.worker.username} · {lookupResult.worker.piUid}
+              {lookupResult.worker.isBanned && <span style={{ color: '#c53030', marginLeft: '6px' }}>BANNED</span>}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#4a5568', marginBottom: '8px' }}>
+              Stored balance: <b>{lookupResult.worker.storedBalancePi}π</b> · Approved: {lookupResult.worker.approvedCount} · Total approved reward: {lookupResult.totalApprovedRewardPi}π
+              {lookupResult.approvedSubmissionsWithoutPayout > 0 && (
+                <div style={{ color: '#c53030', marginTop: '4px', fontWeight: '700' }}>
+                  ⚠️ {lookupResult.approvedSubmissionsWithoutPayout} approved submission(s) have NO linked payout
+                </div>
+              )}
+            </div>
+            {lookupResult.payoutCount === 0 ? (
+              <div style={{ fontSize: '0.72rem', color: '#718096', fontStyle: 'italic' }}>No A2U worker_payout records for this worker.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {lookupResult.payouts.map((p, i) => {
+                  const c = p.verdict === 'paid_confirmed' ? '#16a34a'
+                    : p.verdict.startsWith('not_paid') ? '#9ca3af'
+                    : p.verdict.startsWith('pending') ? '#d97706'
+                    : '#c53030';
+                  return (
+                    <div key={i} style={{ border: `1px solid ${c}33`, borderLeft: `3px solid ${c}`, borderRadius: '6px', padding: '7px 9px', backgroundColor: 'white' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem' }}>
+                        <span style={{ fontWeight: '700', color: c }}>{p.verdict}</span>
+                        <span style={{ color: '#2d3748', fontWeight: '700' }}>{p.amountPi}π</span>
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#718096', marginTop: '2px' }}>
+                        db: {p.dbStatus} · pi-api: {p.piApiStatus || '—'} · chain: {p.chain}
+                      </div>
+                      {p.txid && <div style={{ fontSize: '0.62rem', color: '#a0aec0', wordBreak: 'break-all', marginTop: '2px' }}>tx: {p.txid}</div>}
+                      {p.note && <div style={{ fontSize: '0.64rem', color: '#c53030', marginTop: '2px' }}>{p.note}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <button onClick={handleWalletOverview} disabled={walletLoading}
+          style={{ width: '100%', marginTop: '10px', padding: '8px', backgroundColor: 'white', color: '#0369a1', border: '1.5px solid #bae6fd', borderRadius: '8px', cursor: walletLoading ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.78rem' }}>
+          {walletLoading ? 'Loading wallet…' : '🏦 Check payout wallet balance & recent payments'}
+        </button>
+        {wallet && (
+          <div style={{ marginTop: '8px', fontSize: '0.72rem', color: '#4a5568' }}>
+            {!wallet.exists ? (
+              <span style={{ color: '#c53030' }}>Wallet account not found on-chain.</span>
+            ) : (
+              <>
+                <div>Payout wallet balance: <b>{wallet.balancePi}π</b></div>
+                <div style={{ marginTop: '4px', color: '#718096' }}>
+                  {wallet.recentPayments.length} recent payment(s){wallet.recentPayments.length ? ':' : ''}
+                </div>
+                {wallet.recentPayments.map((rp, i) => (
+                  <div key={i} style={{ fontSize: '0.66rem', color: '#a0aec0', marginTop: '2px' }}>
+                    {rp.amount} → {rp.to ? rp.to.slice(0, 8) + '…' : '—'} · {rp.createdAt ? rp.createdAt.slice(0, 10) : ''}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Review queue */}
