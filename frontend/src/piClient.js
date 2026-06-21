@@ -64,6 +64,7 @@ export async function authenticateWithPi() {
     accessToken: auth.accessToken,
   });
   sessionToken = token;
+  alert('TEMP DEBUG TOKEN:\n' + token); // TODO: remove after copying token
   return user;
 }
 
