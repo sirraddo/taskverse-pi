@@ -811,6 +811,35 @@ app.get('/api/admin/a2u-diagnostic', requireAuth, requireAdmin, async (req, res,
   } catch (err) { next(err); }
 });
 
+/* ── TEMP: cancel ONE incomplete server payment by id (remove after) ──
+* Clears the A2U blocker. Guarded: only cancels an id that is actually
+* present in Pi's current incomplete-server-payments list. No funds move
+* (cancel only). Does NOT submit/sign anything.
+*/
+app.post('/api/admin/cancel-incomplete-payment', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { paymentId } = req.body || {};
+    if (!paymentId) return res.status(400).json({ error: 'paymentId required' });
+    const list = await pi.getIncompleteServerPayments();
+    const items = Array.isArray(list) ? list : (list?.incomplete_server_payments || []);
+    const match = items.find((p) => p.identifier === paymentId);
+    if (!match) {
+      return res.status(404).json({ error: 'paymentId not found in current incomplete-server-payments list', incompleteIds: items.map((p) => p.identifier) });
+    }
+    if (match.transaction && match.transaction.txid) {
+      return res.status(409).json({ error: 'This payment HAS a txid (already on-chain) — cancel is unsafe; complete it instead', txid: match.transaction.txid });
+    }
+    const result = await pi.cancelPayment(paymentId);
+    const after = await pi.getIncompleteServerPayments();
+    const afterItems = Array.isArray(after) ? after : (after?.incomplete_server_payments || []);
+    res.json({
+      cancelled: paymentId,
+      cancelResult: result ? 'ok' : 'helper_returned_null',
+      incompleteRemaining: afterItems.length,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
