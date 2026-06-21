@@ -107,12 +107,17 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   // Dry-run preview — moves nothing, shows exactly what WOULD be paid
   const handleA2uPreview = async () => {
+    const opts = { dryRun: true };
+    if (a2uMode === 'single') {
+      const id = a2uSubmissionId.trim();
+      if (!id) return notify('Single mode: enter a submissionId first (or switch to Batch).');
+      opts.submissionId = id;
+    } else {
+      opts.limit = parseInt(a2uLimit, 10) || 1;
+    }
     setA2uBusy(true);
     setA2uResult(null);
     try {
-      const opts = { dryRun: true };
-      if (a2uMode === 'single' && a2uSubmissionId.trim()) opts.submissionId = a2uSubmissionId.trim();
-      else if (a2uMode === 'batch') opts.limit = parseInt(a2uLimit, 10) || 1;
       const res = await reconcileA2U(opts);
       setA2uPreview(res);
       notify(`👀 Would pay ${res.wouldPayCount} of ${res.totalUnpaid} unpaid. Nothing was paid.`);
