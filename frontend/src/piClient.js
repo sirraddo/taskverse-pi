@@ -64,10 +64,24 @@ export async function authenticateWithPi() {
     accessToken: auth.accessToken,
   });
   sessionToken = token;
-  navigator.clipboard.writeText(token).then(
-      () => alert('Token copied to clipboard!'),
-      () => alert('Clipboard failed — token:\n' + token)
-        );
+const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;background:#000c;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const ta = document.createElement('textarea');
+  ta.value = token;
+  ta.readOnly = true;
+  ta.style.cssText = 'width:100%;max-width:340px;height:160px;font-size:14px;padding:8px;';
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText = 'display:block;margin-top:10px;padding:8px 16px;';
+  closeBtn.onclick = () => box.remove();
+  const panel = document.createElement('div');
+  panel.style.cssText = 'background:#fff;padding:16px;border-radius:8px;text-align:center;';
+  panel.appendChild(ta);
+  panel.appendChild(closeBtn);
+  box.appendChild(panel);
+  document.body.appendChild(box);
+  ta.focus();
+  ta.select();
   return user;
 }
 
