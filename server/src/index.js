@@ -674,10 +674,35 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
 /* ── Admin: reconcile unpaid A2U — fires Testnet A2U for approved subs with no payout ── */
 app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const unpaid = await Submission.find({
+    const { submissionId, limit, confirm } = req.body || {};
+
+    const baseQuery = {
       status: { $in: ['approved', 'auto_approved'] },
       payout: { $exists: false }
-    }).populate('worker').populate('task');
+    };
+    if (submissionId) baseQuery._id = submissionId;
+
+    let unpaidQuery = Submission.find(baseQuery).populate('worker').populate('task');
+    // Only apply a positive integer limit when paying by limit (not by id)
+    const parsedLimit = Number.isInteger(limit) && limit > 0 ? limit : null;
+    if (!submissionId && parsedLimit) unpaidQuery = unpaidQuery.limit(parsedLimit);
+
+    const unpaid = await unpaidQuery;
+
+    // FAIL-SAFE: a call with no submissionId AND no limit does NOT pay anything.
+    // It returns a preview so an accidental/empty call can never drain the queue.
+    // To pay, caller must pass either submissionId OR an explicit limit.
+    if (!submissionId && !parsedLimit) {
+      const totalUnpaid = await Submission.countDocuments(baseQuery);
+      return res.json({
+        dryRun: true,
+        message: 'No submissionId or limit provided — nothing was paid. Pass {submissionId} or {limit:N} to send.',
+        totalUnpaid,
+        preview: unpaid.slice(0, 10).map(s => ({
+          id: s._id, worker: s.worker?.username, piUid: s.worker?.piUid, pi: s.rewardMicroPi / 1e6
+        })),
+      });
+    }
 
     const results = [];
     for (const sub of unpaid) {
@@ -713,7 +738,8 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
     const paid = results.filter(r => r.paymentId);
     const distinctWorkers = [...new Set(paid.map(r => r.worker))];
     res.json({
-      total: unpaid.length,
+      mode: submissionId ? 'single' : `batch(limit=${parsedLimit})`,
+      attempted: unpaid.length,
       succeeded: paid.length,
       failed: results.filter(r => r.error).length,
       distinctWorkersPaid: distinctWorkers.length,
