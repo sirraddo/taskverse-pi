@@ -829,12 +829,15 @@ app.post('/api/admin/cancel-incomplete-payment', requireAuth, requireAdmin, asyn
     if (match.transaction && match.transaction.txid) {
       return res.status(409).json({ error: 'This payment HAS a txid (already on-chain) — cancel is unsafe; complete it instead', txid: match.transaction.txid });
     }
-    const result = await pi.cancelPayment(paymentId);
+    const result = await pi.cancelPaymentVerbose(paymentId);
     const after = await pi.getIncompleteServerPayments();
     const afterItems = Array.isArray(after) ? after : (after?.incomplete_server_payments || []);
     res.json({
-      cancelled: paymentId,
-      cancelResult: result ? 'ok' : 'helper_returned_null',
+      target: paymentId,
+      cancelOk: result.ok,
+      piHttpStatus: result.httpStatus,
+      piBody: result.piBody,
+      message: result.message,
       incompleteRemaining: afterItems.length,
     });
   } catch (err) { next(err); }

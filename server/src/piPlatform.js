@@ -47,6 +47,21 @@ export async function cancelPayment(paymentId) {
   }
 }
 
+// TEMP: verbose cancel — surfaces Pi's full error response for debugging.
+export async function cancelPaymentVerbose(paymentId) {
+  try {
+    const { data } = await serverClient.post(`/payments/${paymentId}/cancelled`);
+    return { ok: true, data };
+  } catch (e) {
+    return {
+      ok: false,
+      httpStatus: e.response?.status ?? null,
+      piBody: e.response?.data ?? null,
+      message: e.message,
+    };
+  }
+}
+
 export async function getPayment(paymentId) {
   const { data } = await serverClient.get(`/payments/${paymentId}`);
   return data;
