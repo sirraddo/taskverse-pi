@@ -105,14 +105,17 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
     finally { setWalletLoading(false); }
   };
 
-  // Dry-run preview — moves nothing, just lists the unpaid queue
+  // Dry-run preview — moves nothing, shows exactly what WOULD be paid
   const handleA2uPreview = async () => {
     setA2uBusy(true);
     setA2uResult(null);
     try {
-      const res = await reconcileA2U({});
+      const opts = { dryRun: true };
+      if (a2uMode === 'single' && a2uSubmissionId.trim()) opts.submissionId = a2uSubmissionId.trim();
+      else if (a2uMode === 'batch') opts.limit = parseInt(a2uLimit, 10) || 1;
+      const res = await reconcileA2U(opts);
       setA2uPreview(res);
-      notify(`👀 Preview: ${res.totalUnpaid} unpaid submission(s). Nothing was paid.`);
+      notify(`👀 Would pay ${res.wouldPayCount} of ${res.totalUnpaid} unpaid. Nothing was paid.`);
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setA2uBusy(false); }
   };
@@ -318,8 +321,9 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
         {a2uPreview && (
           <div style={{ fontSize: '0.72rem', color: '#4a5568', backgroundColor: 'white', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px', marginTop: '4px' }}>
-            <b>{a2uPreview.totalUnpaid}</b> unpaid. Next up:
-            {(a2uPreview.preview || []).map((p, i) => (
+            Would pay <b>{a2uPreview.wouldPayCount}</b> of {a2uPreview.totalUnpaid} unpaid
+            {a2uPreview.receivedSubmissionId && <span> · target <code>{a2uPreview.receivedSubmissionId}</code></span>}:
+            {(a2uPreview.wouldPay || []).map((p, i) => (
               <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.68rem' }}>
                 @{p.worker} · {p.pi}π · <span style={{ color: '#b45309' }}>{p.id}</span>
                 {a2uMode === 'single' && (

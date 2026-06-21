@@ -674,34 +674,65 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
 /* ── Admin: reconcile unpaid A2U — fires Testnet A2U for approved subs with no payout ── */
 app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const { submissionId, limit, confirm } = req.body || {};
+    const { submissionId, limit, dryRun } = req.body || {};
 
     const baseQuery = {
       status: { $in: ['approved', 'auto_approved'] },
       payout: { $exists: false }
     };
-    if (submissionId) baseQuery._id = submissionId;
+
+    // Validate submissionId up front: must be a real ObjectId, else reject loudly
+    // (rather than silently building a query that matches nothing or everything).
+    if (submissionId !== undefined && submissionId !== null && submissionId !== '') {
+      if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+        return res.status(400).json({ error: `submissionId is not a valid id: ${submissionId}` });
+      }
+      baseQuery._id = new mongoose.Types.ObjectId(submissionId);
+    }
+    const hasSubmissionId = baseQuery._id !== undefined;
 
     let unpaidQuery = Submission.find(baseQuery).populate('worker').populate('task');
-    // Only apply a positive integer limit when paying by limit (not by id)
     const parsedLimit = Number.isInteger(limit) && limit > 0 ? limit : null;
-    if (!submissionId && parsedLimit) unpaidQuery = unpaidQuery.limit(parsedLimit);
-
+    if (!hasSubmissionId && parsedLimit) unpaidQuery = unpaidQuery.limit(parsedLimit);
     const unpaid = await unpaidQuery;
 
-    // FAIL-SAFE: a call with no submissionId AND no limit does NOT pay anything.
-    // It returns a preview so an accidental/empty call can never drain the queue.
-    // To pay, caller must pass either submissionId OR an explicit limit.
-    if (!submissionId && !parsedLimit) {
-      const totalUnpaid = await Submission.countDocuments(baseQuery);
+    const selection = unpaid.map(s => ({
+      id: s._id.toString(), worker: s.worker?.username, piUid: s.worker?.piUid, pi: s.rewardMicroPi / 1e6
+    }));
+
+    // DRY-RUN: triggered explicitly via {dryRun:true} OR implicitly when neither
+    // submissionId nor limit is given. Runs the FULL selection logic and returns
+    // exactly which submissions WOULD be paid. Sends nothing.
+    if (dryRun || (!hasSubmissionId && !parsedLimit)) {
+      const totalUnpaid = await Submission.countDocuments({
+        status: { $in: ['approved', 'auto_approved'] }, payout: { $exists: false }
+      });
       return res.json({
         dryRun: true,
-        message: 'No submissionId or limit provided — nothing was paid. Pass {submissionId} or {limit:N} to send.',
+        receivedSubmissionId: submissionId ?? null,
+        receivedLimit: parsedLimit,
+        wouldPayCount: selection.length,
+        wouldPay: selection,
         totalUnpaid,
-        preview: unpaid.slice(0, 10).map(s => ({
-          id: s._id, worker: s.worker?.username, piUid: s.worker?.piUid, pi: s.rewardMicroPi / 1e6
-        })),
+        message: (!hasSubmissionId && !parsedLimit)
+          ? 'No submissionId or limit provided — nothing was paid.'
+          : 'dryRun=true — nothing was paid. These are the submissions that WOULD be paid.',
       });
+    }
+
+    // GUARD: never start a send while Pi already has an incomplete A2U — that is
+    // how the previous blocker formed. Bail out and report it instead.
+    try {
+      const pre = await pi.getIncompleteServerPayments();
+      const preItems = Array.isArray(pre) ? pre : (pre?.incomplete_server_payments || []);
+      if (preItems.length > 0) {
+        return res.status(409).json({
+          error: 'Pi already has an incomplete A2U payment — clear it before sending.',
+          incompleteIds: preItems.map(p => p.identifier),
+        });
+      }
+    } catch (e) {
+      return res.status(502).json({ error: 'Could not verify incomplete-payments state: ' + e.message });
     }
 
     const results = [];
@@ -710,6 +741,7 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
         results.push({ id: sub._id, error: 'no piUid', worker: sub.worker?.username });
         continue;
       }
+      let createdId = null;
       try {
         const a2u = await pi.createA2UPayment({
           uid: sub.worker.piUid,
@@ -717,6 +749,7 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
           memo: 'TaskVerse task reward',
           metadata: { submissionId: sub._id.toString(), taskId: sub.task?._id?.toString() }
         });
+        createdId = a2u.identifier;
         const payment = await Payment.create({
           piPaymentId: a2u.identifier,
           txid: a2u.txid,
@@ -731,14 +764,44 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
         await sub.save();
         results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier });
       } catch (e) {
-        results.push({ id: sub._id, worker: sub.worker?.username, error: e.message });
+        // CLEANUP: a failed send may have left a created-but-incomplete payment on
+        // Pi's side (no txid) which would block the whole queue. Try to cancel it.
+        let cleanup = 'none';
+        try {
+          const inc = await pi.getIncompleteServerPayments();
+          const incItems = Array.isArray(inc) ? inc : (inc?.incomplete_server_payments || []);
+          const stuck = incItems.find(p =>
+            p.identifier === createdId ||
+            p?.metadata?.submissionId === sub._id.toString()
+          );
+          if (stuck && !(stuck.transaction && stuck.transaction.txid)) {
+            const c = await pi.cancelPaymentVerbose(stuck.identifier);
+            cleanup = c.ok ? `cancelled ${stuck.identifier}` : `cancel-failed ${stuck.identifier}`;
+          }
+        } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
+        results.push({ id: sub._id, worker: sub.worker?.username, error: e.message, cleanup });
+      }
+
+      // ONE-AT-A-TIME: Pi only allows a single A2U in flight. After each send,
+      // verify the queue is clear before continuing; stop if anything is stuck.
+      try {
+        const mid = await pi.getIncompleteServerPayments();
+        const midItems = Array.isArray(mid) ? mid : (mid?.incomplete_server_payments || []);
+        if (midItems.length > 0) {
+          results.push({ stopped: true, reason: 'incomplete payment present after send', incompleteIds: midItems.map(p => p.identifier) });
+          break;
+        }
+      } catch (me) {
+        results.push({ stopped: true, reason: 'could not verify queue after send: ' + me.message });
+        break;
       }
     }
 
     const paid = results.filter(r => r.paymentId);
     const distinctWorkers = [...new Set(paid.map(r => r.worker))];
     res.json({
-      mode: submissionId ? 'single' : `batch(limit=${parsedLimit})`,
+      mode: hasSubmissionId ? 'single' : `batch(limit=${parsedLimit})`,
+      receivedSubmissionId: submissionId ?? null,
       attempted: unpaid.length,
       succeeded: paid.length,
       failed: results.filter(r => r.error).length,
