@@ -67,19 +67,38 @@ export async function getPayment(paymentId) {
   return data;
 }
 
-// A2U: uses pi-backend SDK for full create → blockchain submit → complete flow
+// A2U: uses pi-backend SDK for full create → blockchain submit → complete flow.
+// Each step is wrapped so a failure reports WHICH step failed, the HTTP status,
+// and Pi's raw response body — instead of a bare "Request failed with status 404".
 export async function createA2UPayment({ uid, amountPi, memo, metadata }) {
   const sdk = getPiSdk();
   if (!sdk) throw new Error('PI_WALLET_SEED not configured — A2U disabled');
 
+  const step = async (name, fn) => {
+    try {
+      return await fn();
+    } catch (e) {
+      const status = e.response?.status ?? null;
+      const body = e.response?.data ?? null;
+      const detail = body ? JSON.stringify(body) : e.message;
+      // Log server-side so it appears in Render logs, and throw a rich error.
+      console.error(`[A2U:${name}] failed uid=${uid} amount=${amountPi} status=${status} body=${detail}`);
+      const err = new Error(`${name} failed (status ${status ?? '?'}): ${detail}`);
+      err.step = name;
+      err.httpStatus = status;
+      err.piBody = body;
+      throw err;
+    }
+  };
+
   // Step 1: Create payment on Pi Platform
-  const paymentId = await sdk.createPayment({ amount: amountPi, memo, metadata, uid });
+  const paymentId = await step('createPayment', () => sdk.createPayment({ amount: amountPi, memo, metadata, uid }));
 
   // Step 2: Sign & submit to Pi blockchain
-  const txid = await sdk.submitPayment(paymentId);
+  const txid = await step('submitPayment', () => sdk.submitPayment(paymentId));
 
   // Step 3: Mark complete on Pi Platform
-  const completed = await sdk.completePayment(paymentId, txid);
+  const completed = await step('completePayment', () => sdk.completePayment(paymentId, txid));
 
   return { identifier: paymentId, txid, completed };
 }

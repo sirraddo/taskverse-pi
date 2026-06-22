@@ -81,7 +81,11 @@ const refresh = useCallback(async () => {
 try {
 const [feed, me] = await Promise.all([fetchTasks(), fetchMe()]);
 setTasks(feed);
-setUser((prev) => ({ ...prev, ...me }));
+// Only merge a valid profile, and never let an error-shaped payload (lacking
+// username) clobber the logged-in user and unmount the admin panel.
+if (me && me.username) {
+setUser((prev) => ({ ...prev, ...me, isAdmin: me.isAdmin ?? prev?.isAdmin }));
+}
 } catch (err) { triggerNotification('Warning: ' + err.message); }
 }, [triggerNotification]);
 
@@ -114,7 +118,7 @@ const earned = me.approvedCount - prev;
 triggerNotification('Payout received! ' + earned + ' task' + (earned > 1 ? 's' : '') + ' approved. Balance: ' + Number(me.balance).toFixed(2) + ' pi');
 lastApprovedRef.current = me.approvedCount;
 }
-setUser(prev => ({ ...prev, ...me }));
+setUser(prev => (me && me.username) ? ({ ...prev, ...me, isAdmin: me.isAdmin ?? prev?.isAdmin }) : prev);
 } catch (_) {}
 }, 30_000);
 return () => clearInterval(interval);

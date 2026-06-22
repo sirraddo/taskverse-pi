@@ -779,7 +779,11 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
             cleanup = c.ok ? `cancelled ${stuck.identifier}` : `cancel-failed ${stuck.identifier}`;
           }
         } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
-        results.push({ id: sub._id, worker: sub.worker?.username, error: e.message, cleanup });
+        results.push({
+          id: sub._id, worker: sub.worker?.username, error: e.message,
+          step: e.step ?? null, httpStatus: e.httpStatus ?? null, piBody: e.piBody ?? null,
+          cleanup,
+        });
       }
 
       // ONE-AT-A-TIME: Pi only allows a single A2U in flight. After each send,
