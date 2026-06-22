@@ -76,6 +76,14 @@ reasons: [String], // human-readable rule trail for audits
 },
 rewardMicroPi: { type: Number, required: true },
 payout: { type: Schema.Types.ObjectId, ref: 'Payment' },
+// Set when an A2U send cannot reach the recipient (e.g. Pi 404 — unresolvable
+// uid / non-authenticated or duplicate account). Excludes the sub from the
+// unpaid-payout queue so it isn't retried forever. Audit-only; no funds moved.
+payoutSkipped: {
+reason: String,
+httpStatus: Number,
+at: Date,
+},
 },
 { timestamps: true }
 );

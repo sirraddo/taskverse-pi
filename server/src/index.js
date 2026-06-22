@@ -678,7 +678,10 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
 
     const baseQuery = {
       status: { $in: ['approved', 'auto_approved'] },
-      payout: { $exists: false }
+      payout: { $exists: false },
+      // Exclude submissions previously marked unpayable (e.g. recipient 404),
+      // unless the caller explicitly opts to retry them with {includeSkipped:true}.
+      ...(req.body?.includeSkipped ? {} : { 'payoutSkipped.at': { $exists: false } }),
     };
 
     // Validate submissionId up front: must be a real ObjectId, else reject loudly
@@ -779,10 +782,24 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
             cleanup = c.ok ? `cancelled ${stuck.identifier}` : `cancel-failed ${stuck.identifier}`;
           }
         } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
+
+        // If the recipient is unresolvable (404 at createPayment — before any
+        // funds move), mark the sub unpayable so it leaves the queue and we
+        // don't retry it forever. Only for createPayment 404s, never for a
+        // failure that occurred after submit (which could mean funds moved).
+        let skipped = false;
+        if (e.step === 'createPayment' && e.httpStatus === 404) {
+          try {
+            sub.payoutSkipped = { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() };
+            await sub.save();
+            skipped = true;
+          } catch (se) { /* leave in queue if marking fails */ }
+        }
+
         results.push({
           id: sub._id, worker: sub.worker?.username, error: e.message,
           step: e.step ?? null, httpStatus: e.httpStatus ?? null, piBody: e.piBody ?? null,
-          cleanup,
+          skipped, cleanup,
         });
       }
 
@@ -808,7 +825,8 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
       receivedSubmissionId: submissionId ?? null,
       attempted: unpaid.length,
       succeeded: paid.length,
-      failed: results.filter(r => r.error).length,
+      failed: results.filter(r => r.error && !r.skipped).length,
+      skippedUnpayable: results.filter(r => r.skipped).length,
       distinctWorkersPaid: distinctWorkers.length,
       workers: distinctWorkers,
       results,
