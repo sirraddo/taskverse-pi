@@ -11,6 +11,7 @@ import {
   User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
+import { runAutoBatch, startAutoPayScheduler, archiveOldTasks } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
@@ -565,7 +566,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     const [history, postedTasks, openDisputes] = await Promise.all([
       Submission.find({ worker: user._id })
         .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
-      Task.find({ poster: user._id }).sort({ createdAt: -1 }).limit(50).lean(),
+      Task.find({ poster: user._id, archived: { $ne: true } }).sort({ createdAt: -1 }).limit(50).lean(),
       Dispute.find({ openedBy: user._id, status: 'open' })
         .populate({ path: 'submission', populate: { path: 'task', select: 'title' } })
         .sort({ createdAt: -1 }).lean(),
@@ -917,6 +918,38 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
   } catch (err) { next(err); }
 });
 
+/* ── Admin: auto-reconcile — one throttled batch, callable by cron or admin ──
+   Drains a small batch of unpaid A2U using the shared rate-limit-aware logic.
+   Auth: admin JWT OR a CRON_SECRET (?secret= / x-cron-secret) so an external
+   scheduler can call it without a user session. Safe to call repeatedly:
+   processes a small batch, skips unpayable, backs off on 429, stops on cooldown. */
+app.post('/api/admin/auto-reconcile', async (req, res, next) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    const provided = req.headers['x-cron-secret'] || req.query.secret;
+    const cronOk = cronSecret && provided && provided === cronSecret;
+
+    if (!cronOk) {
+      // Fall back to admin-session auth.
+      try {
+        const auth = req.headers.authorization || '';
+        const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+        if (!token) return res.status(401).json({ error: 'auth required (admin token or cron secret)' });
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        if (!isAdmin(payload.username)) return res.status(403).json({ error: 'admin only' });
+      } catch (e) {
+        return res.status(401).json({ error: 'invalid auth' });
+      }
+    }
+
+    const limit = Number.isInteger(req.body?.limit) ? req.body.limit : 3;
+    const summary = await runAutoBatch({ limit });
+    let archive = null;
+    try { archive = await archiveOldTasks({ days: Number(process.env.ARCHIVE_AFTER_DAYS) || 30 }); } catch (_) {}
+    res.json({ ok: true, ...summary, archive });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: deep stats for A2U requirement check ── */
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -1080,6 +1113,16 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
   });
 
   app.listen(PORT, () => console.log('TaskVerse Pi server listening on :' + PORT));
+
+  // Auto-pay scheduler: drains a small A2U batch periodically while the process
+  // is awake. Opt-in via AUTO_PAY=on so it never runs unexpectedly. On free-tier
+  // hosting the process sleeps when idle — pair with an external cron hitting
+  // POST /api/admin/auto-reconcile (x-cron-secret) for reliable coverage.
+  if ((process.env.AUTO_PAY || '').toLowerCase() === 'on') {
+    const intervalMs = Number(process.env.AUTO_PAY_INTERVAL_MS) || 90_000;
+    const batch = Number(process.env.AUTO_PAY_BATCH) || 2;
+    startAutoPayScheduler({ intervalMs, batch });
+  }
 }).catch((e) => {
   console.error('MongoDB connection failed:', e.message);
   process.exit(1);

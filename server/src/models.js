@@ -51,6 +51,10 @@ default: 'awaiting_funding',
 index: true,
 },
 fundingPaymentId: String, // Pi paymentId that funded this campaign
+// Auto-archived (hidden from dashboards) after a retention period when in a
+// terminal state. Data is retained — this only affects default list queries.
+archived: { type: Boolean, default: false, index: true },
+archivedAt: Date,
 },
 { timestamps: true }
 );
