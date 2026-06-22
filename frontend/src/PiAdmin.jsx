@@ -44,6 +44,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [a2uPreview, setA2uPreview] = useState(null);
   const [a2uResult, setA2uResult] = useState(null);
   const [a2uBusy, setA2uBusy] = useState(false);
+  const [a2uConfirm, setA2uConfirm] = useState(null); // { opts, label, detail } | null
 
   const handleCancelStale = async () => {
     if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
@@ -127,32 +128,39 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   // Actually send — guarded by an explicit confirm dialog
   const handleA2uSend = async () => {
-    let opts, label;
+    let opts, label, detail;
     if (a2uMode === 'single') {
       const id = a2uSubmissionId.trim();
       if (!id) return notify('Enter a submissionId to pay.');
       opts = { submissionId: id };
-      label = `submission ${id}`;
+      label = 'Single payout';
+      detail = `Submission ${id}`;
     } else {
       const n = parseInt(a2uLimit, 10);
       if (!Number.isInteger(n) || n < 1) return notify('Enter a batch size of 1 or more.');
       opts = { limit: n };
-      label = `up to ${n} submission(s)`;
+      label = 'Batch payout';
+      detail = `Up to ${n} submission${n > 1 ? 's' : ''}, paced one at a time`;
     }
-    const ok = window.confirm(
-      `Send REAL A2U testnet payout for ${label}?\n\n` +
-      `This signs blockchain transaction(s) and moves funds. Pi processes one A2U at a time.\n\nProceed?`
-    );
-    if (!ok) return;
+    // Open the styled in-page confirmation modal instead of window.confirm()
+    setA2uConfirm({ opts, label, detail });
+  };
+
+  const executeA2uSend = async () => {
+    const pending = a2uConfirm;
+    if (!pending) return;
+    setA2uConfirm(null);
     setA2uBusy(true);
     setA2uResult(null);
     try {
-      const res = await reconcileA2U(opts);
+      const res = await reconcileA2U(pending.opts);
       setA2uResult(res);
       if (res.dryRun) {
         notify('⚠️ Nothing paid — backend treated this as a dry-run.');
+      } else if (res.stoppedForCooldown) {
+        notify(`⏸ Pi rate-limited. ${res.succeeded} paid before cooldown — try again shortly.`);
       } else {
-        notify(`✅ ${res.mode}: ${res.succeeded} paid, ${res.failed} failed (attempted ${res.attempted}).`);
+        notify(`✅ ${res.succeeded} paid${res.skippedUnpayable ? `, ${res.skippedUnpayable} skipped` : ''}${res.failed ? `, ${res.failed} failed` : ''}.`);
       }
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setA2uBusy(false); }
@@ -369,6 +377,49 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Styled payout confirmation modal (replaces native confirm) */}
+        {a2uConfirm && (
+          <div
+            onClick={() => setA2uConfirm(null)}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: '380px', backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            >
+              <div style={{ background: 'linear-gradient(135deg, #b45309, #d97706)', padding: '18px 20px', color: 'white' }}>
+                <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>💸</div>
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Confirm {a2uConfirm.label}</div>
+                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real testnet A2U — moves funds on-chain</div>
+              </div>
+              <div style={{ padding: '18px 20px' }}>
+                <div style={{ fontSize: '0.82rem', color: '#334155', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 12px', fontFamily: 'monospace' }}>
+                  {a2uConfirm.detail}
+                </div>
+                <ul style={{ margin: '12px 0 0', padding: '0 0 0 18px', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.6 }}>
+                  <li>Each payment signs a blockchain transaction.</li>
+                  <li>Pi processes one A2U at a time; sends are paced automatically.</li>
+                  <li>Unpayable recipients are skipped, not retried.</li>
+                </ul>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', padding: '0 20px 20px' }}>
+                <button
+                  onClick={() => setA2uConfirm(null)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeA2uSend}
+                  style={{ flex: 1.4, padding: '11px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #b45309, #d97706)', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(180,83,9,0.35)' }}
+                >
+                  Confirm &amp; Send
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
