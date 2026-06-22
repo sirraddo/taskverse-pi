@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -48,6 +48,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [unpayable, setUnpayable] = useState(null);
   const [unpayableLoading, setUnpayableLoading] = useState(false);
   const [staleConfirm, setStaleConfirm] = useState(false);
+  const [consPreview, setConsPreview] = useState(null);
+  const [consResult, setConsResult] = useState(null);
+  const [consBusy, setConsBusy] = useState(false);
+  const [consConfirm, setConsConfirm] = useState(null); // { maxWorkers } | null
 
   const handleCancelStale = () => setStaleConfirm(true);
 
@@ -119,6 +123,40 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       notify(`📋 ${res.total} unpayable submission${res.total === 1 ? '' : 's'} (${res.totalPi}π) across ${res.byWorker.length} account${res.byWorker.length === 1 ? '' : 's'}.`);
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setUnpayableLoading(false); }
+  };
+
+  const handleConsPreview = async () => {
+    setConsBusy(true);
+    setConsResult(null);
+    try {
+      const res = await reconcileConsolidated({ dryRun: true });
+      setConsPreview(res);
+      notify(`🧮 ${res.totalSubmissions} tasks → ${res.paymentsNeeded} payment${res.paymentsNeeded === 1 ? '' : 's'} (${res.totalPi}π). Nothing paid.`);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setConsBusy(false); }
+  };
+
+  const handleConsSend = () => {
+    if (!consPreview || consPreview.totalWorkers === 0) return notify('Run preview first.');
+    setConsConfirm({ maxWorkers: Math.min(consPreview.totalWorkers, 5) });
+  };
+
+  const executeConsSend = async () => {
+    const pending = consConfirm;
+    if (!pending) return;
+    setConsConfirm(null);
+    setConsBusy(true);
+    setConsResult(null);
+    try {
+      const res = await reconcileConsolidated({ maxWorkers: pending.maxWorkers });
+      setConsResult(res);
+      if (res.stoppedForCooldown) {
+        notify(`⏸ Rate-limited. ${res.workersPaid} worker(s) paid before cooldown.`);
+      } else {
+        notify(`✅ ${res.workersPaid} worker(s) paid · ${res.submissionsPaid} tasks · ${res.piPaid}π${res.skipped ? `, ${res.skipped} skipped` : ''}.`);
+      }
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setConsBusy(false); }
   };
 
   // Dry-run preview — moves nothing, shows exactly what WOULD be paid
@@ -477,6 +515,89 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                   style={{ flex: 1.4, padding: '11px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #b45309, #d97706)', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(180,83,9,0.35)' }}
                 >
                   Confirm &amp; Send
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Admin: consolidated payout — one lump-sum per worker */}
+      <div style={{ backgroundColor: '#ecfdf5', border: '1.5px solid #a7f3d0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ fontWeight: '700', color: '#047857', fontSize: '0.85rem', marginBottom: '4px' }}>
+          🧮 Consolidated Payout
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
+          Pays each worker ONE lump sum covering all their pending tasks — far fewer A2U calls, so it clears a backlog with minimal rate-limit hits. Preview pays nothing.
+        </p>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleConsPreview} disabled={consBusy}
+            style={{ flex: 1, backgroundColor: consBusy ? '#a0aec0' : '#0369a1', color: 'white', border: 'none', padding: '9px', borderRadius: '8px', fontWeight: '700', cursor: consBusy ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>
+            🧮 Preview
+          </button>
+          <button onClick={handleConsSend} disabled={consBusy || !consPreview}
+            style={{ flex: 1, backgroundColor: (consBusy || !consPreview) ? '#a0aec0' : '#047857', color: 'white', border: 'none', padding: '9px', borderRadius: '8px', fontWeight: '700', cursor: (consBusy || !consPreview) ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>
+            {consBusy ? 'Working…' : '💸 Pay (max 5)'}
+          </button>
+        </div>
+
+        {consPreview && (
+          <div style={{ fontSize: '0.72rem', color: '#374151', backgroundColor: 'white', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '9px', marginTop: '10px' }}>
+            <b>{consPreview.totalSubmissions}</b> tasks → <b>{consPreview.paymentsNeeded}</b> payment{consPreview.paymentsNeeded === 1 ? '' : 's'} · {consPreview.totalPi}π
+            {(consPreview.workers || []).map((w, i) => (
+              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.67rem' }}>
+                @{w.worker} · {w.count} task{w.count === 1 ? '' : 's'} → <b style={{ color: '#047857' }}>{Number(w.pi.toFixed(4))}π</b>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {consResult && (
+          <div style={{ fontSize: '0.72rem', color: '#166534', backgroundColor: 'white', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '9px', marginTop: '8px' }}>
+            <b>{consResult.workersPaid}</b> worker{consResult.workersPaid === 1 ? '' : 's'} paid · {consResult.submissionsPaid} tasks · {consResult.piPaid}π
+            {consResult.skipped ? `, ${consResult.skipped} skipped` : ''}{consResult.failed ? `, ${consResult.failed} failed` : ''}
+            {consResult.stoppedForCooldown && (
+              <div style={{ marginTop: '4px', color: '#b45309', fontWeight: 700 }}>⏸ Rate-limited — run again later for the rest.</div>
+            )}
+            {(consResult.results || []).filter(r => r.paymentId || r.error || r.skipped).map((r, i) => (
+              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.paymentId ? '#166534' : (r.skipped ? '#6b7280' : '#c53030') }}>
+                {r.paymentId ? `✓ @${r.worker} ${r.pi}π (${r.covered} task${r.covered === 1 ? '' : 's'})`
+                  : r.skipped ? `⤼ @${r.worker}: skipped (unpayable)`
+                  : `✗ @${r.worker}: ${r.error}`}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {consConfirm && (
+          <div onClick={() => setConsConfirm(null)}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: '380px', backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+              <div style={{ background: 'linear-gradient(135deg, #047857, #059669)', padding: '18px 20px', color: 'white' }}>
+                <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>🧮</div>
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Confirm consolidated payout</div>
+                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real testnet A2U — moves funds on-chain</div>
+              </div>
+              <div style={{ padding: '18px 20px' }}>
+                <div style={{ fontSize: '0.82rem', color: '#334155', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '10px 12px', fontFamily: 'monospace' }}>
+                  Up to {consConfirm.maxWorkers} worker{consConfirm.maxWorkers === 1 ? '' : 's'} — one lump-sum payment each
+                </div>
+                <ul style={{ margin: '12px 0 0', padding: '0 0 0 18px', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.6 }}>
+                  <li>Each worker’s pending tasks are paid in a single A2U.</li>
+                  <li>Paced one at a time; backs off if Pi rate-limits.</li>
+                  <li>Unpayable recipients are skipped, not retried.</li>
+                </ul>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', padding: '0 20px 20px' }}>
+                <button onClick={() => setConsConfirm(null)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={executeConsSend}
+                  style={{ flex: 1.4, padding: '11px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #047857, #059669)', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(4,120,87,0.35)' }}>
+                  Confirm &amp; Pay
                 </button>
               </div>
             </div>

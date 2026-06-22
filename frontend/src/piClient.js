@@ -119,3 +119,4 @@ export const fetchWalletOverview = () => api('/api/admin/wallet-overview');
  */
 export const reconcileA2U = (opts = {}) => api('/api/admin/reconcile-a2u', opts);
 export const fetchUnpayableSubmissions = () => api('/api/admin/unpayable-submissions');
+export const reconcileConsolidated = (opts = {}) => api('/api/admin/reconcile-consolidated', opts);
