@@ -344,12 +344,31 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
         {a2uResult && !a2uResult.dryRun && (
           <div style={{ fontSize: '0.72rem', color: '#166534', backgroundColor: 'white', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px', marginTop: '8px' }}>
-            <b>{a2uResult.mode}</b> — {a2uResult.succeeded} paid, {a2uResult.failed} failed (attempted {a2uResult.attempted}).
-            {(a2uResult.results || []).map((r, i) => (
-              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.error ? '#c53030' : '#166534' }}>
-                {r.error ? `✗ ${r.worker || r.id}: ${r.error}` : `✓ @${r.worker} ${r.pi}π · ${r.paymentId}`}
+            <b>{a2uResult.mode}</b> — {a2uResult.succeeded} paid
+            {a2uResult.skippedUnpayable ? `, ${a2uResult.skippedUnpayable} skipped (unpayable)` : ''}
+            {a2uResult.failed ? `, ${a2uResult.failed} failed` : ''}
+            {a2uResult.rateLimitedRetries ? `, ${a2uResult.rateLimitedRetries} rate-limit retries` : ''}
+            {' '}(attempted {a2uResult.attempted}).
+            {a2uResult.stoppedForCooldown && (
+              <div style={{ marginTop: '4px', color: '#b45309', fontWeight: 700 }}>
+                ⏸ Pi rate-limited — run stopped for cooldown. Wait a while, then run again for the rest.
               </div>
-            ))}
+            )}
+            {(a2uResult.results || []).map((r, i) => {
+              let line, color;
+              if (r.paymentId) { line = `✓ @${r.worker} ${r.pi}π · ${r.paymentId}`; color = '#166534'; }
+              else if (r.info) { line = `⏳ @${r.worker}: ${r.info}`; color = '#b45309'; }
+              else if (r.skipped) { line = `⤼ @${r.worker}: skipped (unpayable, ${r.httpStatus})`; color = '#6b7280'; }
+              else if (r.skippedDueToStop) { line = `· ${r.id}: not attempted (cooldown stop)`; color = '#9ca3af'; }
+              else if (r.stopped) { line = `■ stopped: ${r.reason}`; color = '#c53030'; }
+              else if (r.error) { line = `✗ ${r.worker || r.id}: ${r.error}`; color = '#c53030'; }
+              else { line = JSON.stringify(r); color = '#6b7280'; }
+              return (
+                <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color }}>
+                  {line}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
