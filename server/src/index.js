@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import * as StellarSdk from 'stellar-sdk';
 
 import {
   User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
@@ -232,17 +233,27 @@ app.get('/api/admin/worker-payment-lookup', requireAuth, requireAdmin, async (re
 */
 app.get('/api/admin/wallet-overview', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const pk = process.env.PI_WALLET_PUBLIC_KEY;
-    if (!pk) return res.status(503).json({ error: 'PI_WALLET_PUBLIC_KEY not configured on server' });
+    const envPk = process.env.PI_WALLET_PUBLIC_KEY || null;
+
+    // Source of truth: the public key DERIVED FROM THE SEED actually signs
+    // payments. If the PI_WALLET_PUBLIC_KEY env var disagrees, the env var is
+    // wrong — so we look up balances against the derived key and surface both.
+    let derivedPk = null, deriveError = null;
+    try {
+      const seed = process.env.PI_WALLET_SEED;
+      if (seed) derivedPk = StellarSdk.Keypair.fromSecret(seed).publicKey();
+    } catch (e) { deriveError = e.message; }
+
+    const pk = derivedPk || envPk;
+    if (!pk) return res.status(503).json({ error: 'No wallet key available (PI_WALLET_SEED / PI_WALLET_PUBLIC_KEY unset)' });
+
     const account = await pi.getHorizonAccount(pk);
-    if (!account) return res.json({ publicKey: pk, exists: false, balancePi: 0, recentPayments: [] });
+    const keyInfo = { activeKey: pk, derivedFromSeed: derivedPk, envPublicKey: envPk,
+      keysMatch: !!(derivedPk && envPk && derivedPk === envPk), deriveError };
+
+    if (!account) return res.json({ ...keyInfo, exists: false, balancePi: 0, recentPayments: [] });
     const recentPayments = await pi.getHorizonPayments(pk, 10);
-    res.json({
-      publicKey: pk,
-      exists: true,
-      balancePi: account.balancePi,
-      recentPayments,
-    });
+    res.json({ ...keyInfo, exists: true, balancePi: account.balancePi, recentPayments });
   } catch (err) { next(err); }
 });
 
@@ -739,69 +750,101 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
     }
 
     const results = [];
-    for (const sub of unpaid) {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    // Throttle config (overridable via body): Pi rate-limits A2U, so we pace
+    // sends and back off on 429 instead of failing.
+    const delayMs = Number.isInteger(req.body?.delayMs) ? req.body.delayMs : 3000;
+    const maxRetries = Number.isInteger(req.body?.maxRetries) ? req.body.maxRetries : 4;
+    let hardStop = false;
+
+    for (let idx = 0; idx < unpaid.length; idx++) {
+      const sub = unpaid[idx];
+      if (hardStop) { results.push({ id: sub._id, skippedDueToStop: true }); continue; }
       if (!sub.worker?.piUid) {
         results.push({ id: sub._id, error: 'no piUid', worker: sub.worker?.username });
         continue;
       }
+
       let createdId = null;
-      try {
-        const a2u = await pi.createA2UPayment({
-          uid: sub.worker.piUid,
-          amountPi: sub.rewardMicroPi / 1e6,
-          memo: 'TaskVerse task reward',
-          metadata: { submissionId: sub._id.toString(), taskId: sub.task?._id?.toString() }
-        });
-        createdId = a2u.identifier;
-        const payment = await Payment.create({
-          piPaymentId: a2u.identifier,
-          txid: a2u.txid,
-          direction: 'A2U',
-          purpose: 'worker_payout',
-          user: sub.worker._id,
-          task: sub.task?._id,
-          amountMicroPi: sub.rewardMicroPi,
-          status: 'completed',
-        });
-        sub.payout = payment._id;
-        await sub.save();
-        results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier });
-      } catch (e) {
-        // CLEANUP: a failed send may have left a created-but-incomplete payment on
-        // Pi's side (no txid) which would block the whole queue. Try to cancel it.
-        let cleanup = 'none';
+      let attempt = 0;
+      let done = false;
+
+      while (!done) {
+        attempt++;
         try {
-          const inc = await pi.getIncompleteServerPayments();
-          const incItems = Array.isArray(inc) ? inc : (inc?.incomplete_server_payments || []);
-          const stuck = incItems.find(p =>
-            p.identifier === createdId ||
-            p?.metadata?.submissionId === sub._id.toString()
-          );
-          if (stuck && !(stuck.transaction && stuck.transaction.txid)) {
-            const c = await pi.cancelPaymentVerbose(stuck.identifier);
-            cleanup = c.ok ? `cancelled ${stuck.identifier}` : `cancel-failed ${stuck.identifier}`;
+          const a2u = await pi.createA2UPayment({
+            uid: sub.worker.piUid,
+            amountPi: sub.rewardMicroPi / 1e6,
+            memo: 'TaskVerse task reward',
+            metadata: { submissionId: sub._id.toString(), taskId: sub.task?._id?.toString() }
+          });
+          createdId = a2u.identifier;
+          const payment = await Payment.create({
+            piPaymentId: a2u.identifier,
+            txid: a2u.txid,
+            direction: 'A2U',
+            purpose: 'worker_payout',
+            user: sub.worker._id,
+            task: sub.task?._id,
+            amountMicroPi: sub.rewardMicroPi,
+            status: 'completed',
+          });
+          sub.payout = payment._id;
+          await sub.save();
+          results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier, attempts: attempt });
+          done = true;
+          // pace the next send to stay under Pi's A2U rate limit
+          if (idx < unpaid.length - 1) await sleep(delayMs);
+        } catch (e) {
+          // 429 = Pi rate limit. Back off exponentially and retry the SAME sub.
+          // No funds moved (429 happens at createPayment), so retry is safe.
+          if (e.httpStatus === 429 && attempt <= maxRetries) {
+            const backoff = delayMs * Math.pow(2, attempt); // 6s, 12s, 24s, 48s...
+            results.push({ id: sub._id, worker: sub.worker?.username, info: `rate-limited (429), backing off ${backoff}ms (attempt ${attempt}/${maxRetries})` });
+            await sleep(backoff);
+            continue; // retry same sub
           }
-        } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
 
-        // If the recipient is unresolvable (404 at createPayment — before any
-        // funds move), mark the sub unpayable so it leaves the queue and we
-        // don't retry it forever. Only for createPayment 404s, never for a
-        // failure that occurred after submit (which could mean funds moved).
-        let skipped = false;
-        if (e.step === 'createPayment' && e.httpStatus === 404) {
+          // CLEANUP: a failed send may have left a created-but-incomplete payment.
+          let cleanup = 'none';
           try {
-            sub.payoutSkipped = { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() };
-            await sub.save();
-            skipped = true;
-          } catch (se) { /* leave in queue if marking fails */ }
-        }
+            const inc = await pi.getIncompleteServerPayments();
+            const incItems = Array.isArray(inc) ? inc : (inc?.incomplete_server_payments || []);
+            const stuck = incItems.find(p =>
+              p.identifier === createdId ||
+              p?.metadata?.submissionId === sub._id.toString()
+            );
+            if (stuck && !(stuck.transaction && stuck.transaction.txid)) {
+              const c = await pi.cancelPaymentVerbose(stuck.identifier);
+              cleanup = c.ok ? `cancelled ${stuck.identifier}` : `cancel-failed ${stuck.identifier}`;
+            }
+          } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
 
-        results.push({
-          id: sub._id, worker: sub.worker?.username, error: e.message,
-          step: e.step ?? null, httpStatus: e.httpStatus ?? null, piBody: e.piBody ?? null,
-          skipped, cleanup,
-        });
+          // 404 at createPayment = unresolvable recipient (before funds move) → skip.
+          let skipped = false;
+          if (e.step === 'createPayment' && e.httpStatus === 404) {
+            try {
+              sub.payoutSkipped = { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() };
+              await sub.save();
+              skipped = true;
+            } catch (se) { /* leave in queue if marking fails */ }
+          }
+
+          // If we exhausted 429 retries, stop the whole run — Pi needs a longer
+          // cooldown. Remaining subs stay queued for a later batch.
+          if (e.httpStatus === 429) hardStop = true;
+
+          results.push({
+            id: sub._id, worker: sub.worker?.username, error: e.message,
+            step: e.step ?? null, httpStatus: e.httpStatus ?? null, piBody: e.piBody ?? null,
+            skipped, cleanup, attempts: attempt,
+            ...(hardStop ? { stoppedRun: 'rate-limit cooldown — run again later for remaining' } : {}),
+          });
+          done = true;
+        }
       }
+
+      // one-at-a-time verification happens below (unchanged)
 
       // ONE-AT-A-TIME: Pi only allows a single A2U in flight. After each send,
       // verify the queue is clear before continuing; stop if anything is stuck.
@@ -827,6 +870,8 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
       succeeded: paid.length,
       failed: results.filter(r => r.error && !r.skipped).length,
       skippedUnpayable: results.filter(r => r.skipped).length,
+      rateLimitedRetries: results.filter(r => r.info && r.info.includes('rate-limited')).length,
+      stoppedForCooldown: results.some(r => r.stoppedRun) || results.some(r => r.skippedDueToStop),
       distinctWorkersPaid: distinctWorkers.length,
       workers: distinctWorkers,
       results,
