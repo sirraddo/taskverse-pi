@@ -47,9 +47,12 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [a2uConfirm, setA2uConfirm] = useState(null); // { opts, label, detail } | null
   const [unpayable, setUnpayable] = useState(null);
   const [unpayableLoading, setUnpayableLoading] = useState(false);
+  const [staleConfirm, setStaleConfirm] = useState(false);
 
-  const handleCancelStale = async () => {
-    if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
+  const handleCancelStale = () => setStaleConfirm(true);
+
+  const executeCancelStale = async () => {
+    setStaleConfirm(false);
     setCancelling(true);
     try {
       const res = await cancelStaleFunding(parseInt(staleCutoff, 10));
@@ -393,6 +396,51 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         )}
 
         {/* Styled payout confirmation modal (replaces native confirm) */}
+        {staleConfirm && (
+          <div
+            onClick={() => setStaleConfirm(false)}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: '380px', backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            >
+              <div style={{ background: 'linear-gradient(135deg, #b91c1c, #dc2626)', padding: '18px 20px', color: 'white' }}>
+                <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>🧹</div>
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Sweep stale funding tasks</div>
+                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Tasks stuck in “awaiting_funding” &gt; {staleCutoff}h</div>
+              </div>
+              <div style={{ padding: '18px 20px' }}>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#334155', lineHeight: 1.5 }}>
+                  Each task’s Pi payment is checked on-chain first:
+                </p>
+                <ul style={{ margin: '8px 0 0', padding: '0 0 0 18px', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.6 }}>
+                  <li><b style={{ color: '#16a34a' }}>Completed</b> payments are recovered — the task is set live.</li>
+                  <li><b style={{ color: '#b91c1c' }}>Genuinely unpaid</b> tasks are cancelled.</li>
+                  <li>Tasks whose Pi status can’t be read are skipped for a later run.</li>
+                </ul>
+                <div style={{ marginTop: '10px', fontSize: '0.72rem', color: '#b45309', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 10px' }}>
+                  ⚠️ This cannot be undone.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', padding: '0 20px 20px' }}>
+                <button
+                  onClick={() => setStaleConfirm(false)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeCancelStale}
+                  style={{ flex: 1.4, padding: '11px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #b91c1c, #dc2626)', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(185,28,28,0.35)' }}
+                >
+                  Sweep now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {a2uConfirm && (
           <div
             onClick={() => setA2uConfirm(null)}
