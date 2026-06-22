@@ -1,8 +1,95 @@
-import { Submission, Payment } from './models.js';
+import { Submission, Payment, User } from './models.js';
 import { Task } from './models.js';
 import * as pi from './piPlatform.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Idempotency: has any completed payment already covered this submission?
+async function alreadyCovered(subId) {
+  const p = await Payment.findOne({ status: 'completed', submissions: subId }).lean();
+  return !!p;
+}
+
+// Pay ONE worker's pending submissions. If they have multiple pending, this
+// sends a single consolidated A2U for the summed amount and links all covered
+// submissions to that one Payment. If they have one, it's a normal single send.
+// Returns { ok, paymentId, pi, covered, skipped, error, step, httpStatus }.
+// Moves funds — caller is responsible for rate-limit pacing / one-at-a-time.
+export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task rewards' } = {}) {
+  const worker = await User.findById(workerId).lean();
+  if (!worker) return { ok: false, error: 'worker not found' };
+  if (!worker.piUid) return { ok: false, error: 'no piUid', worker: worker.username };
+
+  // Gather this worker's still-unpaid, non-skipped submissions.
+  const subs = await Submission.find({
+    worker: workerId,
+    status: { $in: ['approved', 'auto_approved'] },
+    payout: { $exists: false },
+    'payoutSkipped.at': { $exists: false },
+  }).populate('task');
+
+  if (subs.length === 0) return { ok: true, covered: 0, pi: 0, worker: worker.username, note: 'nothing pending' };
+
+  // Idempotency guard: drop any sub already covered by a completed payment.
+  const payable = [];
+  for (const s of subs) {
+    if (!(await alreadyCovered(s._id))) payable.push(s);
+  }
+  if (payable.length === 0) return { ok: true, covered: 0, pi: 0, worker: worker.username, note: 'all already covered' };
+
+  const totalMicro = payable.reduce((a, s) => a + (s.rewardMicroPi || 0), 0);
+  const totalPi = totalMicro / 1e6;
+  const subIds = payable.map((s) => s._id);
+
+  let createdId = null;
+  try {
+    const a2u = await pi.createA2UPayment({
+      uid: worker.piUid,
+      amountPi: totalPi,
+      memo,
+      metadata: { workerId: workerId.toString(), submissionIds: subIds.map(String), consolidated: payable.length > 1 },
+    });
+    createdId = a2u.identifier;
+
+    const payment = await Payment.create({
+      piPaymentId: a2u.identifier,
+      txid: a2u.txid,
+      direction: 'A2U',
+      purpose: 'worker_payout',
+      user: worker._id,
+      task: payable[0].task?._id, // representative; full set in submissions[]
+      submissions: subIds,
+      amountMicroPi: totalMicro,
+      status: 'completed',
+    });
+
+    // Mark every covered submission paid → points at the one payment.
+    await Submission.updateMany({ _id: { $in: subIds } }, { $set: { payout: payment._id } });
+
+    return { ok: true, paymentId: a2u.identifier, pi: totalPi, covered: subIds.length, worker: worker.username, consolidated: payable.length > 1 };
+  } catch (e) {
+    // Best-effort cleanup of a created-but-incomplete payment (no txid).
+    try {
+      const inc = await pi.getIncompleteServerPayments();
+      const incItems = Array.isArray(inc) ? inc : (inc?.incomplete_server_payments || []);
+      const stuck = incItems.find((p) => p.identifier === createdId || p?.metadata?.workerId === workerId.toString());
+      if (stuck && !(stuck.transaction && stuck.transaction.txid)) await pi.cancelPaymentVerbose(stuck.identifier);
+    } catch (_) { /* best-effort */ }
+
+    // 404 at createPayment = unresolvable recipient → mark all these subs unpayable.
+    let skipped = false;
+    if (e.step === 'createPayment' && e.httpStatus === 404) {
+      try {
+        await Submission.updateMany(
+          { _id: { $in: subIds } },
+          { $set: { payoutSkipped: { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() } } }
+        );
+        skipped = true;
+      } catch (_) { /* leave queued */ }
+    }
+    return { ok: false, worker: worker.username, error: e.message, step: e.step ?? null, httpStatus: e.httpStatus ?? null, skipped, covered: 0 };
+  }
+}
 
 // Auto-archive terminal tasks (cancelled / exhausted) older than `days`. This
 // only hides them from default dashboard queries — the records and all linked
@@ -144,11 +231,86 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
   return summary;
 }
 
-// Lightweight scheduler. Runs a small batch every `intervalMs` while the
-// process is awake. On free-tier hosting the process sleeps when idle, so this
-// is best-effort; an external cron hitting /api/admin/auto-reconcile gives
-// reliable coverage. Guards against overlapping ticks and self-pauses after a
-// cooldown stop.
+// Consolidated drain: groups ALL unpaid submissions by worker and sends ONE
+// payment per worker (lump sum) — far fewer A2U calls, so it clears a backlog
+// with minimal rate-limit exposure. Paces workers, backs off on 429, stops on
+// cooldown, respects one-at-a-time. `maxWorkers` caps how many workers per run.
+export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, maxRetries = 4 } = {}) {
+  const summary = { workersAttempted: 0, workersPaid: 0, submissionsPaid: 0, piPaid: 0, skipped: 0, failed: 0, rateLimited: 0, stoppedForCooldown: false, results: [] };
+
+  // Blocker check first.
+  try {
+    const pre = await pi.getIncompleteServerPayments();
+    const preItems = Array.isArray(pre) ? pre : (pre?.incomplete_server_payments || []);
+    if (preItems.length > 0) { summary.blocked = true; summary.incompleteIds = preItems.map((p) => p.identifier); return summary; }
+  } catch (e) { summary.error = 'could not verify incomplete-payments: ' + e.message; return summary; }
+
+  // Distinct workers with at least one unpaid, non-skipped submission.
+  const workerIds = await Submission.distinct('worker', {
+    status: { $in: ['approved', 'auto_approved'] },
+    payout: { $exists: false },
+    'payoutSkipped.at': { $exists: false },
+  });
+  const slice = workerIds.slice(0, maxWorkers);
+  summary.workersAttempted = slice.length;
+
+  for (let i = 0; i < slice.length; i++) {
+    if (summary.stoppedForCooldown) { summary.results.push({ worker: String(slice[i]), skippedDueToStop: true }); continue; }
+
+    let attempt = 0, done = false;
+    while (!done) {
+      attempt++;
+      const r = await payWorkerConsolidated(slice[i]);
+      if (r.ok && r.paymentId) {
+        summary.workersPaid++; summary.submissionsPaid += r.covered; summary.piPaid += r.pi;
+        summary.results.push(r); done = true;
+        if (i < slice.length - 1) await sleep(delayMs);
+      } else if (r.httpStatus === 429 && attempt <= maxRetries) {
+        summary.rateLimited++; await sleep(delayMs * Math.pow(2, attempt)); // retry same worker
+      } else {
+        if (r.skipped) summary.skipped++; else summary.failed++;
+        if (r.httpStatus === 429) summary.stoppedForCooldown = true;
+        summary.results.push(r); done = true;
+      }
+    }
+
+    // one-at-a-time verify.
+    try {
+      const mid = await pi.getIncompleteServerPayments();
+      const midItems = Array.isArray(mid) ? mid : (mid?.incomplete_server_payments || []);
+      if (midItems.length > 0) { summary.stoppedForCooldown = true; summary.results.push({ stopped: true, reason: 'incomplete after send' }); break; }
+    } catch (_) { break; }
+  }
+
+  summary.piPaid = Number(summary.piPaid.toFixed(6));
+  return summary;
+}
+
+// Preview consolidation without paying: groups unpaid subs by worker.
+export async function previewConsolidation() {
+  const subs = await Submission.find({
+    status: { $in: ['approved', 'auto_approved'] },
+    payout: { $exists: false },
+    'payoutSkipped.at': { $exists: false },
+  }).populate('worker', 'username piUid').lean();
+
+  const byWorker = {};
+  for (const s of subs) {
+    const id = s.worker?._id?.toString() || 'unknown';
+    (byWorker[id] = byWorker[id] || { worker: s.worker?.username, piUid: s.worker?.piUid, count: 0, pi: 0 });
+    byWorker[id].count++; byWorker[id].pi += (s.rewardMicroPi || 0) / 1e6;
+  }
+  const workers = Object.values(byWorker).map((w) => ({ ...w, pi: Number(w.pi.toFixed(6)) }));
+  return {
+    totalSubmissions: subs.length,
+    totalWorkers: workers.length,
+    totalPi: Number(workers.reduce((a, b) => a + b.pi, 0).toFixed(6)),
+    paymentsNeeded: workers.length, // one per worker vs one per submission
+    workers: workers.sort((a, b) => b.count - a.count),
+  };
+}
+
+
 let _timer = null;
 let _running = false;
 let _pausedUntil = 0;

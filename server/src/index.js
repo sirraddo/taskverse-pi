@@ -11,7 +11,7 @@ import {
   User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
-import { runAutoBatch, startAutoPayScheduler, archiveOldTasks } from './autoPay.js';
+import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
@@ -947,6 +947,22 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
     let archive = null;
     try { archive = await archiveOldTasks({ days: Number(process.env.ARCHIVE_AFTER_DAYS) || 30 }); } catch (_) {}
     res.json({ ok: true, ...summary, archive });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: consolidated payout — one lump-sum payment per worker ──
+   Far fewer A2U calls than per-task payouts, so it clears a backlog with
+   minimal rate-limit exposure. {dryRun:true} previews the grouping (pays
+   nothing). Otherwise pays up to {maxWorkers} workers, paced + 429-aware. */
+app.post('/api/admin/reconcile-consolidated', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (req.body?.dryRun) {
+      const preview = await previewConsolidation();
+      return res.json({ dryRun: true, ...preview });
+    }
+    const maxWorkers = Number.isInteger(req.body?.maxWorkers) ? req.body.maxWorkers : 5;
+    const summary = await runConsolidatedBatch({ maxWorkers });
+    res.json({ ok: true, ...summary });
   } catch (err) { next(err); }
 });
 

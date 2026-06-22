@@ -119,6 +119,10 @@ direction: { type: String, enum: ['U2A', 'A2U'], required: true },
 purpose: { type: String, enum: ['task_funding', 'worker_payout', 'withdrawal'], required: true },
 user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 task: { type: Schema.Types.ObjectId, ref: 'Task' },
+// For consolidated payouts: the submissions this single payment covers.
+// A normal single-task payout has one entry; a lump-sum has many. Used as the
+// record of truth for idempotency (never re-pay a submission already covered).
+submissions: [{ type: Schema.Types.ObjectId, ref: 'Submission', index: true }],
 amountMicroPi: { type: Number, required: true },
 txid: String,
 status: {
