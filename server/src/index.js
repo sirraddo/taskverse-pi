@@ -257,6 +257,44 @@ app.get('/api/admin/wallet-overview', requireAuth, requireAdmin, async (req, res
   } catch (err) { next(err); }
 });
 
+/* ── Admin: review submissions auto-skipped as unpayable (e.g. recipient 404) ── */
+app.get('/api/admin/unpayable-submissions', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const subs = await Submission.find({ 'payoutSkipped.at': { $exists: true } })
+      .populate('worker', 'username piUid')
+      .populate('task', 'title')
+      .sort({ 'payoutSkipped.at': -1 })
+      .lean();
+
+    const items = subs.map(s => ({
+      submissionId: s._id,
+      worker: s.worker?.username || '(unknown)',
+      piUid: s.worker?.piUid || null,
+      task: s.task?.title || null,
+      pi: (s.rewardMicroPi || 0) / 1e6,
+      reason: s.payoutSkipped?.reason || null,
+      httpStatus: s.payoutSkipped?.httpStatus || null,
+      at: s.payoutSkipped?.at || null,
+    }));
+
+    // Group by worker so duplicate/phantom accounts are easy to spot.
+    const byWorker = {};
+    for (const it of items) {
+      const key = `${it.worker}|${it.piUid || ''}`;
+      (byWorker[key] = byWorker[key] || { worker: it.worker, piUid: it.piUid, count: 0, totalPi: 0 });
+      byWorker[key].count++;
+      byWorker[key].totalPi += it.pi;
+    }
+
+    res.json({
+      total: items.length,
+      totalPi: Number(items.reduce((a, b) => a + b.pi, 0).toFixed(6)),
+      byWorker: Object.values(byWorker).sort((a, b) => b.count - a.count),
+      items,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Payments ── */
 app.post('/api/payments/approve', requireAuth, async (req, res, next) => {
   try {

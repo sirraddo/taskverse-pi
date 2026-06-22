@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -45,6 +45,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [a2uResult, setA2uResult] = useState(null);
   const [a2uBusy, setA2uBusy] = useState(false);
   const [a2uConfirm, setA2uConfirm] = useState(null); // { opts, label, detail } | null
+  const [unpayable, setUnpayable] = useState(null);
+  const [unpayableLoading, setUnpayableLoading] = useState(false);
 
   const handleCancelStale = async () => {
     if (!window.confirm(`Sweep tasks stuck in "awaiting_funding" for more than ${staleCutoff} hours?\nEach task's Pi payment is checked on-chain first: completed payments are RECOVERED (task set live), only genuinely-unpaid tasks are cancelled, and tasks whose Pi status can't be read are skipped for a later run. This cannot be undone.`)) return;
@@ -104,6 +106,16 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       setWallet(res);
     } catch (err) { notify('⚠️ ' + err.message); }
     finally { setWalletLoading(false); }
+  };
+
+  const handleLoadUnpayable = async () => {
+    setUnpayableLoading(true);
+    try {
+      const res = await fetchUnpayableSubmissions();
+      setUnpayable(res);
+      notify(`📋 ${res.total} unpayable submission${res.total === 1 ? '' : 's'} (${res.totalPi}π) across ${res.byWorker.length} account${res.byWorker.length === 1 ? '' : 's'}.`);
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setUnpayableLoading(false); }
   };
 
   // Dry-run preview — moves nothing, shows exactly what WOULD be paid
@@ -420,6 +432,37 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Admin: review submissions auto-skipped as unpayable */}
+      <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: '700', color: '#475569', fontSize: '0.85rem' }}>📋 Unpayable Submissions</div>
+          <button onClick={handleLoadUnpayable} disabled={unpayableLoading}
+            style={{ backgroundColor: unpayableLoading ? '#a0aec0' : '#475569', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: '700', cursor: unpayableLoading ? 'not-allowed' : 'pointer', fontSize: '0.74rem' }}>
+            {unpayableLoading ? 'Loading…' : 'Review'}
+          </button>
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '6px 0 0' }}>
+          Submissions skipped because the recipient couldn't be paid on-chain (e.g. unresolvable Pi account). These were not retried and moved no funds.
+        </p>
+
+        {unpayable && (
+          <div style={{ marginTop: '10px' }}>
+            <div style={{ fontSize: '0.76rem', color: '#334155', fontWeight: 700, marginBottom: '6px' }}>
+              {unpayable.total} skipped · {unpayable.totalPi}π · {unpayable.byWorker.length} account{unpayable.byWorker.length === 1 ? '' : 's'}
+            </div>
+            {unpayable.byWorker.map((w, i) => (
+              <div key={i} style={{ fontSize: '0.7rem', color: '#475569', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '7px 9px', marginBottom: '5px', fontFamily: 'monospace' }}>
+                @{w.worker} · {w.count} sub{w.count === 1 ? '' : 's'} · {Number(w.totalPi.toFixed(4))}π
+                {w.piUid && <div style={{ color: '#94a3b8', fontSize: '0.64rem', marginTop: '2px' }}>uid {w.piUid}</div>}
+              </div>
+            ))}
+            {unpayable.total === 0 && (
+              <div style={{ fontSize: '0.72rem', color: '#16a34a' }}>✓ No unpayable submissions — nothing was skipped.</div>
+            )}
           </div>
         )}
       </div>
