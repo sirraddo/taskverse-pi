@@ -74,10 +74,17 @@ const t = translations[lang];
 const [user, setUser] = useState(null);
 // Restore the last view + task id if the app reloaded (e.g. Pi Browser webview
 // reloaded after returning from an external task link). Falls back to feed.
+// SAFETY: only ever restore into views that are safe to render before the
+// user/tasks have loaded. 'submit' needs a task object, so it is NOT restored
+// at boot — we re-enter it only after tasks load (see effect below). Any
+// problem reading storage falls back to a clean feed. This prevents a blank
+// screen from a stale saved state.
 const _saved = (() => { try { return JSON.parse(localStorage.getItem('tv_nav') || '{}'); } catch { return {}; } })();
-const [view, setView] = useState(_saved.view || 'feed');
+const _SAFE_BOOT_VIEWS = ['feed', 'profile'];
+const _bootView = _SAFE_BOOT_VIEWS.includes(_saved.view) ? _saved.view : 'feed';
+const [view, setView] = useState(_bootView);
 const [selectedTask, setSelectedTask] = useState(null);
-const _savedTaskId = _saved.taskId || null;
+const _savedTaskId = (_saved.view === 'submit' && _saved.taskId) ? _saved.taskId : null;
 const [tasks, setTasks] = useState(null);
 const [notification, setNotification] = useState(null);
 const [screen, setScreen] = useState(null);
@@ -131,15 +138,19 @@ else localStorage.setItem('tv_nav', JSON.stringify(nav));
 } catch { /* storage unavailable — non-fatal */ }
 }, [view, selectedTask]);
 
-// After tasks load, if we restored into 'submit' without a task object yet,
-// rehydrate the selected task from the saved id (so proof page isn't blank).
+// After tasks load, if we had a saved 'submit' task, re-enter the proof page
+// — but ONLY once we actually have the task object. We booted into feed for
+// safety, so this is the controlled, data-ready re-entry. If the task is gone,
+// we simply stay on feed. Never blanks.
+const _resumedRef = useRef(false);
 useEffect(() => {
-if (view === 'submit' && !selectedTask && _savedTaskId && Array.isArray(tasks)) {
+if (_resumedRef.current) return;
+if (_savedTaskId && user && Array.isArray(tasks)) {
+_resumedRef.current = true;
 const found = tasks.find((x) => x._id === _savedTaskId);
-if (found) setSelectedTask(found);
-else setView('feed'); // task no longer available — go home cleanly
+if (found) { setSelectedTask(found); setView('submit'); }
 }
-}, [tasks]);
+}, [tasks, user]);
 
 const lastApprovedRef = useRef(null);
 
