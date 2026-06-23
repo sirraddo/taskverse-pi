@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CaptchaVerify from './CaptchaVerify';
-import { submitProof } from './piClient';
+import { submitProof, openExternalLink } from './piClient';
 
 /**
 * PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
@@ -79,6 +79,15 @@ return (
 <span style={{ fontSize: '0.82rem', color: '#4a5568', flex: 1 }}>{activeTask.description || 'Complete the task and submit your proof below.'}</span>
 <span style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>{activeTask.reward} π</span>
 </div>
+
+{/* Prominent task link — so users can reach it easily while doing the task */}
+{activeTask.link && /^https?:\/\//i.test(activeTask.link) && (
+<button
+onClick={() => openExternalLink(activeTask.link)}
+style={{ width: '100%', backgroundColor: '#5a67d8', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.9rem', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', boxShadow: '0 3px 10px rgba(90,103,216,0.3)' }}>
+🔗 Open Task Link
+</button>
+)}
 
 {/* Proof text */}
 <div style={{ marginBottom: '12px' }}>

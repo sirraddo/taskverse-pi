@@ -72,8 +72,12 @@ export default function App() {
 const [lang, setLang] = useState('en');
 const t = translations[lang];
 const [user, setUser] = useState(null);
-const [view, setView] = useState('feed');
+// Restore the last view + task id if the app reloaded (e.g. Pi Browser webview
+// reloaded after returning from an external task link). Falls back to feed.
+const _saved = (() => { try { return JSON.parse(localStorage.getItem('tv_nav') || '{}'); } catch { return {}; } })();
+const [view, setView] = useState(_saved.view || 'feed');
 const [selectedTask, setSelectedTask] = useState(null);
+const _savedTaskId = _saved.taskId || null;
 const [tasks, setTasks] = useState(null);
 const [notification, setNotification] = useState(null);
 const [screen, setScreen] = useState(null);
@@ -116,6 +120,26 @@ const onFocus = () => refresh();
 window.addEventListener('focus', onFocus);
 return () => window.removeEventListener('focus', onFocus);
 }, [Boolean(user)]);
+
+// Persist current view + selected task so returning to a reloaded webview
+// (e.g. after an external task link) lands back on the same screen.
+useEffect(() => {
+try {
+const nav = { view, taskId: selectedTask?._id || _savedTaskId || null };
+if (view === 'feed') localStorage.removeItem('tv_nav');
+else localStorage.setItem('tv_nav', JSON.stringify(nav));
+} catch { /* storage unavailable — non-fatal */ }
+}, [view, selectedTask]);
+
+// After tasks load, if we restored into 'submit' without a task object yet,
+// rehydrate the selected task from the saved id (so proof page isn't blank).
+useEffect(() => {
+if (view === 'submit' && !selectedTask && _savedTaskId && Array.isArray(tasks)) {
+const found = tasks.find((x) => x._id === _savedTaskId);
+if (found) setSelectedTask(found);
+else setView('feed'); // task no longer available — go home cleanly
+}
+}, [tasks]);
 
 const lastApprovedRef = useRef(null);
 
@@ -337,7 +361,6 @@ return (
 </div>
 <h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', lineHeight: 1.3 }}>{task.title}</h3>
 {snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: '#718096', lineHeight: 1.4 }}>{snippet}</p>}
-{task.link && /^https?:\/\//i.test(task.link) && <a href={task.link} onClick={(e) => { e.preventDefault(); openExternalLink(task.link); }} style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.74rem', color: '#667eea', fontWeight: '700', textDecoration: 'none' }}>🔗 Open task link</a>}
 </div>
 <div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{task.reward}</div>
@@ -355,6 +378,14 @@ return (
 <div style={{ height: '100%', width: pct + '%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.6s ease' }} />
 </div>
 </div>
+)}
+
+{task.link && /^https?:\/\//i.test(task.link) && !task.userDone && (
+<button
+onClick={() => openExternalLink(task.link)}
+style={{ width: '100%', backgroundColor: 'white', color: '#5a67d8', border: '2px solid #667eea', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+🔗 Open Task Link
+</button>
 )}
 
 <button
