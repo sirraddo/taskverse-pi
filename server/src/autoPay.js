@@ -15,18 +15,20 @@ async function alreadyCovered(subId) {
 // submissions to that one Payment. If they have one, it's a normal single send.
 // Returns { ok, paymentId, pi, covered, skipped, error, step, httpStatus }.
 // Moves funds — caller is responsible for rate-limit pacing / one-at-a-time.
-export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task rewards' } = {}) {
+export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task rewards', includeSkipped = false } = {}) {
   const worker = await User.findById(workerId).lean();
   if (!worker) return { ok: false, error: 'worker not found' };
   if (!worker.piUid) return { ok: false, error: 'no piUid', worker: worker.username };
 
-  // Gather this worker's still-unpaid, non-skipped submissions.
-  const subs = await Submission.find({
+  // Gather this worker's still-unpaid submissions. By default skip those marked
+  // unpayable; includeSkipped retries them (e.g. a wallet that has since activated).
+  const subQuery = {
     worker: workerId,
     status: { $in: ['approved', 'auto_approved'] },
     payout: { $exists: false },
-    'payoutSkipped.at': { $exists: false },
-  }).populate('task');
+  };
+  if (!includeSkipped) subQuery['payoutSkipped.at'] = { $exists: false };
+  const subs = await Submission.find(subQuery).populate('task');
 
   if (subs.length === 0) return { ok: true, covered: 0, pi: 0, worker: worker.username, note: 'nothing pending' };
 
@@ -64,7 +66,8 @@ export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task r
     });
 
     // Mark every covered submission paid → points at the one payment.
-    await Submission.updateMany({ _id: { $in: subIds } }, { $set: { payout: payment._id } });
+    // Also clear any stale payoutSkipped marker (in case this was a retry).
+    await Submission.updateMany({ _id: { $in: subIds } }, { $set: { payout: payment._id }, $unset: { payoutSkipped: 1 } });
 
     return { ok: true, paymentId: a2u.identifier, pi: totalPi, covered: subIds.length, worker: worker.username, consolidated: payable.length > 1 };
   } catch (e) {
@@ -251,7 +254,7 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
 // payment per worker (lump sum) — far fewer A2U calls, so it clears a backlog
 // with minimal rate-limit exposure. Paces workers, backs off on 429, stops on
 // cooldown, respects one-at-a-time. `maxWorkers` caps how many workers per run.
-export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, maxRetries = 4 } = {}) {
+export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, maxRetries = 4, includeSkipped = false } = {}) {
   const summary = { workersAttempted: 0, workersPaid: 0, submissionsPaid: 0, piPaid: 0, skipped: 0, failed: 0, rateLimited: 0, stoppedForCooldown: false, results: [] };
 
   // Blocker check first.
@@ -261,12 +264,14 @@ export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, max
     if (preItems.length > 0) { summary.blocked = true; summary.incompleteIds = preItems.map((p) => p.identifier); return summary; }
   } catch (e) { summary.error = 'could not verify incomplete-payments: ' + e.message; return summary; }
 
-  // Distinct workers with at least one unpaid, non-skipped submission.
-  const workerIds = await Submission.distinct('worker', {
+  // Distinct workers with at least one unpaid submission. includeSkipped also
+  // retries those previously marked unpayable (e.g. a now-activated wallet).
+  const workerQuery = {
     status: { $in: ['approved', 'auto_approved'] },
     payout: { $exists: false },
-    'payoutSkipped.at': { $exists: false },
-  });
+  };
+  if (!includeSkipped) workerQuery['payoutSkipped.at'] = { $exists: false };
+  const workerIds = await Submission.distinct('worker', workerQuery);
   const slice = workerIds.slice(0, maxWorkers);
   summary.workersAttempted = slice.length;
 
@@ -276,7 +281,7 @@ export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, max
     let attempt = 0, done = false;
     while (!done) {
       attempt++;
-      const r = await payWorkerConsolidated(slice[i]);
+      const r = await payWorkerConsolidated(slice[i], { includeSkipped });
       if (r.ok && r.paymentId) {
         summary.workersPaid++; summary.submissionsPaid += r.covered; summary.piPaid += r.pi;
         summary.results.push(r); done = true;
@@ -303,12 +308,13 @@ export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, max
 }
 
 // Preview consolidation without paying: groups unpaid subs by worker.
-export async function previewConsolidation() {
-  const subs = await Submission.find({
+export async function previewConsolidation({ includeSkipped = false } = {}) {
+  const subQuery = {
     status: { $in: ['approved', 'auto_approved'] },
     payout: { $exists: false },
-    'payoutSkipped.at': { $exists: false },
-  }).populate('worker', 'username piUid').lean();
+  };
+  if (!includeSkipped) subQuery['payoutSkipped.at'] = { $exists: false };
+  const subs = await Submission.find(subQuery).populate('worker', 'username piUid').lean();
 
   const byWorker = {};
   for (const s of subs) {

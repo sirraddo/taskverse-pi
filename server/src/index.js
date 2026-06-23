@@ -964,12 +964,12 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
 app.post('/api/admin/reconcile-consolidated', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     if (req.body?.dryRun) {
-      const preview = await previewConsolidation();
-      return res.json({ dryRun: true, ...preview });
+      const preview = await previewConsolidation({ includeSkipped: !!req.body?.includeSkipped });
+      return res.json({ dryRun: true, includeSkipped: !!req.body?.includeSkipped, ...preview });
     }
     const maxWorkers = Number.isInteger(req.body?.maxWorkers) ? req.body.maxWorkers : 5;
-    const summary = await runConsolidatedBatch({ maxWorkers });
-    res.json({ ok: true, ...summary });
+    const summary = await runConsolidatedBatch({ maxWorkers, includeSkipped: !!req.body?.includeSkipped });
+    res.json({ ok: true, includeSkipped: !!req.body?.includeSkipped, ...summary });
   } catch (err) { next(err); }
 });
 

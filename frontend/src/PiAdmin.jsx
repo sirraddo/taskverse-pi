@@ -52,6 +52,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [consResult, setConsResult] = useState(null);
   const [consBusy, setConsBusy] = useState(false);
   const [consConfirm, setConsConfirm] = useState(null); // { maxWorkers } | null
+  const [consIncludeSkipped, setConsIncludeSkipped] = useState(false);
 
   const handleCancelStale = () => setStaleConfirm(true);
 
@@ -129,7 +130,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
     setConsBusy(true);
     setConsResult(null);
     try {
-      const res = await reconcileConsolidated({ dryRun: true });
+      const res = await reconcileConsolidated({ dryRun: true, includeSkipped: consIncludeSkipped });
       setConsPreview(res);
       notify(`🧮 ${res.totalSubmissions} tasks → ${res.paymentsNeeded} payment${res.paymentsNeeded === 1 ? '' : 's'} (${res.totalPi}π). Nothing paid.`);
     } catch (err) { notify('⚠️ ' + err.message); }
@@ -148,7 +149,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
     setConsBusy(true);
     setConsResult(null);
     try {
-      const res = await reconcileConsolidated({ maxWorkers: pending.maxWorkers });
+      const res = await reconcileConsolidated({ maxWorkers: pending.maxWorkers, includeSkipped: consIncludeSkipped });
       setConsResult(res);
       if (res.stoppedForCooldown) {
         notify(`⏸ Rate-limited. ${res.workersPaid} worker(s) paid before cooldown.`);
@@ -530,6 +531,11 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           Pays each worker ONE lump sum covering all their pending tasks — far fewer A2U calls, so it clears a backlog with minimal rate-limit hits. Preview pays nothing.
         </p>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.72rem', color: '#047857', marginBottom: '10px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={consIncludeSkipped} onChange={e => { setConsIncludeSkipped(e.target.checked); setConsPreview(null); }} />
+          Retry previously-skipped (for wallets now activated on-chain)
+        </label>
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={handleConsPreview} disabled={consBusy}
