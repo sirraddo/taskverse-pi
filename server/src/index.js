@@ -154,6 +154,35 @@ app.get('/api/admin/balance-audit', requireAuth, requireAdmin, async (req, res, 
   } catch (err) { next(err); }
 });
 
+/* ── Admin: APPLY the balance correction (writes) ──
+   Sets each worker's in-app balance to (approved − paidOnChain), the same value
+   the read-only /balance-audit reports. Recomputes fresh server-side; never
+   trusts client input. Floors at 0. Only touches workers with a non-zero delta.
+   Phantom accounts (approved > paid) keep their owed balance untouched. */
+app.post('/api/admin/balance-fix', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const approved = await Submission.aggregate([{ $match: { status: { $in: ['approved', 'auto_approved'] } } }, { $group: { _id: '$worker', micro: { $sum: '$rewardMicroPi' } } }]);
+    const paid = await Payment.aggregate([{ $match: { direction: 'A2U', purpose: 'worker_payout', status: 'completed' } }, { $group: { _id: '$user', micro: { $sum: '$amountMicroPi' }, count: { $sum: 1 } } }]);
+    const aMap = new Map(approved.map((x) => [String(x._id), x.micro]));
+    const pMap = new Map(paid.map((x) => [String(x._id), x.micro]));
+    const ids = [...new Set([...aMap.keys(), ...pMap.keys()])];
+    const targets = await User.find({ _id: { $in: ids } }).select('piUid username balanceMicroPi').lean();
+
+    const applied = [];
+    for (const u of targets) {
+      const approvedMicro = aMap.get(String(u._id)) || 0;
+      const paidMicro = pMap.get(String(u._id)) || 0;
+      const correctMicro = Math.max(0, approvedMicro - paidMicro);
+      if (correctMicro === u.balanceMicroPi) continue; // already correct
+      // Optional scope: only fix a specific worker if piUid provided.
+      if (req.body?.piUid && u.piUid !== req.body.piUid) continue;
+      await User.updateOne({ _id: u._id }, { $set: { balanceMicroPi: correctMicro } });
+      applied.push({ username: u.username, piUid: u.piUid, fromPi: toPi(u.balanceMicroPi), toPi: toPi(correctMicro) });
+    }
+    res.json({ ok: true, applied: applied.length, changes: applied });
+  } catch (err) { next(err); }
+});
+
 /* ── Support: worker payment lookup ──────────────────────────────
 * READ-ONLY. For "worker says I didn't get paid" support cases.
 * Cross-references three sources for a worker's payouts:
