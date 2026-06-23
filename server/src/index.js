@@ -859,11 +859,18 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
             }
           } catch (ce) { cleanup = 'cleanup-error: ' + ce.message; }
 
-          // 404 at createPayment = unresolvable recipient (before funds move) → skip.
+          // Mark unpayable when the recipient genuinely cannot receive on-chain:
+          // createPayment 404, or submitPayment op_no_destination (wallet not on-chain).
+          const errStr2 = `${e.message || ''} ${e.piBody ? JSON.stringify(e.piBody) : ''}`;
+          const noDest2 = errStr2.includes('op_no_destination');
           let skipped = false;
-          if (e.step === 'createPayment' && e.httpStatus === 404) {
+          if ((e.step === 'createPayment' && e.httpStatus === 404) ||
+              (e.step === 'submitPayment' && noDest2)) {
             try {
-              sub.payoutSkipped = { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() };
+              sub.payoutSkipped = {
+                reason: noDest2 ? 'recipient wallet not activated on-chain (op_no_destination)' : 'recipient unresolvable (Pi 404 at createPayment)',
+                httpStatus: e.httpStatus ?? 400, at: new Date(),
+              };
               await sub.save();
               skipped = true;
             } catch (se) { /* leave in queue if marking fails */ }

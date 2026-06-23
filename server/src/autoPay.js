@@ -76,13 +76,22 @@ export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task r
       if (stuck && !(stuck.transaction && stuck.transaction.txid)) await pi.cancelPaymentVerbose(stuck.identifier);
     } catch (_) { /* best-effort */ }
 
-    // 404 at createPayment = unresolvable recipient → mark all these subs unpayable.
+    // Mark unpayable when the recipient genuinely cannot receive on-chain:
+    //  - createPayment 404 → Pi can't resolve the uid
+    //  - submitPayment with op_no_destination → recipient wallet not activated
+    //    on the blockchain (Stellar rejects the tx; no funds move)
+    const errStr = `${e.message || ''} ${e.piBody ? JSON.stringify(e.piBody) : ''}`;
+    const noDestination = errStr.includes('op_no_destination');
     let skipped = false;
-    if (e.step === 'createPayment' && e.httpStatus === 404) {
+    if ((e.step === 'createPayment' && e.httpStatus === 404) ||
+        (e.step === 'submitPayment' && noDestination)) {
+      const reason = noDestination
+        ? 'recipient wallet not activated on-chain (op_no_destination at submitPayment)'
+        : 'recipient unresolvable (Pi 404 at createPayment)';
       try {
         await Submission.updateMany(
           { _id: { $in: subIds } },
-          { $set: { payoutSkipped: { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() } } }
+          { $set: { payoutSkipped: { reason, httpStatus: e.httpStatus ?? 400, at: new Date() } } }
         );
         skipped = true;
       } catch (_) { /* leave queued */ }
@@ -200,10 +209,17 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
           }
         } catch (_) { /* best-effort cleanup */ }
 
-        // 404 at createPayment = unresolvable recipient → mark unpayable, skip.
-        if (e.step === 'createPayment' && e.httpStatus === 404) {
+        // Mark unpayable when the recipient genuinely cannot receive on-chain:
+        // createPayment 404, or submitPayment op_no_destination (wallet not activated).
+        const _errStr = `${e.message || ''} ${e.piBody ? JSON.stringify(e.piBody) : ''}`;
+        const _noDest = _errStr.includes('op_no_destination');
+        if ((e.step === 'createPayment' && e.httpStatus === 404) ||
+            (e.step === 'submitPayment' && _noDest)) {
           try {
-            sub.payoutSkipped = { reason: 'recipient unresolvable (Pi 404 at createPayment)', httpStatus: 404, at: new Date() };
+            sub.payoutSkipped = {
+              reason: _noDest ? 'recipient wallet not activated on-chain (op_no_destination)' : 'recipient unresolvable (Pi 404 at createPayment)',
+              httpStatus: e.httpStatus ?? 400, at: new Date(),
+            };
             await sub.save();
             summary.skippedUnpayable++;
             summary.results.push({ id: sub._id, worker: sub.worker?.username, skipped: true });
