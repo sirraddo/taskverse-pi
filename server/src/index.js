@@ -830,6 +830,11 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
           });
           sub.payout = payment._id;
           await sub.save();
+          // Decrement in-app balance now that this reward is paid on-chain.
+          await User.updateOne(
+            { _id: sub.worker._id },
+            [{ $set: { balanceMicroPi: { $max: [0, { $subtract: ['$balanceMicroPi', sub.rewardMicroPi] }] } } }]
+          );
           results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier, attempts: attempt });
           done = true;
           // pace the next send to stay under Pi's A2U rate limit

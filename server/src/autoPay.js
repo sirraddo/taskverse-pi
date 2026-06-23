@@ -69,6 +69,15 @@ export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task r
     // Also clear any stale payoutSkipped marker (in case this was a retry).
     await Submission.updateMany({ _id: { $in: subIds } }, { $set: { payout: payment._id }, $unset: { payoutSkipped: 1 } });
 
+    // Decrement the worker's in-app balance by what we just paid out on-chain.
+    // The reward was credited to balanceMicroPi at approval; now that the Pi has
+    // left the app wallet and reached their Pi wallet, remove it from the in-app
+    // balance so the dashboard reflects reality. Floor at 0 as a safety guard.
+    await User.updateOne(
+      { _id: worker._id },
+      [{ $set: { balanceMicroPi: { $max: [0, { $subtract: ['$balanceMicroPi', totalMicro] }] } } }]
+    );
+
     return { ok: true, paymentId: a2u.identifier, pi: totalPi, covered: subIds.length, worker: worker.username, consolidated: payable.length > 1 };
   } catch (e) {
     // Best-effort cleanup of a created-but-incomplete payment (no txid).
@@ -190,6 +199,11 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
         });
         sub.payout = payment._id;
         await sub.save();
+        // Decrement in-app balance now that this reward has been paid on-chain.
+        await User.updateOne(
+          { _id: sub.worker._id },
+          [{ $set: { balanceMicroPi: { $max: [0, { $subtract: ['$balanceMicroPi', sub.rewardMicroPi] }] } } }]
+        );
         summary.succeeded++;
         summary.results.push({ id: sub._id, worker: sub.worker.username, pi: sub.rewardMicroPi / 1e6, paymentId: a2u.identifier });
         done = true;
