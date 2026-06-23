@@ -96,6 +96,19 @@ reason: String,
 httpStatus: Number,
 at: Date,
 },
+// Phase-2 geo audit (PASSIVE — recorded at submit time, never blocks).
+// declaredCountry = the worker's profile country at submit time.
+// ipCountry = country inferred from their IP via geo-IP lookup.
+// countryMismatch = true when both are known and disagree (possible spoof).
+// Used to gather evidence on whether self-declared country is being faked,
+// before deciding whether to turn on hard IP enforcement.
+geoAudit: {
+declaredCountry: String,
+ipCountry: String,
+countryMismatch: Boolean,
+ip: String,
+at: Date,
+},
 },
 { timestamps: true }
 );

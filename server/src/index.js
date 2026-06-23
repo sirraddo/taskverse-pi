@@ -15,6 +15,28 @@ import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBa
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
+// Render (and most hosts) put the app behind a proxy, so the real client IP
+// arrives in X-Forwarded-For. Trust it so req.ip is the user's actual IP.
+app.set('trust proxy', true);
+
+// Look up the ISO country for an IP using a free, no-key geo-IP service.
+// Best-effort: returns null on any failure so it can NEVER break a request.
+// Skips private/loopback IPs. Used only for passive geo auditing.
+async function lookupIpCountry(ip) {
+  try {
+    if (!ip) return null;
+    const clean = String(ip).replace('::ffff:', '').trim();
+    if (!clean || clean === '::1' || clean.startsWith('127.') || clean.startsWith('10.') ||
+        clean.startsWith('192.168.') || clean.startsWith('172.')) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500); // never hang a request
+    const r = await fetch(`http://ip-api.com/json/${clean}?fields=status,countryCode`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const j = await r.json();
+    return j?.status === 'success' && j.countryCode ? String(j.countryCode).toUpperCase() : null;
+  } catch (_) { return null; }
+}
+
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
 const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
@@ -205,6 +227,43 @@ app.post('/api/admin/balance-fix', requireAuth, requireAdmin, async (req, res, n
       applied.push({ username: u.username, piUid: u.piUid, fromPi: toPi(u.balanceMicroPi), toPi: toPi(correctMicro) });
     }
     res.json({ ok: true, applied: applied.length, changes: applied });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: geo-audit review (READ-ONLY) ──
+   Surfaces submissions where the worker's declared country and IP-derived
+   country disagree — evidence of possible country spoofing. Passive data only;
+   nothing was blocked. Use this to decide whether to enable hard IP enforcement. */
+app.get('/api/admin/geo-audit', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const withGeo = await Submission.find({ 'geoAudit.at': { $exists: true } })
+      .populate('worker', 'username country')
+      .populate('task', 'title allowedCountries')
+      .sort({ 'geoAudit.at': -1 })
+      .limit(500)
+      .lean();
+
+    const all = withGeo.map(s => ({
+      submissionId: s._id,
+      worker: s.worker?.username || '(unknown)',
+      task: s.task?.title || null,
+      taskRestricted: Array.isArray(s.task?.allowedCountries) && s.task.allowedCountries.length > 0,
+      declaredCountry: s.geoAudit?.declaredCountry || null,
+      ipCountry: s.geoAudit?.ipCountry || null,
+      mismatch: !!s.geoAudit?.countryMismatch,
+      at: s.geoAudit?.at || null,
+    }));
+    const mismatches = all.filter(x => x.mismatch);
+    // Mismatches on country-restricted tasks are the ones that actually matter.
+    const restrictedMismatches = mismatches.filter(x => x.taskRestricted);
+
+    res.json({
+      totalAudited: all.length,
+      mismatchCount: mismatches.length,
+      restrictedMismatchCount: restrictedMismatches.length,
+      restrictedMismatches,
+      recentMismatches: mismatches.slice(0, 50),
+    });
   } catch (err) { next(err); }
 });
 
@@ -463,11 +522,27 @@ app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
     if (verdict === 'auto_reject') {
       return res.status(422).json({ error: 'Submission rejected by quality check', reasons });
     }
+    // Passive geo audit — record declared vs IP-derived country. Never blocks:
+    // the lookup is best-effort with a short timeout and returns null on failure.
+    let geoAudit;
+    try {
+      const declared = normCountry(worker.country) || null;
+      const ipCountry = await lookupIpCountry(req.ip);
+      geoAudit = {
+        declaredCountry: declared,
+        ipCountry: ipCountry || null,
+        countryMismatch: !!(declared && ipCountry && declared !== ipCountry),
+        ip: req.ip || null,
+        at: new Date(),
+      };
+    } catch (_) { geoAudit = undefined; }
+
     const submission = await Submission.create({
       task: task._id, worker: worker._id, proofText, proofFileUrl,
       rewardMicroPi: task.rewardMicroPi,
       status: verdict === 'auto_approve' ? 'auto_approved' : 'pending',
       autoReview: { evaluated: true, verdict, reasons },
+      ...(geoAudit ? { geoAudit } : {}),
     });
     if (verdict === 'auto_approve') {
       await settleApproval(submission._id);
