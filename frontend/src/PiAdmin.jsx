@@ -425,7 +425,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               else if (r.error) { line = `✗ ${r.worker || r.id}: ${r.error}`; color = '#c53030'; }
               else { line = JSON.stringify(r); color = '#6b7280'; }
               return (
-                <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color }}>
+                <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color, wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
                   {line}
                 </div>
               );
@@ -561,7 +561,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               <div style={{ marginTop: '4px', color: '#b45309', fontWeight: 700 }}>⏸ Rate-limited — run again later for the rest.</div>
             )}
             {(consResult.results || []).filter(r => r.paymentId || r.error || r.skipped).map((r, i) => (
-              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.paymentId ? '#166534' : (r.skipped ? '#6b7280' : '#c53030') }}>
+              <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.paymentId ? '#166534' : (r.skipped ? '#6b7280' : '#c53030'), wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
                 {r.paymentId ? `✓ @${r.worker} ${r.pi}π (${r.covered} task${r.covered === 1 ? '' : 's'})`
                   : r.skipped ? `⤼ @${r.worker}: skipped (unpayable)`
                   : `✗ @${r.worker}: ${r.error}`}
