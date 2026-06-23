@@ -11,7 +11,18 @@ import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
-import { fetchTasks, fetchMe, initPi, openExternalLink } from './piClient';
+import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry } from './piClient';
+
+// Short country list for the one-time prompt (mirrors profile options).
+const PROMPT_COUNTRIES = [
+  { code: '', name: 'Select your country…' },
+  { code: 'NG', name: 'Nigeria' }, { code: 'GH', name: 'Ghana' }, { code: 'KE', name: 'Kenya' },
+  { code: 'ZA', name: 'South Africa' }, { code: 'IN', name: 'India' }, { code: 'PK', name: 'Pakistan' },
+  { code: 'PH', name: 'Philippines' }, { code: 'ID', name: 'Indonesia' }, { code: 'VN', name: 'Vietnam' },
+  { code: 'US', name: 'United States' }, { code: 'GB', name: 'United Kingdom' }, { code: 'BR', name: 'Brazil' },
+  { code: 'EG', name: 'Egypt' }, { code: 'CM', name: 'Cameroon' }, { code: 'UG', name: 'Uganda' },
+  { code: 'TZ', name: 'Tanzania' }, { code: 'OTHER', name: 'Other / Prefer not to say' },
+];
 
 function inferCategory(title, description) {
 const s = ((title || '') + ' ' + (description || '')).toLowerCase();
@@ -69,6 +80,8 @@ const [screen, setScreen] = useState(null);
 const [categoryFilter, setCategoryFilter] = useState('All');
 const [searchQuery, setSearchQuery] = useState('');
 const [refreshing, setRefreshing] = useState(false);
+const [countryPromptDismissed, setCountryPromptDismissed] = useState(false);
+const [savingPromptCountry, setSavingPromptCountry] = useState(false);
 
 useEffect(() => { try { initPi(); } catch (_) {} }, []);
 
@@ -223,6 +236,34 @@ return (
 <div style={{ fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-1px', lineHeight: 1.1 }}>{Number(user.balance ?? 0).toFixed(2)} <span style={{ fontSize: '1rem', opacity: 0.85 }}>π</span></div>
 <div style={{ fontSize: '0.7rem', opacity: 0.65, marginTop: '4px' }}>✅ {user.approvedCount ?? 0} {t.tasksDone}</div>
 </div>
+
+{/* One-time country prompt — shows until the user sets a country.
+    Helps them see country-targeted tasks; dismissable for the session. */}
+{!user.country && !countryPromptDismissed && (
+<div style={{ backgroundColor: '#ebf8ff', border: '1.5px solid #bee3f8', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+<div style={{ fontWeight: '700', color: '#2b6cb0', fontSize: '0.84rem' }}>🌍 Set your country</div>
+<button onClick={() => setCountryPromptDismissed(true)} aria-label="Dismiss"
+style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#90cdf4', fontSize: '0.95rem', lineHeight: 1, padding: 0 }}>✕</button>
+</div>
+<p style={{ margin: '4px 0 9px', fontSize: '0.74rem', color: '#4a5568' }}>
+Some tasks are only available in specific countries. Set yours so you don’t miss tasks meant for you. Tasks open to everyone are unaffected.
+</p>
+<select disabled={savingPromptCountry} defaultValue=""
+onChange={async (e) => {
+  const code = e.target.value;
+  if (!code) return;
+  setSavingPromptCountry(true);
+  try { await setMyCountry(code === 'OTHER' ? '' : code); if (code === 'OTHER') { setCountryPromptDismissed(true); } else { await refresh(); } }
+  catch (err) { triggerNotification('⚠️ ' + (err.message || 'Could not save country')); }
+  finally { setSavingPromptCountry(false); }
+}}
+style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '10px', border: '1.5px solid #bee3f8', fontSize: '0.85rem', color: '#2d3748', backgroundColor: 'white' }}>
+{PROMPT_COUNTRIES.map(c => <option key={c.code || 'none'} value={c.code}>{c.name}</option>)}
+</select>
+{savingPromptCountry && <div style={{ fontSize: '0.72rem', color: '#90cdf4', marginTop: '5px' }}>Saving…</div>}
+</div>
+)}
 
 {/* Search */}
 <div style={{ position: 'relative', marginBottom: '10px' }}>
