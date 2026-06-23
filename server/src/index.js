@@ -1191,69 +1191,6 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
-/* ── TEMP/READ-ONLY: A2U payout diagnostic (remove after debugging) ──
-* Checks WHY worker payouts never complete. Attempts ZERO sends.
-* Reports: SDK init status, incomplete server payments (the classic
-* blocker — Pi refuses new A2U while any exist), and config presence.
-*/
-app.get('/api/admin/a2u-diagnostic', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const hasKey = !!process.env.PI_API_KEY;
-    const hasSeed = !!process.env.PI_WALLET_SEED;
-    let incomplete = null, incompleteError = null;
-    try {
-      const list = await pi.getIncompleteServerPayments();
-      incomplete = Array.isArray(list) ? list : (list?.incomplete_server_payments || []);
-    } catch (e) {
-      incompleteError = e.message;
-    }
-    const unpaidCount = await Submission.countDocuments({
-      status: { $in: ['approved', 'auto_approved'] }, payout: { $exists: false },
-    });
-    res.json({
-      config: { hasApiKey: hasKey, hasWalletSeed: hasSeed },
-      incompleteServerPayments: {
-        count: Array.isArray(incomplete) ? incomplete.length : null,
-        items: incomplete,
-        error: incompleteError,
-      },
-      approvedSubmissionsAwaitingPayout: unpaidCount,
-    });
-  } catch (err) { next(err); }
-});
-
-/* ── TEMP: cancel ONE incomplete server payment by id (remove after) ──
-* Clears the A2U blocker. Guarded: only cancels an id that is actually
-* present in Pi's current incomplete-server-payments list. No funds move
-* (cancel only). Does NOT submit/sign anything.
-*/
-app.post('/api/admin/cancel-incomplete-payment', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { paymentId } = req.body || {};
-    if (!paymentId) return res.status(400).json({ error: 'paymentId required' });
-    const list = await pi.getIncompleteServerPayments();
-    const items = Array.isArray(list) ? list : (list?.incomplete_server_payments || []);
-    const match = items.find((p) => p.identifier === paymentId);
-    if (!match) {
-      return res.status(404).json({ error: 'paymentId not found in current incomplete-server-payments list', incompleteIds: items.map((p) => p.identifier) });
-    }
-    if (match.transaction && match.transaction.txid) {
-      return res.status(409).json({ error: 'This payment HAS a txid (already on-chain) — cancel is unsafe; complete it instead', txid: match.transaction.txid });
-    }
-    const result = await pi.cancelPaymentVerbose(paymentId);
-    const after = await pi.getIncompleteServerPayments();
-    const afterItems = Array.isArray(after) ? after : (after?.incomplete_server_payments || []);
-    res.json({
-      target: paymentId,
-      cancelOk: result.ok,
-      piHttpStatus: result.httpStatus,
-      piBody: result.piBody,
-      message: result.message,
-      incompleteRemaining: afterItems.length,
-    });
-  } catch (err) { next(err); }
-});
-
 /* ── Error handler ── */
 app.use((err, req, res, _next) => {
   console.error(err);
