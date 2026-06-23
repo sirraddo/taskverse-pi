@@ -3,6 +3,18 @@ import { createTask, payForTaskFunding } from './piClient';
 
 const FEE_RATE = 0.05; // display only — server recalculates authoritatively
 
+// Common countries for targeting. Code = ISO alpha-2 (what the server stores).
+const COUNTRIES = [
+  { code: 'NG', name: 'Nigeria' }, { code: 'GH', name: 'Ghana' },
+  { code: 'KE', name: 'Kenya' }, { code: 'ZA', name: 'South Africa' },
+  { code: 'CM', name: 'Cameroon' }, { code: 'UG', name: 'Uganda' },
+  { code: 'TZ', name: 'Tanzania' }, { code: 'IN', name: 'India' },
+  { code: 'PK', name: 'Pakistan' }, { code: 'PH', name: 'Philippines' },
+  { code: 'ID', name: 'Indonesia' }, { code: 'VN', name: 'Vietnam' },
+  { code: 'BD', name: 'Bangladesh' }, { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' }, { code: 'BR', name: 'Brazil' },
+];
+
 const inputStyle = {
 width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px',
 border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#2d3748',
@@ -22,6 +34,7 @@ const [description, setDescription] = useState('');
   const [link, setLink] = useState('');
 const [reward, setReward] = useState('');
 const [slots, setSlots] = useState('1');
+const [allowedCountries, setAllowedCountries] = useState([]); // [] = global
 const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
 
@@ -45,6 +58,7 @@ description,
   link,
 rewardPi: parseFloat(reward),
 slots: parseInt(slots, 10),
+allowedCountries,
 });
 // 2. Real Pi wallet payment (rewards + platform fee → app wallet)
 await payForTaskFunding({ taskId, amountToPay, title });
@@ -93,6 +107,45 @@ placeholder="0.10 π" required style={inputStyle} />
 <input type="number" min="1" max="1000" value={slots} onChange={(e) => setSlots(e.target.value)}
 placeholder="10" required style={inputStyle} />
 </div>
+</div>
+
+{/* Country targeting */}
+<div style={{ marginBottom: '10px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>
+🌍 COUNTRY TARGETING <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span>
+</label>
+<select
+  value=""
+  onChange={(e) => {
+    const code = e.target.value;
+    if (code && !allowedCountries.includes(code)) setAllowedCountries([...allowedCountries, code]);
+  }}
+  style={inputStyle}
+>
+  <option value="">{allowedCountries.length ? '+ Add another country…' : 'Everyone, worldwide (default)'}</option>
+  {COUNTRIES.filter(c => !allowedCountries.includes(c.code)).map(c => (
+    <option key={c.code} value={c.code}>{c.name}</option>
+  ))}
+</select>
+{allowedCountries.length > 0 && (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+    {allowedCountries.map(code => {
+      const c = COUNTRIES.find(x => x.code === code);
+      return (
+        <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#edf2f7', border: '1px solid #cbd5e0', borderRadius: '999px', padding: '3px 10px', fontSize: '0.76rem', color: '#2d3748' }}>
+          {c ? c.name : code}
+          <button type="button" onClick={() => setAllowedCountries(allowedCountries.filter(x => x !== code))}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#718096', fontWeight: 700, lineHeight: 1, padding: 0 }}>×</button>
+        </span>
+      );
+    })}
+  </div>
+)}
+<p style={{ fontSize: '0.7rem', color: '#a0aec0', margin: '5px 0 0' }}>
+  {allowedCountries.length
+    ? 'Only workers in the selected countries can see and complete this task.'
+    : 'Leave empty to let any pioneer worldwide complete this task.'}
+</p>
 </div>
 
 {breakdown.total > 0 && (

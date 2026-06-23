@@ -19,6 +19,18 @@ const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
 const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
 
+// Normalize a country code to uppercase ISO alpha-2 (e.g. ' ng ' -> 'NG').
+// Returns '' for anything that isn't a 2-letter code.
+const normCountry = (c) => {
+  const v = String(c || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(v) ? v : '';
+};
+// Normalize a list of allowed countries (dedup, drop invalids).
+const normCountryList = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  return [...new Set(arr.map(normCountry).filter(Boolean))];
+};
+
 app.use(helmet());
 // Support comma-separated origins (e.g. "https://a.vercel.app,https://b.vercel.app")
 const _allowedOrigins = (process.env.CLIENT_ORIGIN || '')
@@ -108,6 +120,7 @@ app.post('/api/tasks', requireAuth, async (req, res, next) => {
       link: /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '',
       poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
       escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
+      allowedCountries: normCountryList(req.body.allowedCountries),
     });
     res.status(201).json({
       taskId: task._id, amountToPay: toPi(gross),
@@ -118,7 +131,18 @@ app.post('/api/tasks', requireAuth, async (req, res, next) => {
 
 app.get('/api/tasks', requireAuth, async (req, res, next) => {
   try {
-    const tasks = await Task.find({ status: 'live', poster: { $ne: req.session.userId } })
+    const me = await currentUser(req);
+    const myCountry = normCountry(me?.country);
+    // A task is visible if it's global (no allowedCountries) OR the user's
+    // declared country is in its allowed list. Done in the query for efficiency.
+    const tasks = await Task.find({
+      status: 'live',
+      poster: { $ne: req.session.userId },
+      $or: [
+        { allowedCountries: { $size: 0 } },
+        ...(myCountry ? [{ allowedCountries: myCountry }] : []),
+      ],
+    })
       .sort({ createdAt: -1 }).limit(100).lean();
     const doneSet = new Set(
       (await Submission.find(
@@ -130,6 +154,7 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
       link: t.link,
       reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
       slotsFilled: t.slotsFilled, slots: t.slots,
+      allowedCountries: t.allowedCountries || [],
       userDone: doneSet.has(t._id.toString()),
     })));
   } catch (err) { next(err); }
@@ -411,6 +436,17 @@ app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
     const task = await Task.findOne({ _id: req.params.id, status: 'live' });
     if (!task) return res.status(404).json({ error: 'Task not available' });
     if (task.poster.equals(worker._id)) return res.status(400).json({ error: 'Cannot work your own task' });
+    // Country gate: if the task is restricted, the worker's declared country
+    // must be in the allowed list. Empty list = global (no restriction).
+    if (Array.isArray(task.allowedCountries) && task.allowedCountries.length > 0) {
+      const myCountry = normCountry(worker.country);
+      if (!myCountry) {
+        return res.status(403).json({ error: 'This task is restricted by country. Set your country in your profile to continue.', countryRestricted: true, allowedCountries: task.allowedCountries });
+      }
+      if (!task.allowedCountries.includes(myCountry)) {
+        return res.status(403).json({ error: `This task is only available to users in: ${task.allowedCountries.join(', ')}.`, countryRestricted: true, allowedCountries: task.allowedCountries });
+      }
+    }
     if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
     const [isDuplicateImage, isRecycledImage] = proofFileUrl
       ? await Promise.all([
@@ -577,6 +613,7 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
       escrowRemainingMicroPi: rewardPool,
       status: 'live',                       // live immediately
       fundingPaymentId: 'admin_sponsored_' + Date.now(),
+      allowedCountries: normCountryList(req.body.allowedCountries),
     });
     res.status(201).json({
       ok: true,
@@ -604,6 +641,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
       username: user.username,
       isAdmin: isAdmin(user.username),
       isKycVerified: user.isKycVerified,
+      country: user.country || '',
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
       history: history.map((h) => ({
@@ -622,6 +660,20 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
         createdAt: d.createdAt,
       })),
     });
+  } catch (err) { next(err); }
+});
+
+/* ── Worker: set declared country (for country-targeted tasks) ── */
+app.patch('/api/me/country', requireAuth, async (req, res, next) => {
+  try {
+    const country = normCountry(req.body.country);
+    if (req.body.country && !country) {
+      return res.status(400).json({ error: 'Country must be a 2-letter ISO code (e.g. NG).' });
+    }
+    const user = await currentUser(req);
+    user.country = country; // '' clears it
+    await user.save();
+    res.json({ ok: true, country: user.country });
   } catch (err) { next(err); }
 });
 

@@ -290,6 +290,9 @@ return (
 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '5px' }}>
 <span style={{ background: m.color + '18', color: m.color, padding: '2px 8px', borderRadius: '10px', fontSize: '0.67rem', fontWeight: '700' }}>{m.emoji} {task.category}</span>
 {urgency && <span style={{ background: '#fff5f5', color: '#e53e3e', padding: '2px 7px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '700' }}>🔥 {task.slotsLeft} left!</span>}
+{Array.isArray(task.allowedCountries) && task.allowedCountries.length > 0 && (
+<span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '700' }}>🌍 {task.allowedCountries.join(', ')} only</span>
+)}
 </div>
 <h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', lineHeight: 1.3 }}>{task.title}</h3>
 {snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: '#718096', lineHeight: 1.4 }}>{snippet}</p>}

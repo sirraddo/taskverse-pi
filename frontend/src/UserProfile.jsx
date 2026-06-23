@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { submitDisputeStatement } from './piClient';
+import { submitDisputeStatement, setMyCountry } from './piClient';
+
+// Common countries (ISO alpha-2). Keep in sync with CreateTask.
+const PROFILE_COUNTRIES = [
+  { code: '', name: 'Not set' },
+  { code: 'NG', name: 'Nigeria' }, { code: 'GH', name: 'Ghana' },
+  { code: 'KE', name: 'Kenya' }, { code: 'ZA', name: 'South Africa' },
+  { code: 'CM', name: 'Cameroon' }, { code: 'UG', name: 'Uganda' },
+  { code: 'TZ', name: 'Tanzania' }, { code: 'IN', name: 'India' },
+  { code: 'PK', name: 'Pakistan' }, { code: 'PH', name: 'Philippines' },
+  { code: 'ID', name: 'Indonesia' }, { code: 'VN', name: 'Vietnam' },
+  { code: 'BD', name: 'Bangladesh' }, { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' }, { code: 'BR', name: 'Brazil' },
+];
 
 const STATUS_COLORS = {
 approved: { bg: '#f0fff4', text: '#276749', label: '✅ Paid' },
@@ -94,6 +107,16 @@ const totalEarned = history
 const pendingCount = history.filter(h => h.status === 'pending').length;
 const next = ACHIEVEMENTS.find(a => count < a.threshold);
 
+const [country, setCountry] = useState(user.country || '');
+const [savingCountry, setSavingCountry] = useState(false);
+const [countrySaved, setCountrySaved] = useState(false);
+const saveCountry = async (code) => {
+  setCountry(code); setSavingCountry(true); setCountrySaved(false);
+  try { await setMyCountry(code); setCountrySaved(true); onRefresh?.(); }
+  catch (e) { /* keep UI responsive; revert on failure */ setCountry(user.country || ''); }
+  finally { setSavingCountry(false); }
+};
+
 return (
 <div style={{ fontFamily: "'Inter', sans-serif", paddingBottom: '32px' }}>
 
@@ -141,7 +164,19 @@ return (
 ))}
 </div>
 
-{/* Achievements */}
+{/* Country selector — enables country-targeted tasks */}
+<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+<h4 style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: '700', color: '#4a5568' }}>🌍 My Country</h4>
+<p style={{ margin: '0 0 8px', fontSize: '0.72rem', color: '#a0aec0' }}>Some tasks are only available in specific countries. Set yours so you can see and complete them.</p>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+<select value={country} disabled={savingCountry} onChange={(e) => saveCountry(e.target.value)}
+style={{ flex: 1, padding: '9px 10px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', color: '#2d3748', backgroundColor: 'white' }}>
+{PROFILE_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+</select>
+{savingCountry && <span style={{ fontSize: '0.72rem', color: '#a0aec0' }}>Saving…</span>}
+{countrySaved && !savingCountry && <span style={{ fontSize: '0.72rem', color: '#38a169', fontWeight: 700 }}>✓ Saved</span>}
+</div>
+</div>
 <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
 <h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', fontWeight: '700', color: '#4a5568' }}>🎖️ Achievements</h4>
 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

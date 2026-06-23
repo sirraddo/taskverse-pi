@@ -22,6 +22,10 @@ isKycVerified: { type: Boolean, default: false },
 approvedCount: { type: Number, default: 0 },
 rejectedCount: { type: Number, default: 0 },
 isBanned: { type: Boolean, default: false },
+// Self-declared country (ISO-3166 alpha-2, uppercase, e.g. 'NG'). Used for
+// country-targeted tasks. Self-declared in Phase 1 — for stricter enforcement
+// (IP / Pi-KYC cross-check) this can be augmented later.
+country: { type: String, default: '' },
 lastLoginAt: Date,
 },
 { timestamps: true }
@@ -51,6 +55,10 @@ default: 'awaiting_funding',
 index: true,
 },
 fundingPaymentId: String, // Pi paymentId that funded this campaign
+// Country targeting. Empty array = global (any pioneer, anywhere — the default).
+// When non-empty, only workers whose profile country is in this list may see,
+// start, or submit the task. Stored as uppercase ISO-3166 alpha-2 codes (e.g. 'NG').
+allowedCountries: { type: [String], default: [] },
 // Auto-archived (hidden from dashboards) after a retention period when in a
 // terminal state. Data is retained — this only affects default list queries.
 archived: { type: Boolean, default: false, index: true },

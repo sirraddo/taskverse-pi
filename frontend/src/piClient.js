@@ -8,9 +8,9 @@ let sessionToken = null;
 
 export const getSessionToken = () => sessionToken;
 
-async function api(path, body) {
+async function api(path, body, method) {
   const res = await fetch(`${API}${path}`, {
-    method: body ? 'POST' : 'GET',
+    method: method || (body ? 'POST' : 'GET'),
     headers: {
       'Content-Type': 'application/json',
       'Bypass-Tunnel-Reminder': 'true',
@@ -87,6 +87,7 @@ export function payForTaskFunding({ taskId, amountToPay, title }) {
 export const createTask = (payload) => api('/api/tasks', payload);
 export const fetchTasks = () => api('/api/tasks');
 export const fetchMe = () => api('/api/me');
+export const setMyCountry = (country) => api('/api/me/country', { country }, 'PATCH');
 export const submitProof = (id, p) => api(`/api/tasks/${id}/submissions`, p);
 export const fetchPayoutHistory= () => api('/api/me/history');
 export const fetchLeaderboard = (period = 'week') => api(`/api/leaderboard?period=${period}`);
