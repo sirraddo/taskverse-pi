@@ -26,6 +26,16 @@ isBanned: { type: Boolean, default: false },
 // country-targeted tasks. Self-declared in Phase 1 — for stricter enforcement
 // (IP / Pi-KYC cross-check) this can be augmented later.
 country: { type: String, default: '' },
+// Profile picture, stored as a base64 data URL (image/jpeg or image/webp).
+// Deliberately kept tiny: the client resizes to <=256x256 and compresses
+// before upload, and the server hard-caps the size. Stored inline in Mongo
+// so no external image host / API keys are needed on the free tier.
+// `select: false` so it is NOT loaded on every user query (keeps list
+// endpoints light) — fetch explicitly when the avatar is actually needed.
+avatar: { type: String, default: '', select: false },
+// Set by an admin when they remove an inappropriate avatar. Blocks the user
+// from re-uploading until cleared, so a bad actor can't just re-upload.
+avatarBlocked: { type: Boolean, default: false },
 lastLoginAt: Date,
 },
 { timestamps: true }

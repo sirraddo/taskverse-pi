@@ -704,6 +704,8 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
 app.get('/api/me', requireAuth, async (req, res, next) => {
   try {
     const user = await currentUser(req);
+    // avatar is select:false on the schema, so pull it explicitly.
+    const withAvatar = await User.findById(user._id).select('+avatar').lean();
     const [history, postedTasks, openDisputes] = await Promise.all([
       Submission.find({ worker: user._id })
         .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
@@ -717,6 +719,8 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
       isAdmin: isAdmin(user.username),
       isKycVerified: user.isKycVerified,
       country: user.country || '',
+      avatar: withAvatar?.avatar || '',
+      avatarBlocked: !!user.avatarBlocked,
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
       history: history.map((h) => ({
@@ -749,6 +753,86 @@ app.patch('/api/me/country', requireAuth, async (req, res, next) => {
     user.country = country; // '' clears it
     await user.save();
     res.json({ ok: true, country: user.country });
+  } catch (err) { next(err); }
+});
+
+/* ── Avatars ─────────────────────────────────────────────────────
+   Stored as a base64 data URL on the user doc. The client resizes and
+   compresses before sending; the server still validates independently
+   (never trust the client). Hard caps below are the real defence. */
+
+// Max stored avatar size. ~120KB of base64 ≈ ~90KB of image bytes — far more
+// than a 256x256 JPEG needs, but leaves headroom. Keeps Mongo docs small.
+const AVATAR_MAX_CHARS = 120_000;
+// Only real raster image types. No SVG: SVG can carry scripts (XSS risk).
+const AVATAR_ALLOWED = /^data:image\/(jpeg|png|webp);base64,/;
+
+app.put('/api/me/avatar', requireAuth, async (req, res, next) => {
+  try {
+    const { avatar } = req.body || {};
+    if (typeof avatar !== 'string' || !avatar) {
+      return res.status(400).json({ error: 'avatar (data URL) required' });
+    }
+    if (!AVATAR_ALLOWED.test(avatar)) {
+      return res.status(415).json({ error: 'Avatar must be a JPEG, PNG or WebP image.' });
+    }
+    if (avatar.length > AVATAR_MAX_CHARS) {
+      return res.status(413).json({ error: 'Image too large. Please choose a smaller picture.' });
+    }
+    // Validate the base64 payload actually decodes — rejects malformed junk.
+    const b64 = avatar.slice(avatar.indexOf(',') + 1);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
+      return res.status(400).json({ error: 'Malformed image data.' });
+    }
+
+    const user = await currentUser(req);
+    if (user.avatarBlocked) {
+      return res.status(403).json({ error: 'Avatar uploads are disabled on your account. Contact support.' });
+    }
+    user.avatar = avatar;
+    await user.save();
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Remove own avatar.
+app.delete('/api/me/avatar', requireAuth, async (req, res, next) => {
+  try {
+    const user = await currentUser(req);
+    user.avatar = '';
+    await user.save();
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Fetch a user's avatar by piUid (avatar is select:false, so fetch explicitly).
+// Public to signed-in users so avatars can show on the leaderboard/queue.
+app.get('/api/avatar/:piUid', requireAuth, async (req, res, next) => {
+  try {
+    const u = await User.findOne({ piUid: req.params.piUid }).select('+avatar').lean();
+    res.json({ avatar: (u && !u.avatarBlocked && u.avatar) ? u.avatar : '' });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: remove an inappropriate avatar ──
+   Clears the image and blocks re-upload until an admin unblocks. This is the
+   moderation safety valve for user-uploaded pictures. */
+app.post('/api/admin/avatar-remove', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { piUid, unblock } = req.body || {};
+    if (!piUid) return res.status(400).json({ error: 'piUid required' });
+    const u = await User.findOne({ piUid });
+    if (!u) return res.status(404).json({ error: 'User not found' });
+
+    if (unblock) {
+      u.avatarBlocked = false;
+      await u.save();
+      return res.json({ ok: true, username: u.username, avatarBlocked: false });
+    }
+    u.avatar = '';
+    u.avatarBlocked = true;
+    await u.save();
+    res.json({ ok: true, username: u.username, avatarBlocked: true, message: 'Avatar removed and uploads blocked.' });
   } catch (err) { next(err); }
 });
 

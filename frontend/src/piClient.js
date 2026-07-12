@@ -121,3 +121,54 @@ export const fetchWalletOverview = () => api('/api/admin/wallet-overview');
 export const reconcileA2U = (opts = {}) => api('/api/admin/reconcile-a2u', opts);
 export const fetchUnpayableSubmissions = () => api('/api/admin/unpayable-submissions');
 export const reconcileConsolidated = (opts = {}) => api('/api/admin/reconcile-consolidated', opts);
+
+/* ── Avatars ──
+ * Pictures are resized + compressed in the browser BEFORE upload (see
+ * resizeImageToDataUrl below), so what reaches the server is a small
+ * JPEG data URL rather than a multi-megabyte camera photo.
+ */
+export const uploadAvatar = (avatar) => api('/api/me/avatar', { avatar }, 'PUT');
+export const deleteAvatar = () => api('/api/me/avatar', undefined, 'DELETE');
+export const fetchAvatar = (piUid) => api(`/api/avatar/${encodeURIComponent(piUid)}`);
+export const adminRemoveAvatar = (piUid, unblock = false) =>
+  api('/api/admin/avatar-remove', { piUid, unblock });
+
+/**
+ * Read a File, downscale it to fit `max`x`max`, centre-crop to a square,
+ * and return a compressed JPEG data URL.
+ * This is what keeps avatars ~30-50KB instead of several megabytes.
+ */
+export function resizeImageToDataUrl(file, max = 256, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      return reject(new Error('Please choose an image file.'));
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a valid image.'));
+      img.onload = () => {
+        try {
+          // Centre-crop to a square so avatars are never stretched.
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2;
+          const sy = (img.height - side) / 2;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = max;
+          canvas.height = max;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, max, max);
+
+          // JPEG keeps it small. (No SVG/PNG-with-alpha needed for avatars.)
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          reject(new Error('Could not process that image.'));
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}

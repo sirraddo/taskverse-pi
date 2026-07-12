@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { submitDisputeStatement, setMyCountry } from './piClient';
+import React, { useState, useRef } from 'react';
+import { submitDisputeStatement, setMyCountry, uploadAvatar, deleteAvatar, resizeImageToDataUrl } from './piClient';
 
 // Common countries (ISO alpha-2). Keep in sync with CreateTask.
 const PROFILE_COUNTRIES = [
@@ -117,6 +117,38 @@ const saveCountry = async (code) => {
   finally { setSavingCountry(false); }
 };
 
+/* ── Avatar upload ──
+   The image is resized + compressed in the browser before it is sent, so we
+   never ship a multi-megabyte camera photo to the server. */
+const fileRef = useRef(null);
+const [avatar, setAvatar] = useState(user.avatar || '');
+const [avatarBusy, setAvatarBusy] = useState(false);
+const [avatarErr, setAvatarErr] = useState('');
+
+const handleAvatarPick = async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = ''; // allow re-picking the same file
+  if (!file) return;
+  setAvatarErr(''); setAvatarBusy(true);
+  try {
+    // Guard before we even decode: reject absurdly large files early.
+    if (file.size > 12 * 1024 * 1024) throw new Error('That image is too large (max 12MB).');
+    const dataUrl = await resizeImageToDataUrl(file, 256, 0.82);
+    await uploadAvatar(dataUrl);
+    setAvatar(dataUrl);
+    onRefresh?.();
+  } catch (err) {
+    setAvatarErr(err.message || 'Upload failed');
+  } finally { setAvatarBusy(false); }
+};
+
+const handleAvatarRemove = async () => {
+  setAvatarErr(''); setAvatarBusy(true);
+  try { await deleteAvatar(); setAvatar(''); onRefresh?.(); }
+  catch (err) { setAvatarErr(err.message || 'Could not remove'); }
+  finally { setAvatarBusy(false); }
+};
+
 return (
 <div style={{ fontFamily: "'Inter', sans-serif", paddingBottom: '32px' }}>
 
@@ -135,9 +167,34 @@ return (
 <div style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', borderRadius: '18px', padding: '24px 20px', marginBottom: '14px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 6px 24px rgba(5,150,105,0.4)' }}>
 <div style={{ position: 'absolute', top: '-30px', left: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
 <div style={{ position: 'absolute', bottom: '-20px', right: '-10px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-<div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', margin: '0 auto 10px', position: 'relative' }}>
-{rank.icon}
+{/* Avatar — tap to upload/change. Falls back to the rank icon. */}
+<div style={{ position: 'relative', width: '64px', margin: '0 auto 10px' }}>
+<div
+  onClick={() => !avatarBusy && !user.avatarBlocked && fileRef.current?.click()}
+  title={user.avatarBlocked ? 'Avatar uploads disabled on your account' : 'Tap to change picture'}
+  style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', position: 'relative', overflow: 'hidden', cursor: (avatarBusy || user.avatarBlocked) ? 'default' : 'pointer', border: avatar ? '2px solid rgba(255,255,255,0.55)' : 'none' }}>
+  {avatar
+    ? <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    : rank.icon}
+  {avatarBusy && (
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700 }}>…</div>
+  )}
 </div>
+{!user.avatarBlocked && (
+  <div
+    onClick={() => !avatarBusy && fileRef.current?.click()}
+    style={{ position: 'absolute', bottom: 0, right: 0, width: '22px', height: '22px', borderRadius: '50%', background: 'white', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
+    ✎
+  </div>
+)}
+<input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={handleAvatarPick} />
+</div>
+{avatarErr && (
+  <div style={{ fontSize: '0.7rem', background: 'rgba(0,0,0,0.25)', padding: '4px 8px', borderRadius: '8px', marginBottom: '8px', display: 'inline-block' }}>{avatarErr}</div>
+)}
+{avatar && !avatarBusy && (
+  <div onClick={handleAvatarRemove} style={{ fontSize: '0.68rem', opacity: 0.85, textDecoration: 'underline', cursor: 'pointer', marginBottom: '6px' }}>Remove picture</div>
+)}
 <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: '800' }}>{user.username}</h2>
 <div style={{ fontSize: '0.8rem', opacity: 0.9, marginBottom: '6px', fontWeight: '600' }}>
 <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 10px', borderRadius: '10px' }}>{rank.icon} {rank.label}</span>

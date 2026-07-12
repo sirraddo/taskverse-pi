@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -32,6 +32,24 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [staleCutoff, setStaleCutoff] = useState('24');
   // Support: worker payment lookup + wallet overview
   const [lookupQuery, setLookupQuery] = useState('');
+
+  // Avatar moderation (remove an inappropriate profile picture).
+  const [avatarUid, setAvatarUid] = useState('');
+  const [avatarModBusy, setAvatarModBusy] = useState(false);
+  const [avatarModMsg, setAvatarModMsg] = useState('');
+  const handleAvatarModeration = async (unblock) => {
+    setAvatarModBusy(true); setAvatarModMsg('');
+    try {
+      const r = await adminRemoveAvatar(avatarUid.trim(), unblock);
+      setAvatarModMsg(
+        unblock
+          ? `✓ ${r.username}: uploads re-enabled.`
+          : `✓ ${r.username}: avatar removed and uploads blocked.`
+      );
+    } catch (e) {
+      setAvatarModMsg(`⚠️ ${e.message || 'Failed'}`);
+    } finally { setAvatarModBusy(false); }
+  };
   const [lookupResult, setLookupResult] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
   const [wallet, setWallet] = useState(null);
@@ -638,6 +656,34 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             {unpayable.total === 0 && (
               <div style={{ fontSize: '0.72rem', color: '#16a34a' }}>✓ No unpayable submissions — nothing was skipped.</div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Moderation: remove an inappropriate profile picture */}
+      <div style={{ backgroundColor: '#fff5f5', border: '1.5px solid #fed7d7', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+        <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>
+          🖼️ Remove Profile Picture
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 10px' }}>
+          Clears an inappropriate avatar and blocks that user from re-uploading. Use “Unblock” to allow uploads again.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <input value={avatarUid} onChange={e => setAvatarUid(e.target.value)}
+            placeholder="piUid of the user"
+            style={{ padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #fed7d7', fontSize: '0.82rem', backgroundColor: 'white', color: '#2d3748', flex: 1 }} />
+          <button onClick={() => handleAvatarModeration(false)} disabled={avatarModBusy || !avatarUid.trim()}
+            style={{ backgroundColor: (avatarModBusy || !avatarUid.trim()) ? '#a0aec0' : '#c53030', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: '700', cursor: (avatarModBusy || !avatarUid.trim()) ? 'not-allowed' : 'pointer', fontSize: '0.8rem', flexShrink: 0 }}>
+            {avatarModBusy ? '…' : 'Remove'}
+          </button>
+          <button onClick={() => handleAvatarModeration(true)} disabled={avatarModBusy || !avatarUid.trim()}
+            style={{ backgroundColor: 'white', color: '#c53030', border: '1.5px solid #fed7d7', padding: '8px 12px', borderRadius: '8px', fontWeight: '700', cursor: (avatarModBusy || !avatarUid.trim()) ? 'not-allowed' : 'pointer', fontSize: '0.8rem', flexShrink: 0 }}>
+            Unblock
+          </button>
+        </div>
+        {avatarModMsg && (
+          <div style={{ fontSize: '0.75rem', color: '#276749', backgroundColor: '#f0fff4', padding: '8px 10px', borderRadius: '8px', wordBreak: 'break-word' }}>
+            {avatarModMsg}
           </div>
         )}
       </div>
