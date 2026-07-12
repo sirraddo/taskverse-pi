@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CaptchaVerify from './CaptchaVerify';
-import { submitProof, openExternalLink, uploadProofImage, resizeImageToDataUrl } from './piClient';
+import { submitProof, openExternalLink } from './piClient';
 
 /**
 * PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
@@ -21,29 +21,28 @@ const [error, setError] = useState(null);
 const [proofFileUrl, setProofFileUrl] = useState('');
 const [uploading, setUploading] = useState(false);
 const [fileName, setFileName] = useState('');
-const [preview, setPreview] = useState(''); // local data URL of what was uploaded
 
-const handleFileChange = async (e) => {
+const handleFileChange = (e) => {
 const file = e.target.files[0];
 if (!file) return;
 setFileName(file.name);
-setError(null);
+const key = import.meta.env.VITE_IMGBB_API_KEY;
+if (!key) { setProofFileUrl(''); return; }
 setUploading(true);
+const reader = new FileReader();
+reader.onloadend = async () => {
 try {
-  // Guard before decoding — reject absurd files early.
-  if (file.size > 20 * 1024 * 1024) throw new Error('That image is too large (max 20MB).');
-  // Compress in-browser, then upload to OUR backend (no ImgBB, no public key).
-  // Kept at 1280px / q0.8 so screenshot text stays readable for the reviewer.
-  const dataUrl = await resizeImageToDataUrl(file, 1280, 0.8);
-  const { ref } = await uploadProofImage(dataUrl, activeTask?.id || activeTask?._id);
-  setProofFileUrl(ref);
-  // Show what they actually uploaded.
-  setPreview(dataUrl);
+const form = new FormData();
+form.append('image', reader.result.split(',')[1]);
+const res = await fetch('https://api.imgbb.com/1/upload?key=' + key, { method: 'POST', body: form });
+const data = await res.json();
+if (data.success) setProofFileUrl(data.data.url);
+else throw new Error('Upload failed');
 } catch (err) {
-  setProofFileUrl('');
-  setPreview('');
-  setError(err.message || 'Image upload failed — please try again.');
+setError('Image upload failed — please try again.');
 } finally { setUploading(false); }
+};
+reader.readAsDataURL(file);
 };
 
 const handleSubmit = async () => {
@@ -131,10 +130,9 @@ This task requires a screenshot. Submissions without one are rejected.
     internet as proof. The server now only accepts URLs from our image host. */}
 {proofFileUrl.trim() && (
 <div style={{ marginTop: '7px' }}>
-{preview && (
-<img src={preview} alt="Your screenshot"
-  style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1.5px solid #e2e8f0', display: 'block', objectFit: 'contain' }} />
-)}
+<img src={proofFileUrl} alt="Your screenshot"
+  style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1.5px solid #e2e8f0', display: 'block', objectFit: 'contain' }}
+  onError={(e) => { e.target.style.display = 'none'; }} />
 <div style={{ marginTop: '5px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Screenshot uploaded</div>
 </div>
 )}
