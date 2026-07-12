@@ -1,5 +1,6 @@
 import { Submission, Payment, User } from './models.js';
 import { Task } from './models.js';
+import { ProofImage } from './models.js';
 import * as pi from './piPlatform.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -370,6 +371,13 @@ export function startAutoPayScheduler({ intervalMs = 90_000, batch = 2 } = {}) {
       // Cheap housekeeping: archive old terminal tasks (retention default 30d).
       try { await archiveOldTasks({ days: Number(process.env.ARCHIVE_AFTER_DAYS) || 30 }); }
       catch (ae) { console.error('[archive] error:', ae.message); }
+      // Drop proof screenshots for long-settled submissions so Mongo storage
+      // doesn't grow without bound (~140KB per screenshot). Disputed and
+      // pending submissions keep their proof.
+      try {
+        const p = await pruneOldProofImages({ days: Number(process.env.PROOF_RETENTION_DAYS) || 45 });
+        if (p.deleted) console.log(`[proofPrune] removed ${p.deleted} old screenshots`);
+      } catch (pe) { console.error('[proofPrune] error:', pe.message); }
     } catch (e) {
       console.error('[autoPay] tick error:', e.message);
     } finally {
@@ -378,4 +386,51 @@ export function startAutoPayScheduler({ intervalMs = 90_000, batch = 2 } = {}) {
   };
   _timer = setInterval(tick, intervalMs);
   console.log(`[autoPay] scheduler started (every ${intervalMs}ms, batch ${batch})`);
+}
+
+/* ── Prune old proof screenshots ─────────────────────────────────
+   Screenshots are stored in Mongo (no third-party host). They are only needed
+   while a submission is awaiting review or recently settled — once a submission
+   has been decided and paid, the image has served its purpose.
+
+   Without this, storage grows without bound: a readable 1280px screenshot is
+   ~140KB, so ~3,500 submissions would fill a 512MB Atlas free tier.
+
+   We only delete images belonging to submissions that are BOTH terminal
+   (approved/auto_approved/rejected) AND older than `days`. Pending, disputed,
+   and recent submissions keep their proof. The submission record itself is
+   never touched — only the image blob. */
+export async function pruneOldProofImages({ days = 45 } = {}) {
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+
+  // Submissions that are settled and old enough for their proof to be dropped.
+  const stale = await Submission.find({
+    status: { $in: ['approved', 'auto_approved', 'rejected'] },
+    createdAt: { $lt: cutoff },
+    proofFileUrl: { $regex: '^local:' },
+  }).select('_id proofFileUrl').lean();
+
+  if (!stale.length) return { checked: 0, deleted: 0 };
+
+  // Never prune a proof that is attached to an OPEN dispute — it's evidence.
+  const { Dispute } = await import('./models.js');
+  const disputed = new Set(
+    (await Dispute.find({ status: 'open' }).select('submission').lean())
+      .map((d) => String(d.submission))
+  );
+
+  const ids = [];
+  const subIds = [];
+  for (const s of stale) {
+    if (disputed.has(String(s._id))) continue;
+    const m = /^local:([a-f0-9]{24})$/i.exec(s.proofFileUrl || '');
+    if (m) { ids.push(m[1]); subIds.push(s._id); }
+  }
+  if (!ids.length) return { checked: stale.length, deleted: 0 };
+
+  const r = await ProofImage.deleteMany({ _id: { $in: ids } });
+  // Mark the submission so the UI can say "proof expired" rather than erroring.
+  await Submission.updateMany({ _id: { $in: subIds } }, { $set: { proofFileUrl: 'expired' } });
+
+  return { checked: stale.length, deleted: r.deletedCount || 0 };
 }

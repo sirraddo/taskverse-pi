@@ -8,10 +8,10 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, ProofImage, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
-import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
+import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation, pruneOldProofImages } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
@@ -39,14 +39,21 @@ async function lookupIpCountry(ip) {
 
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
 
-// Hosts we accept proof screenshots from. The app uploads to ImgBB and sends
-// back the resulting URL; anything else is rejected so workers can't pass off a
-// random image from elsewhere on the internet as their proof.
-// Override/extend with PROOF_IMAGE_HOSTS="imgbb.com,i.ibb.co,my-host.com".
-const PROOF_IMAGE_HOSTS = (process.env.PROOF_IMAGE_HOSTS || 'ibb.co,imgbb.com')
-  .split(',')
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+/* ── Proof screenshots (self-hosted) ──
+   Screenshots used to be uploaded to ImgBB from the browser using a
+   VITE_-prefixed API key. That key is baked into the public JS bundle, so it
+   was readable by anyone, and the whole proof pipeline depended on a third
+   party staying up. Both are now gone: images are uploaded to THIS server and
+   stored in Mongo (ProofImage), referenced as "local:<id>".
+
+   Kept deliberately larger than avatars — a proof screenshot has to remain
+   readable. ~400KB of base64 ≈ ~300KB of JPEG, plenty for a legible 1280px
+   screenshot. */
+const PROOF_MAX_CHARS = 400_000;
+const PROOF_ALLOWED_MIME = /^data:image\/(jpeg|png|webp);base64,/;
+// Legacy: submissions created before this change still point at ImgBB URLs.
+// Accept them on read so old proofs keep displaying, but never on write.
+const LEGACY_PROOF_HOSTS = ['ibb.co', 'imgbb.com'];
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
 const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
 
@@ -75,7 +82,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' })); // proof screenshots are posted as base64 JSON
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
 function requireAuth(req, res, next) {
@@ -506,21 +513,25 @@ app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
     const worker = await currentUser(req);
     const { proofText = '', proofFileUrl: rawProofFileUrl = null } = req.body;
 
-    // ── Close the "paste any URL" loophole ──
-    // The client uploads screenshots to our image host and sends back the
-    // resulting URL. Previously ANY string was accepted here, so a worker could
-    // paste a link to any random image on the internet as their "proof".
-    // We now only accept URLs served by the trusted host(s).
+    // ── Proof screenshot reference ──
+    // Screenshots are uploaded to /api/proof-image and referenced as
+    // "local:<id>". We no longer accept arbitrary URLs: previously ANY string
+    // was allowed here, so a worker could paste a link to any random image on
+    // the internet as their "proof".
     const proofFileUrl = rawProofFileUrl ? String(rawProofFileUrl).trim() : null;
     if (proofFileUrl) {
-      let host = '';
-      try { host = new URL(proofFileUrl).hostname.toLowerCase(); }
-      catch { return res.status(400).json({ error: 'Screenshot must be a valid URL.' }); }
-      const ok = PROOF_IMAGE_HOSTS.some((h) => host === h || host.endsWith('.' + h));
-      if (!ok) {
+      const m = /^local:([a-f0-9]{24})$/i.exec(proofFileUrl);
+      if (!m) {
         return res.status(400).json({
-          error: 'Screenshots must be uploaded through the app — external image links are not accepted.',
+          error: 'Screenshots must be uploaded through the app.',
         });
+      }
+      // The image must exist AND belong to this worker — stops someone
+      // referencing another worker's uploaded screenshot as their own proof.
+      const img = await ProofImage.findById(m[1]).select('worker').lean();
+      if (!img) return res.status(400).json({ error: 'Screenshot not found — please re-upload.' });
+      if (img.worker && !img.worker.equals(worker._id)) {
+        return res.status(403).json({ error: 'That screenshot does not belong to you.' });
       }
     }
 
@@ -847,6 +858,85 @@ app.get('/api/avatar/:piUid', requireAuth, async (req, res, next) => {
   try {
     const u = await User.findOne({ piUid: req.params.piUid }).select('+avatar').lean();
     res.json({ avatar: (u && !u.avatarBlocked && u.avatar) ? u.avatar : '' });
+  } catch (err) { next(err); }
+});
+
+/* ── Proof screenshots: upload ──
+   The browser resizes/compresses, then posts the image here. We store it in
+   Mongo and hand back an opaque reference ("local:<id>") which the client sends
+   as proofFileUrl when submitting. No third-party host, no public API key. */
+app.post('/api/proof-image', requireAuth, async (req, res, next) => {
+  try {
+    const { image, taskId } = req.body || {};
+    if (typeof image !== 'string' || !image) {
+      return res.status(400).json({ error: 'image (data URL) required' });
+    }
+    if (!PROOF_ALLOWED_MIME.test(image)) {
+      // No SVG: it can carry script, and this gets rendered in the admin panel.
+      return res.status(415).json({ error: 'Screenshot must be a JPEG, PNG or WebP image.' });
+    }
+    if (image.length > PROOF_MAX_CHARS) {
+      return res.status(413).json({ error: 'Screenshot too large. Please try a smaller image.' });
+    }
+    const b64 = image.slice(image.indexOf(',') + 1);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
+      return res.status(400).json({ error: 'Malformed image data.' });
+    }
+
+    const worker = await currentUser(req);
+    const doc = await ProofImage.create({
+      data: image,
+      worker: worker._id,
+      task: (taskId && mongoose.isValidObjectId(taskId)) ? taskId : undefined,
+      bytes: Math.round((b64.length * 3) / 4),
+    });
+    res.status(201).json({ ref: `local:${doc._id}` });
+  } catch (err) { next(err); }
+});
+
+/* ── Proof screenshots: serve ──
+   Returns the raw image bytes (not JSON) so it can be used directly in an
+   <img src>. Auth-gated: proofs are not public. */
+app.get('/api/proof-image/:id', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).end();
+    const doc = await ProofImage.findById(req.params.id).lean();
+    if (!doc || !doc.data) return res.status(404).end();
+
+    const m = /^data:(image\/[a-z+]+);base64,(.*)$/s.exec(doc.data);
+    if (!m) return res.status(404).end();
+    const buf = Buffer.from(m[2], 'base64');
+    res.set('Content-Type', m[1]);
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.send(buf);
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: proof-screenshot storage ──
+   Screenshots live in Mongo, so storage is finite (Atlas free tier is 512MB).
+   GET  shows how much they're using.
+   POST prunes images for long-settled submissions (never pending/disputed). */
+app.get('/api/admin/proof-storage', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const [count, agg] = await Promise.all([
+      ProofImage.countDocuments(),
+      ProofImage.aggregate([{ $group: { _id: null, bytes: { $sum: '$bytes' } } }]),
+    ]);
+    const bytes = agg?.[0]?.bytes || 0;
+    res.json({
+      screenshots: count,
+      approxMB: +(bytes / 1_048_576).toFixed(1),
+      retentionDays: Number(process.env.PROOF_RETENTION_DAYS) || 45,
+      note: 'Prune removes screenshots for settled submissions older than the retention window. Pending and disputed submissions always keep their proof.',
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/admin/proof-prune', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const days = Number(req.body?.days) || Number(process.env.PROOF_RETENTION_DAYS) || 45;
+    const r = await pruneOldProofImages({ days });
+    res.json({ ok: true, days, ...r });
   } catch (err) { next(err); }
 });
 

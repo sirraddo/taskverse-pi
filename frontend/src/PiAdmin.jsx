@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ProofImage from './ProofImage';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
 
 const inputStyle = {
@@ -806,13 +807,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
           {sub.proofFileUrl && (
             <div style={{ marginBottom: '8px' }}>
-              <img src={sub.proofFileUrl} alt="Proof screenshot"
-                style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'block', maxHeight: '200px', objectFit: 'contain' }}
-                onError={(e) => { e.target.style.display = 'none'; }} />
-              <a href={sub.proofFileUrl} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#059669', display: 'inline-block', marginTop: '4px' }}>
-                Open full image ↗
-              </a>
+              <ProofImage src={sub.proofFileUrl} maxHeight={200} />
             </div>
           )}
 

@@ -191,9 +191,30 @@ sourcePaymentId: { type: String, required: true },
 export const microPi = (pi) => Math.round(Number(pi) * 1_000_000);
 export const toPi = (micro) => micro / 1_000_000;
 
+/* ── Proof screenshots ───────────────────────────────────────────
+   Stored in their OWN collection, not on the Submission doc, so that listing
+   submissions (queue, history, payouts) never drags megabytes of image data
+   into memory. Submission.proofFileUrl holds a reference of the form
+   "local:<ObjectId>" pointing at one of these.
+
+   Images are resized + compressed in the browser before upload. Kept larger /
+   higher quality than avatars because a proof screenshot has to stay READABLE —
+   you must be able to see what the worker actually did. */
+const proofImageSchema = new Schema(
+  {
+    // base64 data URL (image/jpeg). Capped server-side.
+    data: { type: String, required: true },
+    worker: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    task: { type: Schema.Types.ObjectId, ref: 'Task', index: true },
+    bytes: Number,
+  },
+  { timestamps: true }
+);
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
 export const Dispute = mongoose.model('Dispute', disputeSchema);
 export const Payment = mongoose.model('Payment', paymentSchema);
 export const PlatformLedger = mongoose.model('PlatformLedger', platformLedgerSchema);
+export const ProofImage = mongoose.model('ProofImage', proofImageSchema);

@@ -172,3 +172,30 @@ export function resizeImageToDataUrl(file, max = 256, quality = 0.82) {
     reader.readAsDataURL(file);
   });
 }
+
+/* ── Proof screenshots (self-hosted) ──
+ * Previously these went to ImgBB using a VITE_ API key, which is baked into
+ * the public bundle (readable by anyone) and made the whole proof pipeline
+ * depend on a third party. Now the image is compressed in-browser and posted
+ * to our own backend, which returns an opaque "local:<id>" reference.
+ */
+export const uploadProofImage = (image, taskId) =>
+  api('/api/proof-image', { image, taskId });
+
+/**
+ * Load a proof screenshot for display.
+ * The endpoint is auth-gated, and <img src> cannot send an Authorization
+ * header — so we fetch the bytes with the header and hand back an object URL.
+ * (Putting the session token in a query string would leak it into server logs.)
+ * Remember to URL.revokeObjectURL() when done.
+ */
+export async function loadProofImage(ref) {
+  if (!ref || ref === 'expired') return '';
+  const m = /^local:([a-f0-9]{24})$/i.exec(String(ref));
+  if (!m) return String(ref); // legacy ImgBB URL from older submissions
+  const res = await fetch(`${API}/api/proof-image/${m[1]}`, {
+    headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+  });
+  if (!res.ok) throw new Error('Could not load screenshot');
+  return URL.createObjectURL(await res.blob());
+}
