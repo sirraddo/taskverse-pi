@@ -35,6 +35,8 @@ const [description, setDescription] = useState('');
 const [reward, setReward] = useState('');
 const [slots, setSlots] = useState('1');
 const [allowedCountries, setAllowedCountries] = useState([]); // [] = global
+const [requireScreenshot, setRequireScreenshot] = useState(false);
+const [requireManualReview, setRequireManualReview] = useState(false);
 const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
 
@@ -59,6 +61,8 @@ description,
 rewardPi: parseFloat(reward),
 slots: parseInt(slots, 10),
 allowedCountries,
+requireScreenshot,
+requireManualReview,
 });
 // 2. Real Pi wallet payment (rewards + platform fee → app wallet)
 await payForTaskFunding({ taskId, amountToPay, title });
@@ -146,6 +150,31 @@ placeholder="10" required style={inputStyle} />
     ? 'Only workers in the selected countries can see and complete this task.'
     : 'Leave empty to let any pioneer worldwide complete this task.'}
 </p>
+</div>
+
+{/* Proof policy — protects against low-effort / irrelevant screenshots */}
+<div style={{ marginBottom: '14px', backgroundColor: '#f7fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px' }}>
+  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#4a5568', marginBottom: '9px', letterSpacing: '0.03em' }}>PROOF POLICY</div>
+
+  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer', marginBottom: '10px' }}>
+    <input type="checkbox" checked={requireScreenshot} onChange={(e) => setRequireScreenshot(e.target.checked)}
+      style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: '#059669', flexShrink: 0 }} />
+    <span>
+      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#2d3748', display: 'block' }}>Screenshot required</span>
+      <span style={{ fontSize: '0.7rem', color: '#718096' }}>Submissions without an image are rejected automatically.</span>
+    </span>
+  </label>
+
+  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer' }}>
+    <input type="checkbox" checked={requireManualReview} onChange={(e) => setRequireManualReview(e.target.checked)}
+      style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: '#059669', flexShrink: 0 }} />
+    <span>
+      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#2d3748', display: 'block' }}>Manual review (no auto-approve)</span>
+      <span style={{ fontSize: '0.7rem', color: '#718096' }}>
+        Every submission waits for an admin to check it. Use this when a worker could pass off a random or unrelated screenshot — only a human can tell.
+      </span>
+    </span>
+  </label>
 </div>
 
 {breakdown.total > 0 && (

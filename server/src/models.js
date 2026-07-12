@@ -69,6 +69,15 @@ fundingPaymentId: String, // Pi paymentId that funded this campaign
 // When non-empty, only workers whose profile country is in this list may see,
 // start, or submit the task. Stored as uppercase ISO-3166 alpha-2 codes (e.g. 'NG').
 allowedCountries: { type: [String], default: [] },
+// ── Proof policy (per task) ──
+// requireScreenshot: submission is rejected outright unless an image is attached.
+// Use for tasks where a screenshot is the only meaningful proof.
+requireScreenshot: { type: Boolean, default: false },
+// requireManualReview: submissions on this task NEVER auto-approve — they always
+// land in the admin queue for a human decision. This is the real defence against
+// irrelevant/random screenshots, because no automated check can tell whether an
+// image actually shows the required action; only a human can.
+requireManualReview: { type: Boolean, default: false },
 // Auto-archived (hidden from dashboards) after a retention period when in a
 // terminal state. Data is retained — this only affects default list queries.
 archived: { type: Boolean, default: false, index: true },

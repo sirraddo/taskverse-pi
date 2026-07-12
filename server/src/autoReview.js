@@ -2,9 +2,13 @@
  * autoReview.js - automated moderation for the submission queue.
  *
  * NEW POLICY (auto-approve first):
- *  1. Hard validation  -> auto_reject immediately for gibberish / empty
+ *  1. Hard validation  -> auto_reject immediately for gibberish / empty,
+ *                         or if the task requires a screenshot and none given
  *  2. Suspicious flags -> manual queue (duplicate image, recycled screenshot,
  *                         high rejection rate, banned worker)
+ *  2b. Task-level      -> requireManualReview forces the manual queue even when
+ *                         nothing is suspicious (no automated check can tell if a
+ *                         screenshot is actually RELEVANT — only a human can)
  *  3. Everything else  -> auto_approve
  *
  * This means legitimate first-time workers, high-value tasks, and
@@ -84,6 +88,8 @@ export function evaluateSubmission({
   isRecycledImage  = false,
   worker,
   rewardMicroPi,
+  requireScreenshot = false,
+  requireManualReview = false,
 }) {
   const reasons = [];
   const flags   = [];
@@ -94,6 +100,14 @@ export function evaluateSubmission({
 
   if (!hasText && !hasFile) {
     return { verdict: 'auto_reject', reasons: ['Empty submission — provide text or a screenshot'] };
+  }
+
+  /* STEP 1b — Task requires a screenshot: reject outright if none attached. */
+  if (requireScreenshot && !hasFile) {
+    return {
+      verdict: 'auto_reject',
+      reasons: ['This task requires a screenshot as proof — none was attached'],
+    };
   }
 
   if (hasText) {
@@ -131,6 +145,17 @@ export function evaluateSubmission({
 
   if (flags.length > 0) {
     return { verdict: 'manual', reasons: [...reasons, ...flags, 'Flagged for human review'] };
+  }
+
+  /* STEP 2b — Task is set to ALWAYS require a human decision.
+     No automated check can verify that a screenshot actually shows the
+     required action (a worker could attach any unrelated image), so for
+     tasks where proof quality matters the poster can force manual review. */
+  if (requireManualReview) {
+    return {
+      verdict: 'manual',
+      reasons: [...reasons, 'Task is set to manual review — admin must approve every submission'],
+    };
   }
 
   /* STEP 3 — Auto-approve everything that passes */

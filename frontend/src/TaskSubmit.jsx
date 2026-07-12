@@ -39,7 +39,7 @@ const data = await res.json();
 if (data.success) setProofFileUrl(data.data.url);
 else throw new Error('Upload failed');
 } catch (err) {
-setError('Image upload failed — paste a URL below instead.');
+setError('Image upload failed — please try again.');
 } finally { setUploading(false); }
 };
 reader.readAsDataURL(file);
@@ -105,7 +105,19 @@ style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRad
 
 {/* Screenshot upload */}
 <div style={{ marginBottom: '14px' }}>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '5px' }}>SCREENSHOT (OPTIONAL)</label>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: activeTask.requireScreenshot ? '#c53030' : '#718096', display: 'block', marginBottom: '5px' }}>
+{activeTask.requireScreenshot ? 'SCREENSHOT (REQUIRED)' : 'SCREENSHOT (OPTIONAL)'}
+</label>
+{activeTask.requireScreenshot && (
+<div style={{ fontSize: '0.7rem', color: '#c53030', background: '#fff5f5', border: '1px solid #fed7d7', padding: '6px 9px', borderRadius: '8px', marginBottom: '6px' }}>
+This task requires a screenshot. Submissions without one are rejected.
+</div>
+)}
+{activeTask.requireManualReview && (
+<div style={{ fontSize: '0.7rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', padding: '6px 9px', borderRadius: '8px', marginBottom: '6px' }}>
+🔍 Reviewed by an admin before payout — make sure your screenshot clearly shows the completed task.
+</div>
+)}
 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1.5px dashed #cbd5e0', cursor: uploading ? 'wait' : 'pointer', fontSize: '0.82rem', color: '#4a5568' }}>
 <span style={{ fontSize: '1.1rem' }}>{uploading ? '⏳' : '📷'}</span>
 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -113,11 +125,16 @@ style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRad
 </span>
 <input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} style={{ display: 'none' }} />
 </label>
-<input type="url" value={proofFileUrl} onChange={(e) => setProofFileUrl(e.target.value)}
-placeholder="or paste image URL (Imgur, ImgBB, etc.)"
-style={{ width: '100%', marginTop: '7px', padding: '8px 12px', boxSizing: 'border-box', fontSize: '0.79rem', borderRadius: '8px', border: '1.5px solid #e2e8f0', color: '#4a5568', outline: 'none' }} />
+{/* Screenshots must be uploaded through the app. The manual "paste any image
+    URL" box was removed — it let workers pass off any random image from the
+    internet as proof. The server now only accepts URLs from our image host. */}
 {proofFileUrl.trim() && (
-<div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Image URL set</div>
+<div style={{ marginTop: '7px' }}>
+<img src={proofFileUrl} alt="Your screenshot"
+  style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1.5px solid #e2e8f0', display: 'block', objectFit: 'contain' }}
+  onError={(e) => { e.target.style.display = 'none'; }} />
+<div style={{ marginTop: '5px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Screenshot uploaded</div>
+</div>
 )}
 </div>
 

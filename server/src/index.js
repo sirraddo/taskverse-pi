@@ -38,6 +38,15 @@ async function lookupIpCountry(ip) {
 }
 
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
+
+// Hosts we accept proof screenshots from. The app uploads to ImgBB and sends
+// back the resulting URL; anything else is rejected so workers can't pass off a
+// random image from elsewhere on the internet as their proof.
+// Override/extend with PROOF_IMAGE_HOSTS="imgbb.com,i.ibb.co,my-host.com".
+const PROOF_IMAGE_HOSTS = (process.env.PROOF_IMAGE_HOSTS || 'ibb.co,imgbb.com')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
 const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
 
@@ -143,6 +152,8 @@ app.post('/api/tasks', requireAuth, async (req, res, next) => {
       poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
       escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
       allowedCountries: normCountryList(req.body.allowedCountries),
+      requireScreenshot: Boolean(req.body.requireScreenshot),
+      requireManualReview: Boolean(req.body.requireManualReview),
     });
     res.status(201).json({
       taskId: task._id, amountToPay: toPi(gross),
@@ -177,6 +188,8 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
       reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
       slotsFilled: t.slotsFilled, slots: t.slots,
       allowedCountries: t.allowedCountries || [],
+      requireScreenshot: !!t.requireScreenshot,
+      requireManualReview: !!t.requireManualReview,
       userDone: doneSet.has(t._id.toString()),
     })));
   } catch (err) { next(err); }
@@ -491,7 +504,26 @@ app.post('/api/payments/incomplete', requireAuth, async (req, res, next) => {
 app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
   try {
     const worker = await currentUser(req);
-    const { proofText = '', proofFileUrl = null } = req.body;
+    const { proofText = '', proofFileUrl: rawProofFileUrl = null } = req.body;
+
+    // ── Close the "paste any URL" loophole ──
+    // The client uploads screenshots to our image host and sends back the
+    // resulting URL. Previously ANY string was accepted here, so a worker could
+    // paste a link to any random image on the internet as their "proof".
+    // We now only accept URLs served by the trusted host(s).
+    const proofFileUrl = rawProofFileUrl ? String(rawProofFileUrl).trim() : null;
+    if (proofFileUrl) {
+      let host = '';
+      try { host = new URL(proofFileUrl).hostname.toLowerCase(); }
+      catch { return res.status(400).json({ error: 'Screenshot must be a valid URL.' }); }
+      const ok = PROOF_IMAGE_HOSTS.some((h) => host === h || host.endsWith('.' + h));
+      if (!ok) {
+        return res.status(400).json({
+          error: 'Screenshots must be uploaded through the app — external image links are not accepted.',
+        });
+      }
+    }
+
     const task = await Task.findOne({ _id: req.params.id, status: 'live' });
     if (!task) return res.status(404).json({ error: 'Task not available' });
     if (task.poster.equals(worker._id)) return res.status(400).json({ error: 'Cannot work your own task' });
@@ -518,6 +550,8 @@ app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
       isDuplicateImage: Boolean(isDuplicateImage),
       isRecycledImage: Boolean(isRecycledImage),
       worker, rewardMicroPi: task.rewardMicroPi,
+      requireScreenshot: Boolean(task.requireScreenshot),
+      requireManualReview: Boolean(task.requireManualReview),
     });
     if (verdict === 'auto_reject') {
       return res.status(422).json({ error: 'Submission rejected by quality check', reasons });
@@ -689,6 +723,8 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
       status: 'live',                       // live immediately
       fundingPaymentId: 'admin_sponsored_' + Date.now(),
       allowedCountries: normCountryList(req.body.allowedCountries),
+      requireScreenshot: Boolean(req.body.requireScreenshot),
+      requireManualReview: Boolean(req.body.requireManualReview),
     });
     res.status(201).json({
       ok: true,
