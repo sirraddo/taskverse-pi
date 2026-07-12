@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Logo from './Logo';
 import HowItWorks from './HowItWorks';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
@@ -36,16 +37,16 @@ export default function PiLogin({ onLoginSuccess }) {
 
   return (
     <div style={{ padding: '40px 20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)', textAlign: 'center', margin: '40px 15px' }}>
-      <div style={{ width: '80px', height: '80px', backgroundColor: '#ffa500', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-        <span style={{ fontSize: '2.5rem', color: 'white', fontWeight: 'bold' }}>π</span>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+        <Logo size={80} />
       </div>
-      <h2>Welcome to TaskVerse</h2>
+      <h2>Welcome to TaskVerse Earn</h2>
       {error && (
         <p style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px', borderRadius: '8px', fontSize: '0.9rem' }}>
           {error}
         </p>
       )}
-      <button onClick={handlePiAuth} disabled={loading} style={{ width: '100%', backgroundColor: '#ffa500', color: 'white', border: 'none', padding: '14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', opacity: loading ? 0.7 : 1 }}>
+      <button onClick={handlePiAuth} disabled={loading} style={{ width: '100%', backgroundColor: '#059669', color: 'white', border: 'none', padding: '14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', opacity: loading ? 0.7 : 1 }}>
         {loading ? 'Connecting to Pi…' : 'Authenticate with Pi Browser'}
       </button>
     

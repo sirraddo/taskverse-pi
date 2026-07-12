@@ -57,7 +57,7 @@ style={{ width: '56px', padding: '6px 8px', borderRadius: '8px', border: '1.5px 
 <button
 type="button"
 onClick={checkAnswer}
-style={{ backgroundColor: '#ffa500', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '0.84rem' }}
+style={{ backgroundColor: '#059669', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '0.84rem' }}
 >
 Verify
 </button>

@@ -1,3 +1,5 @@
+import Logo from './Logo';
+
 const STEPS = [
   { icon: '🔐', title: 'Sign In with Pi', desc: 'Open in Pi Browser and tap Authenticate. Your Pi username and KYC status are verified automatically.' },
   { icon: '📋', title: 'Browse Tasks', desc: 'See available micro-gigs posted by task creators. Each shows the reward in Pi, slots remaining, and what you need to do.' },
@@ -32,7 +34,9 @@ export default function HowItWorks({ onClose, onBack }) {
       )}
 
       <div style={{ textAlign: 'center', padding: onBack && !onClose ? '10px 0 20px' : '30px 0 20px' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🌍</div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+          <Logo size={72} />
+        </div>
         <h1 style={{ fontSize: '1.6rem', color: '#1a202c', margin: 0 }}>TaskVerse Earn</h1>
         <p style={{ color: '#059669', fontWeight: 'bold', margin: '6px 0 0' }}>Earn Pi. Anywhere. Anytime.</p>
         <p style={{ color: '#718096', fontSize: '0.9rem', marginTop: '10px' }}>
