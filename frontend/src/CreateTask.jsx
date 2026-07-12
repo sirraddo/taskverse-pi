@@ -161,7 +161,7 @@ placeholder="10" required style={inputStyle} />
 <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '6px 0' }} />
 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
 <span style={{ fontWeight: '700', color: '#2d3748' }}>Total deposit</span>
-<strong style={{ color: '#764ba2', fontSize: '1rem' }}>{breakdown.total.toFixed(4)} π</strong>
+<strong style={{ color: '#047857', fontSize: '1rem' }}>{breakdown.total.toFixed(4)} π</strong>
 </div>
 </div>
 )}
@@ -173,7 +173,7 @@ placeholder="10" required style={inputStyle} />
 )}
 
 <button onClick={handleSubmit} disabled={phase === 'paying' || !title.trim() || !reward || !slots}
-style={{ width: '100%', backgroundColor: (phase === 'paying' || !title.trim() || !reward) ? '#a0aec0' : '#764ba2', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: (phase === 'paying') ? 'wait' : 'pointer', fontSize: '0.9rem', transition: 'background 0.2s' }}>
+style={{ width: '100%', backgroundColor: (phase === 'paying' || !title.trim() || !reward) ? '#a0aec0' : '#047857', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', cursor: (phase === 'paying') ? 'wait' : 'pointer', fontSize: '0.9rem', transition: 'background 0.2s' }}>
 {phase === 'paying' ? '⏳ Waiting for Pi Wallet…' : '🚀 Deposit & Publish (' + breakdown.total.toFixed(4) + ' π)'}
 </button>
 </div>

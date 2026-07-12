@@ -1,15 +1,17 @@
 {
-  "name": "TaskVerse Pi",
+  "name": "TaskVerse Earn",
   "short_name": "TaskVerse",
-  "description": "Earn Pi by completing micro-tasks. The decentralised gig marketplace for the Pi Network ecosystem.",
+  "description": "Complete micro-tasks and get paid. TaskVerse Earn works on the Pi Network.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#667eea",
-  "theme_color": "#667eea",
+  "background_color": "#0F172A",
+  "theme_color": "#059669",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "categories": ["productivity", "finance", "social"],
   "lang": "en",

@@ -6,7 +6,7 @@ export default function PrivacyPolicy({ onBack }) {
       <p style={{ color: '#718096', fontSize: '0.85rem' }}>Last updated: June 2026</p>
 
       <h2 style={{ fontSize: '1rem', marginTop: '24px' }}>1. Who We Are</h2>
-      <p>TaskVerse Pi is a decentralised micro-task marketplace that runs inside the Pi Browser. We connect task posters with workers who earn Pi cryptocurrency for completing small jobs.</p>
+      <p>TaskVerse Earn is a decentralised micro-task marketplace that runs inside the Pi Browser. We connect task posters with workers who earn Pi cryptocurrency for completing small jobs.</p>
 
       <h2 style={{ fontSize: '1rem', marginTop: '20px' }}>2. Data We Collect</h2>
       <p>We collect only what is necessary to operate the platform:</p>
@@ -42,9 +42,9 @@ export default function PrivacyPolicy({ onBack }) {
       <p>All data is transmitted over HTTPS. Sensitive fields are stored encrypted. We use JWT authentication with short expiry windows.</p>
 
       <h2 style={{ fontSize: '1rem', marginTop: '20px' }}>8. Changes</h2>
-      <p>We will notify users of material changes to this policy via an in-app notification. Continued use of TaskVerse Pi after changes constitutes acceptance.</p>
+      <p>We will notify users of material changes to this policy via an in-app notification. Continued use of TaskVerse Earn after changes constitutes acceptance.</p>
 
-      <p style={{ marginTop: '30px', color: '#a0aec0', fontSize: '0.8rem' }}>TaskVerse Pi — Built on the Pi Network</p>
+      <p style={{ marginTop: '30px', color: '#a0aec0', fontSize: '0.8rem' }}>TaskVerse Earn — Built on the Pi Network</p>
     </div>
   );
         }

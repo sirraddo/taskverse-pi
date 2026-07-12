@@ -56,13 +56,13 @@ export default function PiLogin({ onLoginSuccess }) {
 
       {/* Legal footer — bottom of login card */}
       <div style={{ textAlign: 'center', padding: '16px 20px', fontSize: '0.75rem', color: '#a0aec0' }}>
-        <button onClick={() => setShowHow(true)} style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '8px', display: 'block', width: '100%' }}>
-          How does TaskVerse Pi work? ➜
+        <button onClick={() => setShowHow(true)} style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '8px', display: 'block', width: '100%' }}>
+          How does TaskVerse Earn work? ➜
         </button>
         By continuing you agree to our{' '}
-        <button onClick={() => setShowTerms(true)} style={{ background:'none', border:'none', color:'#667eea', cursor:'pointer', padding:0, fontSize:'0.75rem' }}>Terms</button>
+        <button onClick={() => setShowTerms(true)} style={{ background:'none', border:'none', color:'#059669', cursor:'pointer', padding:0, fontSize:'0.75rem' }}>Terms</button>
         {' '}and{' '}
-        <button onClick={() => setShowPrivacy(true)} style={{ background:'none', border:'none', color:'#667eea', cursor:'pointer', padding:0, fontSize:'0.75rem' }}>Privacy Policy</button>
+        <button onClick={() => setShowPrivacy(true)} style={{ background:'none', border:'none', color:'#059669', cursor:'pointer', padding:0, fontSize:'0.75rem' }}>Privacy Policy</button>
       </div>
 </div>
   );

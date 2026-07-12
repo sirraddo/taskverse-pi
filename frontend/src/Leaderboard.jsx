@@ -46,9 +46,9 @@ export default function Leaderboard({ onBack }) {
         {PERIODS.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
             style={{ flex: 1, padding: '8px 0', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.78rem',
-              backgroundColor: period === p.key ? '#667eea' : 'white',
+              backgroundColor: period === p.key ? '#059669' : 'white',
               color: period === p.key ? 'white' : '#718096',
-              boxShadow: period === p.key ? '0 2px 8px rgba(102,126,234,0.4)' : '0 1px 3px rgba(0,0,0,0.07)',
+              boxShadow: period === p.key ? '0 2px 8px rgba(5,150,105,0.4)' : '0 1px 3px rgba(0,0,0,0.07)',
               transition: 'all 0.15s ease' }}>
             {p.label}
           </button>
@@ -81,7 +81,7 @@ export default function Leaderboard({ onBack }) {
               {entry.tasksCompleted || 0} task{entry.tasksCompleted !== 1 ? 's' : ''} completed
             </div>
           </div>
-          <div style={{ fontWeight: '800', color: '#667eea', fontSize: '1rem', flexShrink: 0 }}>
+          <div style={{ fontWeight: '800', color: '#059669', fontSize: '1rem', flexShrink: 0 }}>
             {Number(entry.totalEarned || 0).toFixed(2)} π
           </div>
         </div>

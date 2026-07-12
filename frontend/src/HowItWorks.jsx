@@ -7,7 +7,7 @@ const STEPS = [
 ];
 
 const FAQS = [
-  { q: 'Is TaskVerse Pi free to use?', a: 'Free for workers. Task posters pay a 5% platform fee on top of the reward pool when funding a campaign.' },
+  { q: 'Is TaskVerse Earn free to use?', a: 'Free for workers. Task posters pay a 5% platform fee on top of the reward pool when funding a campaign.' },
   { q: 'How fast are payouts?', a: 'Auto-approved submissions are paid within seconds. Manual-reviewed ones take up to 24 hours.' },
   { q: 'What if my submission is rejected?', a: 'You will see the rejection reason in your Profile. You can submit an appeal statement from the Open Appeals section.' },
   { q: 'How do I post my own task?', a: 'Tap “+ Post Task” on the main feed, fill in the title, description, reward per slot and number of slots, then fund via Pi Browser.' },
@@ -33,8 +33,8 @@ export default function HowItWorks({ onClose, onBack }) {
 
       <div style={{ textAlign: 'center', padding: onBack && !onClose ? '10px 0 20px' : '30px 0 20px' }}>
         <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🌍</div>
-        <h1 style={{ fontSize: '1.6rem', color: '#1a202c', margin: 0 }}>TaskVerse Pi</h1>
-        <p style={{ color: '#667eea', fontWeight: 'bold', margin: '6px 0 0' }}>Earn Pi. Anywhere. Anytime.</p>
+        <h1 style={{ fontSize: '1.6rem', color: '#1a202c', margin: 0 }}>TaskVerse Earn</h1>
+        <p style={{ color: '#059669', fontWeight: 'bold', margin: '6px 0 0' }}>Earn Pi. Anywhere. Anytime.</p>
         <p style={{ color: '#718096', fontSize: '0.9rem', marginTop: '10px' }}>
           The micro-task marketplace built for the Pi Network ecosystem.
         </p>
@@ -70,7 +70,7 @@ export default function HowItWorks({ onClose, onBack }) {
       ))}
 
       <button onClick={dismiss}
-        style={{ width: '100%', marginTop: '24px', padding: '14px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(102,126,234,0.4)' }}>
+        style={{ width: '100%', marginTop: '24px', padding: '14px', background: 'linear-gradient(135deg, #059669, #047857)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(5,150,105,0.4)' }}>
         {onClose ? 'Get Started — Earn Pi Now 🚀' : 'Got It ✔'}
       </button>
       <p style={{ textAlign: 'center', color: '#a0aec0', fontSize: '0.75rem', marginTop: '12px' }}>Available exclusively inside Pi Browser</p>

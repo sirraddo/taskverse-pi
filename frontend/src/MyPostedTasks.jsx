@@ -39,7 +39,7 @@ return (
 {task.title}
 </h3>
 </div>
-<div style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '52px', flexShrink: 0, marginLeft: '10px' }}>
+<div style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '52px', flexShrink: 0, marginLeft: '10px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{Number(task.reward).toFixed(2)}</div>
 <div style={{ fontSize: '0.58rem', opacity: 0.85, fontWeight: '600' }}>π/slot</div>
 </div>

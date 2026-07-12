@@ -276,8 +276,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           onClick={() => setShowForm(f => !f)}
           style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0 }}
         >
-          <span style={{ fontWeight: '700', color: '#764ba2', fontSize: '0.9rem' }}>📌 Create Sponsored Task</span>
-          <span style={{ color: '#764ba2', fontSize: '1.1rem', fontWeight: '700' }}>{showForm ? '−' : '+'}</span>
+          <span style={{ fontWeight: '700', color: '#047857', fontSize: '0.9rem' }}>📌 Create Sponsored Task</span>
+          <span style={{ color: '#047857', fontSize: '1.1rem', fontWeight: '700' }}>{showForm ? '−' : '+'}</span>
         </button>
         <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#a0aec0' }}>
           Sponsored tasks go live instantly without Pi payment — use to seed the feed or reward specific actions.
@@ -308,7 +308,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               </div>
             )}
             <button onClick={handleCreateTask} disabled={creating}
-              style={{ marginTop: '10px', width: '100%', backgroundColor: creating ? '#a0aec0' : '#764ba2', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: '700', cursor: creating ? 'not-allowed' : 'pointer', fontSize: '0.88rem' }}>
+              style={{ marginTop: '10px', width: '100%', backgroundColor: creating ? '#a0aec0' : '#047857', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: '700', cursor: creating ? 'not-allowed' : 'pointer', fontSize: '0.88rem' }}>
               {creating ? '⏳ Creating…' : '🚀 Create & Publish Task'}
             </button>
           </div>
@@ -745,7 +745,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: '700', color: '#1a202c', flex: 1 }}>
               {sub.task?.title}
             </h4>
-            <span style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '3px 8px', borderRadius: '8px', fontWeight: '800', fontSize: '0.78rem', flexShrink: 0, marginLeft: '8px' }}>
+            <span style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '3px 8px', borderRadius: '8px', fontWeight: '800', fontSize: '0.78rem', flexShrink: 0, marginLeft: '8px' }}>
               {(sub.task?.rewardMicroPi / 1e6).toFixed(2)} π
             </span>
           </div>
@@ -764,7 +764,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                 style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'block', maxHeight: '200px', objectFit: 'contain' }}
                 onError={(e) => { e.target.style.display = 'none'; }} />
               <a href={sub.proofFileUrl} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#667eea', display: 'inline-block', marginTop: '4px' }}>
+                style={{ fontSize: '0.75rem', color: '#059669', display: 'inline-block', marginTop: '4px' }}>
                 Open full image ↗
               </a>
             </div>

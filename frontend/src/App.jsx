@@ -36,11 +36,11 @@ return 'Other';
 }
 
 const CATEGORY_META = {
-All: { emoji: '🌐', color: '#667eea' },
+All: { emoji: '🌐', color: '#059669' },
 Social: { emoji: '📢', color: '#ed8936' },
 Review: { emoji: '✍️', color: '#48bb78' },
 Content: { emoji: '🎬', color: '#e53e3e' },
-Referral: { emoji: '🤝', color: '#9f7aea' },
+Referral: { emoji: '🤝', color: '#10b981' },
 Translation: { emoji: '🌍', color: '#38b2ac' },
 Feedback: { emoji: '🐛', color: '#f6ad55' },
 Other: { emoji: '📋', color: '#718096' },
@@ -63,9 +63,9 @@ return (
 }
 
 const translations = {
-en: { title: "TaskVerse Pi", wallet: "Balance", availableGigs: "Available Tasks", profile: "Profile", postTask: "+ Post Task", openTask: "Start", full: "Full", adminBtn: "Moderation Queue", alertSubmit: "Proof sent for review!", alertAutoApproved: "Auto-approved! Payout queued.", alertRejected: "Submission failed quality check:", alertPublish: "Task listed on global feed!", loading: "Loading...", empty: "No matching tasks — check back soon!", slotsLeft: "slots left", search: "Search tasks...", tasksDone: "tasks done" },
-es: { title: "TaskVerse Pi", wallet: "Saldo", availableGigs: "Tareas Disponibles", profile: "Perfil", postTask: "+ Publicar", openTask: "Iniciar", full: "Lleno", adminBtn: "Moderacion", alertSubmit: "Prueba enviada!", alertAutoApproved: "Aprobado! Pago en camino.", alertRejected: "No paso el control:", alertPublish: "Tarea publicada!", loading: "Cargando...", empty: "Sin tareas - vuelve pronto!", slotsLeft: "cupos", search: "Buscar...", tasksDone: "tareas hechas" },
-vi: { title: "TaskVerse Pi", wallet: "So du", availableGigs: "Viec Co San", profile: "Ho so", postTask: "+ Dang Viec", openTask: "Bat Dau", full: "Het", adminBtn: "Hang Doi", alertSubmit: "Da gui bang chung!", alertAutoApproved: "Tu dong duyet!", alertRejected: "Khong dat:", alertPublish: "Da dang!", loading: "Dang tai...", empty: "Chua co viec!", slotsLeft: "cho", search: "Tim viec...", tasksDone: "viec xong" },
+en: { title: "TaskVerse Earn", wallet: "Balance", availableGigs: "Available Tasks", profile: "Profile", postTask: "+ Post Task", openTask: "Start", full: "Full", adminBtn: "Moderation Queue", alertSubmit: "Proof sent for review!", alertAutoApproved: "Auto-approved! Payout queued.", alertRejected: "Submission failed quality check:", alertPublish: "Task listed on global feed!", loading: "Loading...", empty: "No matching tasks — check back soon!", slotsLeft: "slots left", search: "Search tasks...", tasksDone: "tasks done" },
+es: { title: "TaskVerse Earn", wallet: "Saldo", availableGigs: "Tareas Disponibles", profile: "Perfil", postTask: "+ Publicar", openTask: "Iniciar", full: "Lleno", adminBtn: "Moderacion", alertSubmit: "Prueba enviada!", alertAutoApproved: "Aprobado! Pago en camino.", alertRejected: "No paso el control:", alertPublish: "Tarea publicada!", loading: "Cargando...", empty: "Sin tareas - vuelve pronto!", slotsLeft: "cupos", search: "Buscar...", tasksDone: "tareas hechas" },
+vi: { title: "TaskVerse Earn", wallet: "So du", availableGigs: "Viec Co San", profile: "Ho so", postTask: "+ Dang Viec", openTask: "Bat Dau", full: "Het", adminBtn: "Hang Doi", alertSubmit: "Da gui bang chung!", alertAutoApproved: "Tu dong duyet!", alertRejected: "Khong dat:", alertPublish: "Da dang!", loading: "Dang tai...", empty: "Chua co viec!", slotsLeft: "cho", search: "Tim viec...", tasksDone: "viec xong" },
 };
 
 export default function App() {
@@ -257,11 +257,11 @@ return (
 <select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: '600', color: '#4a5568', fontSize: '0.78rem' }}>
 <option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="vi">🇻🇳 VI</option>
 </select>
-<button onClick={() => setView('create')} style={{ backgroundColor: '#764ba2', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '20px', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem' }}>{t.postTask}</button>
+<button onClick={() => setView('create')} style={{ backgroundColor: '#047857', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '20px', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem' }}>{t.postTask}</button>
 </div>
 
 {/* Wallet card */}
-<div style={{ background: 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', color: 'white', padding: '20px', borderRadius: '18px', marginBottom: '14px', boxShadow: '0 6px 24px rgba(102,126,234,0.4)', position: 'relative', overflow: 'hidden' }}>
+<div style={{ background: 'linear-gradient(135deg,#059669 0%,#047857 100%)', color: 'white', padding: '20px', borderRadius: '18px', marginBottom: '14px', boxShadow: '0 6px 24px rgba(5,150,105,0.4)', position: 'relative', overflow: 'hidden' }}>
 <div style={{ position: 'absolute', top: '-25px', right: '-20px', width: '110px', height: '110px', borderRadius: '50%', background: 'rgba(255,255,255,0.07)' }} />
 <div style={{ fontSize: '0.72rem', opacity: 0.85, marginBottom: '4px', fontWeight: '600' }}>
 {user.username}
@@ -373,7 +373,7 @@ return (
 <h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', lineHeight: 1.3 }}>{task.title}</h3>
 {snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: '#718096', lineHeight: 1.4 }}>{snippet}</p>}
 </div>
-<div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
+<div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{task.reward}</div>
 <div style={{ fontSize: '0.6rem', opacity: 0.85, fontWeight: '600' }}>π</div>
 </div>
@@ -394,7 +394,7 @@ return (
 {task.link && /^https?:\/\//i.test(task.link) && !task.userDone && (
 <button
 onClick={() => openExternalLink(task.link)}
-style={{ width: '100%', backgroundColor: 'white', color: '#5a67d8', border: '2px solid #667eea', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+style={{ width: '100%', backgroundColor: 'white', color: '#047857', border: '2px solid #059669', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
 🔗 Open Task Link
 </button>
 )}
@@ -402,7 +402,7 @@ style={{ width: '100%', backgroundColor: 'white', color: '#5a67d8', border: '2px
 <button
 onClick={() => { if (!isFull && !task.userDone) { setSelectedTask(task); setView('submit'); } }}
 disabled={isFull || task.userDone}
-style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#c6f6d5' : '#667eea', color: isFull ? '#a0aec0' : task.userDone ? '#276749' : 'white', border: 'none', padding: '10px', borderRadius: '10px', cursor: (isFull || task.userDone) ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.84rem' }}>
+style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#c6f6d5' : '#059669', color: isFull ? '#a0aec0' : task.userDone ? '#276749' : 'white', border: 'none', padding: '10px', borderRadius: '10px', cursor: (isFull || task.userDone) ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.84rem' }}>
 {isFull ? 'Task Full' : task.userDone ? 'Done ✅' : t.openTask + ' →'}
 </button>
 </div>
@@ -416,9 +416,9 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 
 {/* Bottom nav */}
 <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-<button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#667eea', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>🏆 Board</button>
-<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#667eea', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📜 History</button>
-<button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#764ba2', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📌 My Tasks</button>
+<button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>🏆 Board</button>
+<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📜 History</button>
+<button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📌 My Tasks</button>
 </div>
 <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: '#b0bac8' }}>
 <span onClick={() => setScreen('howitworks')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>How It Works</span>

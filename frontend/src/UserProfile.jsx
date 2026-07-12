@@ -25,7 +25,7 @@ escrow_exhausted: { bg: '#f7fafc', text: '#718096', label: '✕ Escrow gone' },
 
 function getRank(count) {
 if (count >= 50) return { label: 'Elite Pioneer', icon: '🏆', color: '#d69e2e' };
-if (count >= 25) return { label: 'Pro Earner', icon: '💎', color: '#6b46c1' };
+if (count >= 25) return { label: 'Pro Earner', icon: '💎', color: '#047857' };
 if (count >= 10) return { label: 'Active Pioneer', icon: '🚀', color: '#2b6cb0' };
 if (count >= 5) return { label: 'Contributor', icon: '⚡', color: '#2d6a4f' };
 if (count >= 1) return { label: 'First Tasker', icon: '🌱', color: '#48bb78' };
@@ -34,7 +34,7 @@ return { label: 'Newcomer', icon: '👋', color: '#a0aec0' };
 
 const ACHIEVEMENTS = [
 { key: 'first', threshold: 1, icon: '🌱', label: 'First Task', color: '#68d391' },
-{ key: 'five', threshold: 5, icon: '⚡', label: 'On a Roll', color: '#9f7aea' },
+{ key: 'five', threshold: 5, icon: '⚡', label: 'On a Roll', color: '#10b981' },
 { key: 'ten', threshold: 10, icon: '🚀', label: 'Pioneer', color: '#63b3ed' },
 { key: 'twentyfive', threshold: 25, icon: '💎', label: 'Pro Earner', color: '#f6ad55' },
 { key: 'fifty', threshold: 50, icon: '🏆', label: 'Elite', color: '#fc8181' },
@@ -132,7 +132,7 @@ return (
 </div>
 
 {/* Hero card */}
-<div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '18px', padding: '24px 20px', marginBottom: '14px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 6px 24px rgba(102,126,234,0.4)' }}>
+<div style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', borderRadius: '18px', padding: '24px 20px', marginBottom: '14px', textAlign: 'center', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 6px 24px rgba(5,150,105,0.4)' }}>
 <div style={{ position: 'absolute', top: '-30px', left: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
 <div style={{ position: 'absolute', bottom: '-20px', right: '-10px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
 <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', margin: '0 auto 10px', position: 'relative' }}>

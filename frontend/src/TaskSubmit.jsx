@@ -77,14 +77,14 @@ return (
 {/* Task reward badge */}
 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
 <span style={{ fontSize: '0.82rem', color: '#4a5568', flex: 1 }}>{activeTask.description || 'Complete the task and submit your proof below.'}</span>
-<span style={{ background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>{activeTask.reward} π</span>
+<span style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>{activeTask.reward} π</span>
 </div>
 
 {/* Prominent task link — so users can reach it easily while doing the task */}
 {activeTask.link && /^https?:\/\//i.test(activeTask.link) && (
 <button
 onClick={() => openExternalLink(activeTask.link)}
-style={{ width: '100%', backgroundColor: '#5a67d8', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.9rem', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', boxShadow: '0 3px 10px rgba(90,103,216,0.3)' }}>
+style={{ width: '100%', backgroundColor: '#047857', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.9rem', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', boxShadow: '0 3px 10px rgba(4,120,87,0.3)' }}>
 🔗 Open Task Link
 </button>
 )}
@@ -117,7 +117,7 @@ style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRad
 placeholder="or paste image URL (Imgur, ImgBB, etc.)"
 style={{ width: '100%', marginTop: '7px', padding: '8px 12px', boxSizing: 'border-box', fontSize: '0.79rem', borderRadius: '8px', border: '1.5px solid #e2e8f0', color: '#4a5568', outline: 'none' }} />
 {proofFileUrl.trim() && (
-<div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#667eea', fontWeight: '600' }}>✓ Image URL set</div>
+<div style={{ marginTop: '6px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Image URL set</div>
 )}
 </div>
 
@@ -132,7 +132,7 @@ style={{ width: '100%', marginTop: '7px', padding: '8px 12px', boxSizing: 'borde
 <button
 onClick={handleSubmit}
 disabled={!isHuman || sending}
-style={{ width: '100%', marginTop: '6px', backgroundColor: (!isHuman || sending) ? '#a0aec0' : '#667eea', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: (!isHuman || sending) ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}
+style={{ width: '100%', marginTop: '6px', backgroundColor: (!isHuman || sending) ? '#a0aec0' : '#059669', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: (!isHuman || sending) ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}
 >
 {sending ? '⏳ Submitting…' : '✓ Submit Work'}
 </button>

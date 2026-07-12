@@ -18,7 +18,7 @@ export default function PayoutHistory({ onBack }) {
         <h2 style={{ margin: 0 }}>&#128220; Payout History</h2>
       </div>
       {history !== null && (
-        <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' }}>
+        <div style={{ background: 'linear-gradient(135deg, #059669, #047857)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' }}>
           <div style={{ fontSize: '0.85rem', opacity: 0.85 }}>Total Earned</div>
           <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{Number(total).toFixed(2)} &#960;</div>
           <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{history.length} submissions</div>
