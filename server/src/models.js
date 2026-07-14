@@ -251,6 +251,28 @@ const featureFlagSchema = new Schema(
   { timestamps: true }
 );
 
+/* ── Platform Settings ────────────────────────────────────────────
+   Singleton document (fixed _id) holding the knobs that used to be
+   hardcoded/env-only: platform fee rate, reward/slot limits for task
+   posting, and the auto-review rejection-rate threshold. Any field left
+   unset (null) falls back to the original hardcoded default — see
+   getPlatformSettings() in index.js — so this doc is safe to leave
+   completely empty. */
+const platformSettingsSchema = new Schema(
+  {
+    _id: { type: String, default: 'global' },
+    feeRate: { type: Number, default: null },              // fraction, e.g. 0.05 = 5%
+    minRewardMicroPi: { type: Number, default: null },
+    maxRewardMicroPi: { type: Number, default: null },      // null = no cap
+    minSlots: { type: Number, default: null },
+    maxSlots: { type: Number, default: null },               // null = no cap
+    autoApproveRejectionRateThreshold: { type: Number, default: null }, // fraction, e.g. 0.35
+    autoApproveMinDecisions: { type: Number, default: null },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true }
+);
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
@@ -260,3 +282,4 @@ export const PlatformLedger = mongoose.model('PlatformLedger', platformLedgerSch
 export const Announcement = mongoose.model('Announcement', announcementSchema);
 export const Banner = mongoose.model('Banner', bannerSchema);
 export const FeatureFlag = mongoose.model('FeatureFlag', featureFlagSchema);
+export const PlatformSettings = mongoose.model('PlatformSettings', platformSettingsSchema);

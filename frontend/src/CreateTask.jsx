@@ -1,7 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { createTask, payForTaskFunding } from './piClient';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createTask, payForTaskFunding, fetchSettings } from './piClient';
 
-const FEE_RATE = 0.05; // display only — server recalculates authoritatively
+// Display-only defaults — used until the real settings load (or if that
+// fetch fails), so the form behaves exactly as it always did in the
+// meantime. The server recalculates authoritatively regardless.
+const DEFAULT_SETTINGS = { feeRate: 0.05, minRewardPi: 0.01, maxRewardPi: null, minSlots: 1, maxSlots: null };
 
 // Common countries for targeting. Code = ISO alpha-2 (what the server stores).
 const COUNTRIES = [
@@ -39,14 +42,19 @@ const [requireScreenshot, setRequireScreenshot] = useState(false);
 const [requireManualReview, setRequireManualReview] = useState(false);
 const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
+const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+
+useEffect(() => {
+  fetchSettings().then((s) => s && setSettings(s)).catch(() => {});
+}, []);
 
 const breakdown = useMemo(() => {
 const r = parseFloat(reward) || 0;
 const s = parseInt(slots, 10) || 0;
 const pool = r * s;
-const fee = pool * FEE_RATE;
+const fee = pool * settings.feeRate;
 return { pool, fee, total: pool + fee };
-}, [reward, slots]);
+}, [reward, slots, settings.feeRate]);
 
 const handleSubmit = async (e) => {
 e.preventDefault();
@@ -103,12 +111,12 @@ style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
 <div>
 <label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>REWARD PER WORKER</label>
-<input type="number" step="0.01" min="0.01" value={reward} onChange={(e) => setReward(e.target.value)}
-placeholder="0.10 π" required style={inputStyle} />
+<input type="number" step="0.01" min={settings.minRewardPi} max={settings.maxRewardPi || undefined} value={reward} onChange={(e) => setReward(e.target.value)}
+placeholder={`${settings.minRewardPi} π`} required style={inputStyle} />
 </div>
 <div>
 <label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>WORKER SLOTS</label>
-<input type="number" min="1" max="1000" value={slots} onChange={(e) => setSlots(e.target.value)}
+<input type="number" min={settings.minSlots} max={settings.maxSlots || 1000} value={slots} onChange={(e) => setSlots(e.target.value)}
 placeholder="10" required style={inputStyle} />
 </div>
 </div>
@@ -184,7 +192,7 @@ placeholder="10" required style={inputStyle} />
 <strong style={{ color: '#2d3748' }}>{breakdown.pool.toFixed(4)} π</strong>
 </div>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#718096', fontSize: '0.8rem' }}>
-<span>Platform hosting fee (5%)</span>
+<span>Platform hosting fee ({(settings.feeRate * 100).toFixed(1)}%)</span>
 <span>{breakdown.fee.toFixed(4)} π</span>
 </div>
 <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '6px 0' }} />

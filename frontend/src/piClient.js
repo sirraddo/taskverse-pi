@@ -242,6 +242,11 @@ export const setFlagEnabled = (key, enabled) =>
 export const deleteFlag = (key) =>
   api(`/api/admin/flags/${encodeURIComponent(key)}`, undefined, 'DELETE');
 
+/* ── Platform settings (fee rate, reward/slot limits, auto-approve thresholds) ── */
+export const fetchSettings = () => api('/api/settings');
+export const fetchAdminSettings = () => api('/api/admin/settings');
+export const updateSettings = (patch) => api('/api/admin/settings', patch, 'PATCH');
+
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
  * (16:7 by default) instead of a square, and keeps a slightly larger JPEG

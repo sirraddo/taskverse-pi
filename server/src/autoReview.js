@@ -90,6 +90,11 @@ export function evaluateSubmission({
   rewardMicroPi,
   requireScreenshot = false,
   requireManualReview = false,
+  // Admin-tunable via Admin → Settings (Platform Settings). Defaults match
+  // the original hardcoded policy exactly, so callers that don't pass these
+  // behave identically to before this became configurable.
+  rejectionRateThreshold = 0.35,
+  minDecisionsForRejectionCheck = 5,
 }) {
   const reasons = [];
   const flags   = [];
@@ -134,7 +139,7 @@ export function evaluateSubmission({
 
   const total = worker.approvedCount + worker.rejectedCount;
   const rejectionRate = total === 0 ? 0 : worker.rejectedCount / total;
-  if (rejectionRate >= 0.35 && total >= 5) {
+  if (rejectionRate >= rejectionRateThreshold && total >= minDecisionsForRejectionCheck) {
     flags.push('High rejection rate (' + (rejectionRate * 100).toFixed(0) + '%) — ' + total + ' total decisions');
   }
 

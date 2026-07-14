@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -38,6 +38,31 @@ async function lookupIpCountry(ip) {
 }
 
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
+
+// Original hardcoded defaults, preserved exactly — used for any field the
+// admin hasn't overridden via Admin → Settings. A completely empty
+// PlatformSettings doc reproduces the app's behavior before this feature
+// existed, byte for byte.
+const SETTINGS_DEFAULTS = {
+  feeRate: FEE_RATE,
+  minRewardMicroPi: 10_000,   // 0.01 π
+  maxRewardMicroPi: null,     // no cap
+  minSlots: 1,
+  maxSlots: null,             // no cap
+  autoApproveRejectionRateThreshold: 0.35,
+  autoApproveMinDecisions: 5,
+};
+
+async function getPlatformSettings() {
+  const row = await PlatformSettings.findById('global').lean();
+  const out = { ...SETTINGS_DEFAULTS };
+  if (row) {
+    for (const k of Object.keys(SETTINGS_DEFAULTS)) {
+      if (row[k] !== null && row[k] !== undefined) out[k] = row[k];
+    }
+  }
+  return out;
+}
 
 // Hosts we accept proof screenshots from. The app uploads to ImgBB and sends
 // back the resulting URL; anything else is rejected so workers can't pass off a
@@ -179,11 +204,20 @@ app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), a
     const { title, description = '', rewardPi, slots } = req.body;
     const rewardMicro = microPi(rewardPi);
     const slotCount = parseInt(slots, 10);
-    if (!title?.trim() || !(rewardMicro >= 10_000) || !(slotCount >= 1)) {
-      return res.status(400).json({ error: 'Valid title, reward (>=0.01pi) and slots required' });
+    const settings = await getPlatformSettings();
+    if (!title?.trim() || !(rewardMicro >= settings.minRewardMicroPi) || !(slotCount >= settings.minSlots)) {
+      return res.status(400).json({
+        error: `Valid title, reward (>=${toPi(settings.minRewardMicroPi)}pi) and slots (>=${settings.minSlots}) required`,
+      });
+    }
+    if (settings.maxRewardMicroPi && rewardMicro > settings.maxRewardMicroPi) {
+      return res.status(400).json({ error: `Reward per slot can't exceed ${toPi(settings.maxRewardMicroPi)}pi.` });
+    }
+    if (settings.maxSlots && slotCount > settings.maxSlots) {
+      return res.status(400).json({ error: `Slots can't exceed ${settings.maxSlots}.` });
     }
     const rewardPool = rewardMicro * slotCount;
-    const fee = Math.round(rewardPool * FEE_RATE);
+    const fee = Math.round(rewardPool * settings.feeRate);
     const gross = rewardPool + fee;
     const task = await Task.create({
       title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
@@ -196,7 +230,7 @@ app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), a
     });
     res.status(201).json({
       taskId: task._id, amountToPay: toPi(gross),
-      breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: FEE_RATE },
+      breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: settings.feeRate },
     });
   } catch (err) { next(err); }
 });
@@ -584,6 +618,7 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
           Submission.exists({ worker: worker._id, proofFileUrl }),
         ])
       : [false, false];
+    const settings = await getPlatformSettings();
     const { verdict, reasons } = evaluateSubmission({
       proofText, proofFileUrl,
       isDuplicateImage: Boolean(isDuplicateImage),
@@ -591,6 +626,8 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
       worker, rewardMicroPi: task.rewardMicroPi,
       requireScreenshot: Boolean(task.requireScreenshot),
       requireManualReview: Boolean(task.requireManualReview),
+      rejectionRateThreshold: settings.autoApproveRejectionRateThreshold,
+      minDecisionsForRejectionCheck: settings.autoApproveMinDecisions,
     });
     if (verdict === 'auto_reject') {
       return res.status(422).json({ error: 'Submission rejected by quality check', reasons });
@@ -746,9 +783,15 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
     const { title, description = '', rewardPi, slots } = req.body;
     const rewardMicro = microPi(rewardPi);
     const slotCount = parseInt(slots, 10);
-    if (!title?.trim() || !(rewardMicro >= 10_000) || !(slotCount >= 1)) {
-      return res.status(400).json({ error: 'Valid title, reward (≥0.01π) and slots required' });
+    const settings = await getPlatformSettings();
+    if (!title?.trim() || !(rewardMicro >= settings.minRewardMicroPi) || !(slotCount >= settings.minSlots)) {
+      return res.status(400).json({
+        error: `Valid title, reward (≥${toPi(settings.minRewardMicroPi)}π) and slots (≥${settings.minSlots}) required`,
+      });
     }
+    // Note: the max reward/slot caps intentionally don't apply here — those
+    // exist to bound public posters' fee exposure, and admin-sponsored
+    // campaigns are fee-free by design (see platformFeeMicroPi: 0 below).
     const rewardPool = rewardMicro * slotCount;
     const task = await Task.create({
       title: title.trim(),
@@ -1192,6 +1235,89 @@ app.delete('/api/admin/flags/:key', requireAuth, requireAdmin, async (req, res, 
   try {
     await FeatureFlag.findOneAndDelete({ key: String(req.params.key || '').trim() });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Platform settings ────────────────────────────────────────────
+   Admin-editable fee rate, reward/slot limits, and auto-approve
+   thresholds — previously hardcoded/env-only, now live-tunable. */
+
+// Any signed-in user: display-friendly current values, for CreateTask to
+// show an accurate fee estimate and input bounds instead of guessing.
+app.get('/api/settings', requireAuth, async (req, res, next) => {
+  try {
+    const s = await getPlatformSettings();
+    res.json({
+      feeRate: s.feeRate,
+      minRewardPi: toPi(s.minRewardMicroPi),
+      maxRewardPi: s.maxRewardMicroPi ? toPi(s.maxRewardMicroPi) : null,
+      minSlots: s.minSlots,
+      maxSlots: s.maxSlots,
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: full current values (including auto-approve thresholds, which
+// aren't relevant to show a regular user) plus whether each has been
+// explicitly overridden or is still using the built-in default.
+app.get('/api/admin/settings', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const row = await PlatformSettings.findById('global').lean();
+    const s = await getPlatformSettings();
+    res.json({
+      settings: s,
+      overridden: Object.fromEntries(
+        Object.keys(SETTINGS_DEFAULTS).map((k) => [k, Boolean(row && row[k] !== null && row[k] !== undefined)])
+      ),
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: update one or more settings. Sending a field as null resets it to
+// the built-in default (removes the override) rather than deleting the doc.
+app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const updates = {};
+
+    const setNum = (key, { min, max, integer = false } = {}) => {
+      if (!(key in body)) return null;
+      if (body[key] === null || body[key] === '') { updates[key] = null; return null; }
+      const n = Number(body[key]);
+      if (!Number.isFinite(n)) return `${key} must be a number.`;
+      if (integer && !Number.isInteger(n)) return `${key} must be a whole number.`;
+      if (min !== undefined && n < min) return `${key} must be at least ${min}.`;
+      if (max !== undefined && n > max) return `${key} must be at most ${max}.`;
+      updates[key] = n;
+      return null;
+    };
+
+    let error =
+      setNum('feeRate', { min: 0, max: 0.5 }) ||
+      setNum('minRewardMicroPi', { min: 1 }) ||
+      setNum('maxRewardMicroPi', { min: 1 }) ||
+      setNum('minSlots', { min: 1, integer: true }) ||
+      setNum('maxSlots', { min: 1, integer: true }) ||
+      setNum('autoApproveRejectionRateThreshold', { min: 0, max: 1 }) ||
+      setNum('autoApproveMinDecisions', { min: 1, integer: true });
+    if (error) return res.status(400).json({ error });
+
+    // Cross-field sanity: if both min and max are ending up set, min <= max.
+    const merged = { ...(await getPlatformSettings()), ...updates };
+    if (merged.maxRewardMicroPi && merged.minRewardMicroPi > merged.maxRewardMicroPi) {
+      return res.status(400).json({ error: 'Min reward cannot be greater than max reward.' });
+    }
+    if (merged.maxSlots && merged.minSlots > merged.maxSlots) {
+      return res.status(400).json({ error: 'Min slots cannot be greater than max slots.' });
+    }
+
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update.' });
+
+    const admin = await currentUser(req);
+    await PlatformSettings.findByIdAndUpdate(
+      'global', { $set: { ...updates, updatedBy: admin._id } }, { upsert: true }
+    );
+    res.json({ ok: true, settings: await getPlatformSettings() });
   } catch (err) { next(err); }
 });
 
