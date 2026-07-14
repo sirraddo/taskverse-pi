@@ -314,6 +314,39 @@ const platformSettingsSchema = new Schema(
   { timestamps: true }
 );
 
+/* ── Support tickets ──────────────────────────────────────────────
+   In-app contact channel — previously users had no way to reach the
+   operator except outside the app. A ticket is a small threaded
+   conversation: the user opens it with a message, the admin replies from
+   the Support tab, either side can keep replying, and the admin closes it
+   when resolved. Status auto-flips: admin reply -> 'answered', a user (or
+   admin) reply on a closed ticket -> 'open' again. */
+const supportMessageSchema = new Schema(
+  {
+    from: { type: String, enum: ['user', 'admin'], required: true },
+    body: { type: String, required: true, trim: true, maxlength: 3000 },
+  },
+  { timestamps: true }
+);
+
+const supportTicketSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    subject: { type: String, required: true, trim: true, maxlength: 120 },
+    category: { type: String, enum: ['payment', 'task', 'account', 'other'], default: 'other' },
+    // Optional link to a Payment.refId the user is asking about — lets the
+    // admin jump straight to Admin -> Transactions for that reference.
+    refId: { type: String, default: '' },
+    status: { type: String, enum: ['open', 'answered', 'closed'], default: 'open', index: true },
+    messages: [supportMessageSchema],
+    // Flips true whenever the admin posts a reply, cleared when the user
+    // opens the ticket — powers a simple unread badge for the user.
+    hasUnreadForUser: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+supportTicketSchema.index({ updatedAt: -1 });
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
@@ -324,3 +357,4 @@ export const Announcement = mongoose.model('Announcement', announcementSchema);
 export const Banner = mongoose.model('Banner', bannerSchema);
 export const FeatureFlag = mongoose.model('FeatureFlag', featureFlagSchema);
 export const PlatformSettings = mongoose.model('PlatformSettings', platformSettingsSchema);
+export const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);

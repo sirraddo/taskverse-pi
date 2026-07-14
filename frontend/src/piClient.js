@@ -262,6 +262,22 @@ export const fetchAdminTransactions = (params = {}) => {
   return api(`/api/admin/transactions?${q.toString()}`);
 };
 
+/* ── Support tickets (user-facing) ── */
+export const fetchMyTickets = () => api('/api/support/tickets');
+export const createTicket = (payload) => api('/api/support/tickets', payload);
+export const fetchMyTicket = (id) => api(`/api/support/tickets/${id}`);
+export const replyToTicket = (id, message) => api(`/api/support/tickets/${id}/reply`, { message });
+
+/* ── Support tickets (admin) ── */
+export const fetchAdminTickets = (params = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+  return api(`/api/admin/support/tickets?${q.toString()}`);
+};
+export const fetchAdminTicket = (id) => api(`/api/admin/support/tickets/${id}`);
+export const replyToTicketAsAdmin = (id, message) => api(`/api/admin/support/tickets/${id}/reply`, { message });
+export const setTicketStatus = (id, status) => api(`/api/admin/support/tickets/${id}`, { status }, 'PATCH');
+
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
  * (16:7 by default) instead of a square, and keeps a slightly larger JPEG

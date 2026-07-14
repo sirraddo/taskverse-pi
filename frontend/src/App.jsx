@@ -14,6 +14,7 @@ import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
+import SupportInbox from './SupportInbox';
 import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
 
 // Short country list for the one-time prompt (mirrors profile options).
@@ -239,6 +240,7 @@ return (
 {screen === 'terms' && <TermsOfService onBack={() => setScreen(null)} />}
 {screen === 'howitworks' && <HowItWorks onBack={() => setScreen(null)} />}
 {screen === 'myTasks' && <MyPostedTasks tasks={user.postedTasks || []} onBack={() => setScreen(null)} />}
+{screen === 'support' && <SupportInbox onBack={() => setScreen(null)} />}
 </div>
 )}
 
@@ -446,6 +448,7 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 <button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📌 My Tasks</button>
 </div>
 <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: '#b0bac8' }}>
+<span onClick={() => setScreen('support')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>🎧 Support</span>
 <span onClick={() => setScreen('howitworks')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>How It Works</span>
 <span onClick={() => setScreen('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy</span>
 <span onClick={() => setScreen('terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>

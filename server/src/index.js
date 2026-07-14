@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -1410,6 +1410,77 @@ app.get('/api/admin/transactions', requireAuth, requireAdmin, async (req, res, n
   } catch (err) { next(err); }
 });
 
+/* ── Admin: support tickets ───────────────────────────────────────
+   The other side of the in-app contact channel above. */
+
+app.get('/api/admin/support/tickets', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const filter = {};
+    if (req.query.status && ['open', 'answered', 'closed'].includes(req.query.status)) filter.status = req.query.status;
+
+    const [rows, total] = await Promise.all([
+      SupportTicket.find(filter)
+        .populate('user', 'username piUid')
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * limit).limit(limit)
+        .select('subject category status refId user updatedAt createdAt messages')
+        .lean(),
+      SupportTicket.countDocuments(filter),
+    ]);
+    // Open tickets first regardless of alphabetical sort above, then answered, then closed.
+    const order = { open: 0, answered: 1, closed: 2 };
+    rows.sort((a, b) => (order[a.status] - order[b.status]) || (new Date(b.updatedAt) - new Date(a.updatedAt)));
+
+    res.json({
+      tickets: rows.map((t) => ({
+        id: t._id, subject: t.subject, category: t.category, status: t.status, refId: t.refId,
+        user: t.user ? { id: t.user._id, username: t.user.username, piUid: t.user.piUid } : null,
+        messageCount: t.messages.length, lastMessage: t.messages[t.messages.length - 1]?.body || '',
+        updatedAt: t.updatedAt, createdAt: t.createdAt,
+      })),
+      total, page, limit, hasMore: page * limit < total,
+    });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const ticket = await SupportTicket.findById(req.params.id).populate('user', 'username piUid').lean();
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({
+      id: ticket._id, subject: ticket.subject, category: ticket.category, status: ticket.status,
+      refId: ticket.refId, createdAt: ticket.createdAt,
+      user: ticket.user ? { id: ticket.user._id, username: ticket.user.username, piUid: ticket.user.piUid } : null,
+      messages: ticket.messages.map((m) => ({ from: m.from, body: m.body, createdAt: m.createdAt })),
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/admin/support/tickets/:id/reply', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const body = String(req.body?.message || '').trim().slice(0, 3000);
+    if (!body) return res.status(400).json({ error: 'Message required.' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    ticket.messages.push({ from: 'admin', body });
+    ticket.status = 'answered';
+    ticket.hasUnreadForUser = true;
+    await ticket.save();
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+app.patch('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!['open', 'closed'].includes(req.body?.status)) return res.status(400).json({ error: 'status must be open or closed.' });
+    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, { $set: { status: req.body.status } }, { new: true });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ ok: true, status: ticket.status });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: user list & search ────────────────────────────────────
    Replaces pasting a raw piUid into a box blindly — browse/search users,
    then act on the row directly (ban, unblock avatar, look up payments). */
@@ -1499,6 +1570,70 @@ app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) =
       { new: true }
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Support: user-facing tickets ─────────────────────────────────
+   In-app contact channel. A user opens a ticket with a message, can keep
+   replying, and sees the admin's replies here — no need to leave the app. */
+
+app.get('/api/support/tickets', requireAuth, async (req, res, next) => {
+  try {
+    const tickets = await SupportTicket.find({ user: req.session.userId })
+      .sort({ updatedAt: -1 }).limit(50)
+      .select('subject category status refId hasUnreadForUser updatedAt createdAt messages')
+      .lean();
+    res.json({
+      tickets: tickets.map((t) => ({
+        id: t._id, subject: t.subject, category: t.category, status: t.status, refId: t.refId,
+        hasUnreadForUser: t.hasUnreadForUser, messageCount: t.messages.length,
+        lastMessage: t.messages[t.messages.length - 1]?.body || '',
+        updatedAt: t.updatedAt, createdAt: t.createdAt,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/support/tickets', requireAuth, async (req, res, next) => {
+  try {
+    const subject = String(req.body?.subject || '').trim().slice(0, 120);
+    const body = String(req.body?.message || '').trim().slice(0, 3000);
+    const category = ['payment', 'task', 'account', 'other'].includes(req.body?.category) ? req.body.category : 'other';
+    const refId = String(req.body?.refId || '').trim().slice(0, 40);
+    if (!subject || !body) return res.status(400).json({ error: 'Subject and message are required.' });
+    const ticket = await SupportTicket.create({
+      user: req.session.userId, subject, category, refId,
+      messages: [{ from: 'user', body }],
+    });
+    res.status(201).json({ ok: true, id: ticket._id });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/support/tickets/:id', requireAuth, async (req, res, next) => {
+  try {
+    const ticket = await SupportTicket.findOne({ _id: req.params.id, user: req.session.userId }).lean();
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (ticket.hasUnreadForUser) {
+      await SupportTicket.updateOne({ _id: ticket._id }, { $set: { hasUnreadForUser: false } });
+    }
+    res.json({
+      id: ticket._id, subject: ticket.subject, category: ticket.category, status: ticket.status,
+      refId: ticket.refId, createdAt: ticket.createdAt,
+      messages: ticket.messages.map((m) => ({ from: m.from, body: m.body, createdAt: m.createdAt })),
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/support/tickets/:id/reply', requireAuth, async (req, res, next) => {
+  try {
+    const body = String(req.body?.message || '').trim().slice(0, 3000);
+    if (!body) return res.status(400).json({ error: 'Message required.' });
+    const ticket = await SupportTicket.findOne({ _id: req.params.id, user: req.session.userId });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    ticket.messages.push({ from: 'user', body });
+    ticket.status = 'open'; // a user reply always puts it back in the admin's queue
+    await ticket.save();
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
