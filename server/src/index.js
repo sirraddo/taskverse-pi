@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -957,6 +957,119 @@ app.delete('/api/admin/announcements/:id', requireAuth, requireAdmin, async (req
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
     await Announcement.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Banners ──────────────────────────────────────────────────────
+   Promo carousel on the home feed — used to cross-promote the operator's
+   own apps (e.g. Zappi NG). Several can be active at once (unlike
+   Announcements), ordered by `order`. Image stored inline as base64,
+   same pattern as User.avatar, so no external image host is needed. */
+
+// Max stored banner image size. Wider/taller than an avatar (it's a promo
+// graphic, not a thumbnail) but still well under the 1mb JSON body limit.
+const BANNER_IMAGE_MAX_CHARS = 400_000;
+const BANNER_IMAGE_ALLOWED = /^data:image\/(jpeg|png|webp);base64,/;
+
+function validateBannerImage(image) {
+  if (typeof image !== 'string' || !image) return 'Banner image is required.';
+  if (!BANNER_IMAGE_ALLOWED.test(image)) return 'Image must be a JPEG, PNG or WebP.';
+  if (image.length > BANNER_IMAGE_MAX_CHARS) return 'Image too large. Please choose a smaller/more compressed image.';
+  const b64 = image.slice(image.indexOf(',') + 1);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return 'Malformed image data.';
+  return null;
+}
+
+// Worker: active banners for the home carousel, in display order.
+app.get('/api/banners', requireAuth, async (req, res, next) => {
+  try {
+    const list = await Banner.find({ active: true })
+      .sort({ order: 1, createdAt: -1 })
+      .select('image linkUrl linkLabel')
+      .lean();
+    res.json({
+      banners: list.map((b) => ({
+        id: b._id, image: b.image, linkUrl: b.linkUrl, linkLabel: b.linkLabel || '',
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: list all banners (active + inactive) for management.
+app.get('/api/admin/banners', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const list = await Banner.find().sort({ order: 1, createdAt: -1 }).lean();
+    res.json({
+      banners: list.map((b) => ({
+        id: b._id, title: b.title, image: b.image, linkUrl: b.linkUrl,
+        linkLabel: b.linkLabel || '', active: b.active, order: b.order, createdAt: b.createdAt,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: create a banner.
+app.post('/api/admin/banners', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const title = String(req.body?.title || '').trim();
+    const linkUrl = String(req.body?.linkUrl || '').trim();
+    const linkLabel = String(req.body?.linkLabel || '').trim().slice(0, 40);
+    const order = Number.isFinite(Number(req.body?.order)) ? Number(req.body.order) : 0;
+    const image = req.body?.image;
+
+    if (!title) return res.status(400).json({ error: 'Title is required.' });
+    if (title.length > 80) return res.status(400).json({ error: 'Title is too long (max 80).' });
+    if (!linkUrl || !/^https?:\/\//i.test(linkUrl)) {
+      return res.status(400).json({ error: 'Link must start with http:// or https://' });
+    }
+    const imgErr = validateBannerImage(image);
+    if (imgErr) return res.status(415).json({ error: imgErr });
+
+    const admin = await currentUser(req);
+    const b = await Banner.create({
+      title, image, linkUrl, linkLabel, order, active: true, createdBy: admin._id,
+    });
+    res.status(201).json({ ok: true, id: b._id });
+  } catch (err) { next(err); }
+});
+
+// Admin: update a banner (toggle active, reorder, or edit fields).
+app.patch('/api/admin/banners/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const updates = {};
+    if (req.body?.active !== undefined) updates.active = Boolean(req.body.active);
+    if (req.body?.order !== undefined && Number.isFinite(Number(req.body.order))) updates.order = Number(req.body.order);
+    if (req.body?.title !== undefined) {
+      const title = String(req.body.title).trim();
+      if (!title || title.length > 80) return res.status(400).json({ error: 'Title must be 1-80 characters.' });
+      updates.title = title;
+    }
+    if (req.body?.linkUrl !== undefined) {
+      const linkUrl = String(req.body.linkUrl).trim();
+      if (!linkUrl || !/^https?:\/\//i.test(linkUrl)) {
+        return res.status(400).json({ error: 'Link must start with http:// or https://' });
+      }
+      updates.linkUrl = linkUrl;
+    }
+    if (req.body?.linkLabel !== undefined) updates.linkLabel = String(req.body.linkLabel).trim().slice(0, 40);
+    if (req.body?.image !== undefined) {
+      const imgErr = validateBannerImage(req.body.image);
+      if (imgErr) return res.status(415).json({ error: imgErr });
+      updates.image = req.body.image;
+    }
+
+    const b = await Banner.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!b) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+app.delete('/api/admin/banners/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    await Banner.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

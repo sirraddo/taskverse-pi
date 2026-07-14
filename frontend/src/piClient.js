@@ -225,3 +225,53 @@ export const setAnnouncementActive = (id, active) =>
   api(`/api/admin/announcements/${id}`, { active }, 'PATCH');
 export const deleteAnnouncement = (id) =>
   api(`/api/admin/announcements/${id}`, undefined, 'DELETE');
+
+/* ── Banners (promo carousel, e.g. cross-promoting Zappi NG) ── */
+export const fetchBanners = () => api('/api/banners');
+export const fetchAdminBanners = () => api('/api/admin/banners');
+export const createBanner = (payload) => api('/api/admin/banners', payload);
+export const updateBanner = (id, patch) => api(`/api/admin/banners/${id}`, patch, 'PATCH');
+export const deleteBanner = (id) => api(`/api/admin/banners/${id}`, undefined, 'DELETE');
+
+/**
+ * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
+ * (16:7 by default) instead of a square, and keeps a slightly larger JPEG
+ * since these are full-width promo graphics rather than small avatars.
+ */
+export function resizeBannerImageToDataUrl(file, width = 960, height = 420, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      return reject(new Error('Please choose an image file.'));
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a valid image.'));
+      img.onload = () => {
+        try {
+          // Cover-fit: crop to the target aspect ratio, then scale to fill.
+          const targetRatio = width / height;
+          const srcRatio = img.width / img.height;
+          let sx, sy, sw, sh;
+          if (srcRatio > targetRatio) {
+            sh = img.height; sw = sh * targetRatio;
+            sx = (img.width - sw) / 2; sy = 0;
+          } else {
+            sw = img.width; sh = sw / targetRatio;
+            sx = 0; sy = (img.height - sh) / 2;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          reject(new Error('Could not process that image.'));
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}

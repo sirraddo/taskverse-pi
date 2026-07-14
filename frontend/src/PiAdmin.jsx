@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminAnnouncements from './AdminAnnouncements';
+import AdminBanners from './AdminBanners';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
 
 const inputStyle = {
@@ -662,6 +663,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       </div>
 
       <AdminAnnouncements notify={notify} />
+
+      <AdminBanners notify={notify} />
 
       {/* Moderation: remove an inappropriate profile picture */}
       <div style={{ backgroundColor: '#fff5f5', border: '1.5px solid #fed7d7', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>

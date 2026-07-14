@@ -1,4 +1,5 @@
 import AnnouncementBanner from './AnnouncementBanner';
+import PromoBanner from './PromoBanner';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import HowItWorks from './HowItWorks';
 import PrivacyPolicy from './PrivacyPolicy';
@@ -275,6 +276,9 @@ return (
 
 {/* Admin announcement — shown when there's something to say. */}
 <AnnouncementBanner />
+
+{/* Promo carousel — cross-promotes the operator's other apps (e.g. Zappi NG). */}
+<PromoBanner />
 
 {/* One-time country prompt — shows until the user sets a country.
     Helps them see country-targeted tasks; dismissable for the session. */}

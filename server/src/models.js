@@ -213,6 +213,28 @@ const announcementSchema = new Schema(
   { timestamps: true }
 );
 
+/* ── Banners ──────────────────────────────────────────────────────
+   Admin-posted promo banners shown in a carousel on the home feed —
+   used to cross-promote the operator's own apps (e.g. Zappi NG). Unlike
+   Announcements, several can be active at once; `order` controls the
+   display sequence. Image is stored inline as base64 (same pattern as
+   User.avatar) so there's no external image host / API key to manage. */
+const bannerSchema = new Schema(
+  {
+    // Admin-facing label only — never shown to users.
+    title: { type: String, required: true, trim: true, maxlength: 80 },
+    // data:image/(jpeg|png|webp);base64,... — validated + size-capped at the route.
+    image: { type: String, required: true },
+    linkUrl: { type: String, required: true, trim: true },
+    linkLabel: { type: String, default: '', trim: true, maxlength: 40 },
+    active: { type: Boolean, default: true, index: true },
+    // Lower sorts first. Ties break by newest-first.
+    order: { type: Number, default: 0 },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true }
+);
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
@@ -220,3 +242,4 @@ export const Dispute = mongoose.model('Dispute', disputeSchema);
 export const Payment = mongoose.model('Payment', paymentSchema);
 export const PlatformLedger = mongoose.model('PlatformLedger', platformLedgerSchema);
 export const Announcement = mongoose.model('Announcement', announcementSchema);
+export const Banner = mongoose.model('Banner', bannerSchema);
