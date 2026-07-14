@@ -1321,6 +1321,62 @@ app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+/* ── Admin: user list & search ────────────────────────────────────
+   Replaces pasting a raw piUid into a box blindly — browse/search users,
+   then act on the row directly (ban, unblock avatar, look up payments). */
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const filter = {};
+    if (q) {
+      const rx = new RegExp(escapeRegex(q), 'i');
+      filter.$or = [{ username: rx }, { piUid: rx }];
+    }
+    if (req.query.banned === 'true') filter.isBanned = true;
+    if (req.query.banned === 'false') filter.isBanned = false;
+
+    const [rows, total] = await Promise.all([
+      User.find(filter)
+        .select('piUid username balanceMicroPi approvedCount rejectedCount isBanned avatarBlocked country lastLoginAt createdAt')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    res.json({
+      users: rows.map((u) => ({
+        id: u._id, piUid: u.piUid, username: u.username,
+        balancePi: toPi(u.balanceMicroPi), approvedCount: u.approvedCount, rejectedCount: u.rejectedCount,
+        isBanned: u.isBanned, avatarBlocked: u.avatarBlocked, country: u.country || '',
+        lastLoginAt: u.lastLoginAt, createdAt: u.createdAt,
+      })),
+      total, page, limit, hasMore: page * limit < total,
+    });
+  } catch (err) { next(err); }
+});
+
+// Ban/unban a user by their Mongo _id (from the list above). Banned users
+// can't authenticate (see currentUser()) and are blocked from working tasks.
+app.patch('/api/admin/users/:id/ban', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const banned = Boolean(req.body?.banned);
+    const u = await User.findByIdAndUpdate(req.params.id, { $set: { isBanned: banned } }, { new: true })
+      .select('username isBanned');
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, username: u.username, isBanned: u.isBanned });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: remove an inappropriate avatar ──
    Clears the image and blocks re-upload until an admin unblocks. This is the
    moderation safety valve for user-uploaded pictures. */

@@ -3,6 +3,7 @@ import AdminAnnouncements from './AdminAnnouncements';
 import AdminBanners from './AdminBanners';
 import AdminFlags from './AdminFlags';
 import AdminSettings from './AdminSettings';
+import AdminUsers from './AdminUsers';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
 
 const inputStyle = {
@@ -724,6 +725,12 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
       {tab === 'users' && (
       <>
+      <AdminUsers notify={notify} />
+
+      <p style={{ fontSize: '0.68rem', color: '#a0aec0', margin: '0 0 10px' }}>
+        The tools below still work for a quick lookup when you already know a piUid — the list above covers the same actions plus search.
+      </p>
+
       {/* Moderation: remove an inappropriate profile picture */}
       <div style={{ backgroundColor: '#fff5f5', border: '1.5px solid #fed7d7', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
         <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>

@@ -247,6 +247,14 @@ export const fetchSettings = () => api('/api/settings');
 export const fetchAdminSettings = () => api('/api/admin/settings');
 export const updateSettings = (patch) => api('/api/admin/settings', patch, 'PATCH');
 
+/* ── Admin: user list & search ── */
+export const fetchAdminUsers = (q, page = 1, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (q) params.set('q', q);
+  return api(`/api/admin/users?${params.toString()}`);
+};
+export const setUserBanned = (id, banned) => api(`/api/admin/users/${id}/ban`, { banned }, 'PATCH');
+
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
  * (16:7 by default) instead of a square, and keeps a slightly larger JPEG
