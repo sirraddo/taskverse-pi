@@ -233,6 +233,15 @@ export const createBanner = (payload) => api('/api/admin/banners', payload);
 export const updateBanner = (id, patch) => api(`/api/admin/banners/${id}`, patch, 'PATCH');
 export const deleteBanner = (id) => api(`/api/admin/banners/${id}`, undefined, 'DELETE');
 
+/* ── Feature flags (emergency brake + maintenance mode) ── */
+export const fetchFlags = () => api('/api/flags');
+export const fetchAdminFlags = () => api('/api/admin/flags');
+export const createFlag = (key) => api('/api/admin/flags', { key });
+export const setFlagEnabled = (key, enabled) =>
+  api(`/api/admin/flags/${encodeURIComponent(key)}`, { enabled }, 'PATCH');
+export const deleteFlag = (key) =>
+  api(`/api/admin/flags/${encodeURIComponent(key)}`, undefined, 'DELETE');
+
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
  * (16:7 by default) instead of a square, and keeps a slightly larger JPEG

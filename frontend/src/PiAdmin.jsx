@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminAnnouncements from './AdminAnnouncements';
 import AdminBanners from './AdminBanners';
+import AdminFlags from './AdminFlags';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
 
 const inputStyle = {
@@ -16,6 +17,7 @@ const TABS = [
   { key: 'payouts', label: '💸 Payouts' },
   { key: 'announcements', label: '📢 Announcements' },
   { key: 'banners', label: '🖼️ Banners' },
+  { key: 'flags', label: '🚩 Flags' },
   { key: 'users', label: '👤 Users' },
 ];
 
@@ -708,6 +710,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
       {tab === 'banners' && (
       <AdminBanners notify={notify} />
+      )}
+
+      {tab === 'flags' && (
+      <AdminFlags notify={notify} />
       )}
 
       {tab === 'users' && (

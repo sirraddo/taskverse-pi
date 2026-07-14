@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -95,6 +95,45 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+/* ── Feature flags ──────────────────────────────────────────────
+   Emergency brake for specific actions, plus a global 'maintenance'
+   switch that overrides everything else at once.
+   Fail-open by design, but the safe default differs per flag:
+   - posting / submissions / payouts: no row yet = ALLOWED (enabled=true).
+     A flag nobody has created can never silently break the app.
+   - maintenance: no row yet = NOT active. Since "enabled" here means
+     "the maintenance switch is ON", defaulting a missing row to true
+     would put a freshly-deployed app into maintenance mode with nobody
+     having touched anything — so this one defaults to false instead. */
+const KNOWN_FEATURES = [
+  { key: 'posting', label: 'Task posting', description: 'Users creating new tasks (POST /api/tasks).' },
+  { key: 'submissions', label: 'Task submissions', description: 'Workers submitting proof for a task.' },
+  { key: 'payouts', label: 'A2U payouts', description: 'Approve-and-pay + the background auto-pay scheduler.' },
+  { key: 'maintenance', label: 'Maintenance mode', description: 'When ON, blocks the whole app for non-admins.' },
+];
+
+async function isMaintenanceActive() {
+  const m = await FeatureFlag.findOne({ key: 'maintenance' }).lean();
+  return m ? m.enabled === true : false; // no row = not in maintenance
+}
+
+async function isFeatureEnabled(key) {
+  if (await isMaintenanceActive()) return false; // overrides posting/submissions/payouts
+  const f = await FeatureFlag.findOne({ key }).lean();
+  return f ? f.enabled !== false : true; // no row = allowed
+}
+
+function requireFeature(key, label) {
+  return async (req, res, next) => {
+    try {
+      if (!(await isFeatureEnabled(key))) {
+        return res.status(503).json({ error: `${label || key} is temporarily disabled by the admin. Please try again shortly.` });
+      }
+      next();
+    } catch (err) { next(err); }
+  };
+}
+
 async function currentUser(req) {
   const user = await User.findById(req.session.userId);
   if (!user || user.isBanned) throw Object.assign(new Error('Account unavailable'), { status: 403 });
@@ -134,7 +173,7 @@ app.post('/api/auth/verify', async (req, res, next) => {
 });
 
 /* ── Tasks ── */
-app.post('/api/tasks', requireAuth, async (req, res, next) => {
+app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), async (req, res, next) => {
   try {
     const user = await currentUser(req);
     const { title, description = '', rewardPi, slots } = req.body;
@@ -501,7 +540,7 @@ app.post('/api/payments/incomplete', requireAuth, async (req, res, next) => {
 });
 
 /* ── Submissions ── */
-app.post('/api/tasks/:id/submissions', requireAuth, async (req, res, next) => {
+app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions', 'Task submissions'), async (req, res, next) => {
   try {
     const worker = await currentUser(req);
     const { proofText = '', proofFileUrl: rawProofFileUrl = null } = req.body;
@@ -641,7 +680,7 @@ app.get('/api/admin/queue', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
-app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, async (req, res, next) => {
+app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, requireFeature('payouts', 'Payouts'), async (req, res, next) => {
   try {
     const sub = await Submission.findOneAndUpdate(
       { _id: req.params.id, status: 'pending' }, { status: 'approved' }, { new: true });
@@ -1070,6 +1109,88 @@ app.delete('/api/admin/banners/:id', requireAuth, requireAdmin, async (req, res,
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
     await Banner.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Feature flags admin ────────────────────────────────────────
+   Emergency brake for posting/submissions/payouts, plus a global
+   'maintenance' switch. Mirrors Zappi NG's Flags tab: pick a known
+   feature that doesn't have a flag yet, create it, then toggle it. */
+
+// Everyone signed in: current on/off state for every known feature, plus
+// whether the app is in maintenance mode. Frontend uses this to grey out
+// buttons and show the maintenance splash — always a complete, correct
+// picture even before any flag row exists (see isFeatureEnabled above).
+app.get('/api/flags', requireAuth, async (req, res, next) => {
+  try {
+    const maintenance = await isMaintenanceActive();
+    const [posting, submissions, payouts] = await Promise.all([
+      isFeatureEnabled('posting'), isFeatureEnabled('submissions'), isFeatureEnabled('payouts'),
+    ]);
+    res.json({ flags: { posting, submissions, payouts, maintenance } });
+  } catch (err) { next(err); }
+});
+
+// Admin: full list of known features, each with its current flag (or null if
+// no flag has been created for it yet — i.e. it's using the default).
+app.get('/api/admin/flags', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const rows = await FeatureFlag.find().sort({ key: 1 }).lean();
+    const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+    res.json({
+      features: KNOWN_FEATURES.map((f) => {
+        const row = byKey[f.key];
+        // Default when no row exists yet: 'maintenance' defaults OFF,
+        // everything else defaults ON (allowed) — see isFeatureEnabled above.
+        const defaultEnabled = f.key !== 'maintenance';
+        return {
+          ...f,
+          exists: Boolean(row),
+          enabled: row ? row.enabled : defaultEnabled,
+          updatedAt: row?.updatedAt || null,
+        };
+      }),
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: create a flag row for a known feature. Starts in its normal/safe
+// state — 'maintenance' starts OFF, everything else starts ON (allowed) —
+// so simply creating a row never itself changes behavior; the admin still
+// has to flip it.
+app.post('/api/admin/flags', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const key = String(req.body?.key || '').trim();
+    const known = KNOWN_FEATURES.find((f) => f.key === key);
+    if (!known) return res.status(400).json({ error: 'Unknown feature key.' });
+    const existing = await FeatureFlag.findOne({ key });
+    if (existing) return res.status(409).json({ error: 'That flag already exists.' });
+    const admin = await currentUser(req);
+    await FeatureFlag.create({ key, enabled: key !== 'maintenance', updatedBy: admin._id });
+    res.status(201).json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Admin: toggle a flag on/off.
+app.patch('/api/admin/flags/:key', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const key = String(req.params.key || '').trim();
+    const known = KNOWN_FEATURES.find((f) => f.key === key);
+    if (!known) return res.status(400).json({ error: 'Unknown feature key.' });
+    const enabled = Boolean(req.body?.enabled);
+    const admin = await currentUser(req);
+    const flag = await FeatureFlag.findOneAndUpdate(
+      { key }, { $set: { enabled, updatedBy: admin._id } }, { new: true, upsert: true }
+    );
+    res.json({ ok: true, enabled: flag.enabled });
+  } catch (err) { next(err); }
+});
+
+// Admin: delete a flag row (reverts that feature to its default: enabled).
+app.delete('/api/admin/flags/:key', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    await FeatureFlag.findOneAndDelete({ key: String(req.params.key || '').trim() });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

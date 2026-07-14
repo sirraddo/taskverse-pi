@@ -1,8 +1,22 @@
-import { Submission, Payment, User } from './models.js';
+import { Submission, Payment, User, FeatureFlag } from './models.js';
 import { Task } from './models.js';
 import * as pi from './piPlatform.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Same rule as the HTTP routes in index.js (duplicated here rather than
+// imported, since index.js imports THIS module — importing back would be
+// circular). 'maintenance' row with enabled:true means maintenance mode IS
+// active (no row = not active); 'payouts' row with enabled:false means
+// payouts are paused (no row = allowed). Either one pauses the scheduler.
+async function payoutsCurrentlyEnabled() {
+  const [maint, payouts] = await Promise.all([
+    FeatureFlag.findOne({ key: 'maintenance' }).lean(),
+    FeatureFlag.findOne({ key: 'payouts' }).lean(),
+  ]);
+  if (maint?.enabled === true) return false; // maintenance mode active
+  return payouts ? payouts.enabled !== false : true;
+}
 
 // Idempotency: has any completed payment already covered this submission?
 async function alreadyCovered(subId) {
@@ -356,6 +370,7 @@ export function startAutoPayScheduler({ intervalMs = 90_000, batch = 2 } = {}) {
   const tick = async () => {
     if (_running) return;
     if (Date.now() < _pausedUntil) return;
+    if (!(await payoutsCurrentlyEnabled())) return; // admin has paused payouts or enabled maintenance mode
     _running = true;
     try {
       const r = await runAutoBatch({ limit: batch });

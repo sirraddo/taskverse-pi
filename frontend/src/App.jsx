@@ -1,5 +1,6 @@
 import AnnouncementBanner from './AnnouncementBanner';
 import PromoBanner from './PromoBanner';
+import MaintenancePage from './MaintenancePage';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import HowItWorks from './HowItWorks';
 import PrivacyPolicy from './PrivacyPolicy';
@@ -13,7 +14,7 @@ import UserProfile from './UserProfile';
 import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
-import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry } from './piClient';
+import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
 
 // Short country list for the one-time prompt (mirrors profile options).
 const PROMPT_COUNTRIES = [
@@ -95,6 +96,10 @@ const [searchQuery, setSearchQuery] = useState('');
 const [refreshing, setRefreshing] = useState(false);
 const [countryPromptDismissed, setCountryPromptDismissed] = useState(false);
 const [savingPromptCountry, setSavingPromptCountry] = useState(false);
+// Feature flags (emergency brake + maintenance mode). null until first load;
+// treated as "everything allowed" until then so the app never blocks on a
+// slow/failed flags fetch.
+const [flags, setFlags] = useState(null);
 
 useEffect(() => { try { initPi(); } catch (_) {} }, []);
 
@@ -105,8 +110,9 @@ setTimeout(() => setNotification(null), 4000);
 
 const refresh = useCallback(async () => {
 try {
-const [feed, me] = await Promise.all([fetchTasks(), fetchMe()]);
+const [feed, me, flagsRes] = await Promise.all([fetchTasks(), fetchMe(), fetchFlags().catch(() => null)]);
 setTasks(feed);
+if (flagsRes?.flags) setFlags(flagsRes.flags);
 // Only merge a valid profile, and never let an error-shaped payload (lacking
 // username) clobber the logged-in user and unmount the admin panel.
 if (me && me.username) {
@@ -198,6 +204,12 @@ return (
 );
 }
 
+// Maintenance mode blocks the whole app for everyone except admins, who
+// still need to get in to flip the switch back off.
+if (flags?.maintenance && !user.isAdmin) {
+return <MaintenancePage />;
+}
+
 const enriched = (tasks || []).map(tk => ({ ...tk, category: inferCategory(tk.title, tk.description) }));
 const cats = ['All', ...Array.from(new Set(enriched.map(tk => tk.category))).sort()];
 const filtered = enriched.filter(tk => {
@@ -259,7 +271,12 @@ return (
 <select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: '600', color: '#4a5568', fontSize: '0.78rem' }}>
 <option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="vi">🇻🇳 VI</option>
 </select>
-<button onClick={() => setView('create')} style={{ backgroundColor: '#047857', color: 'white', border: 'none', padding: '7px 14px', borderRadius: '20px', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem' }}>{t.postTask}</button>
+<button onClick={() => { if (flags?.posting === false) { triggerNotification('⚠️ Task posting is temporarily disabled by the admin.'); return; } setView('create'); }}
+  style={{
+    backgroundColor: flags?.posting === false ? '#a0aec0' : '#047857', color: 'white', border: 'none',
+    padding: '7px 14px', borderRadius: '20px', cursor: flags?.posting === false ? 'not-allowed' : 'pointer',
+    fontWeight: '700', fontSize: '0.82rem',
+  }}>{t.postTask}</button>
 </div>
 
 {/* Wallet card */}

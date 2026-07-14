@@ -235,6 +235,22 @@ const bannerSchema = new Schema(
   { timestamps: true }
 );
 
+/* ── Feature Flags ────────────────────────────────────────────────
+   Admin on/off switches for specific user-facing actions (posting,
+   submissions, payouts) — the emergency brake described in the
+   product notes. A missing flag means enabled (fail-open), so a flag
+   nobody has created yet never silently breaks anything. The special
+   key 'maintenance' overrides all the others at once, checked first
+   in isFeatureEnabled(). */
+const featureFlagSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true, trim: true },
+    enabled: { type: Boolean, default: true },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true }
+);
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
@@ -243,3 +259,4 @@ export const Payment = mongoose.model('Payment', paymentSchema);
 export const PlatformLedger = mongoose.model('PlatformLedger', platformLedgerSchema);
 export const Announcement = mongoose.model('Announcement', announcementSchema);
 export const Banner = mongoose.model('Banner', bannerSchema);
+export const FeatureFlag = mongoose.model('FeatureFlag', featureFlagSchema);
