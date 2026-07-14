@@ -9,6 +9,16 @@ const inputStyle = {
   backgroundColor: 'white', outline: 'none', marginBottom: '8px',
 };
 
+// Tab definitions for the admin panel — one section visible at a time.
+const TABS = [
+  { key: 'queue', label: '📋 Queue' },
+  { key: 'tasks', label: '📌 Tasks' },
+  { key: 'payouts', label: '💸 Payouts' },
+  { key: 'announcements', label: '📢 Announcements' },
+  { key: 'banners', label: '🖼️ Banners' },
+  { key: 'users', label: '👤 Users' },
+];
+
 /**
  * PRODUCTION ADMIN PANEL
  * - Revenue + dispute count banner
@@ -17,6 +27,9 @@ const inputStyle = {
  * - Approve / Reject actions
  */
 export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
+  // Which section is showing. Mirrors the tabbed layout used in Zappi NG's
+  // admin panel — one section visible at a time instead of one long scroll.
+  const [tab, setTab] = useState('queue');
   const [queue, setQueue] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [disputeCount, setDisputeCount] = useState(0);
@@ -290,6 +303,24 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         </div>
       )}
 
+      {/* Tab bar — mirrors Zappi NG's admin layout: one section at a time */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '16px', paddingBottom: '2px' }}>
+        {TABS.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            style={{
+              flexShrink: 0, padding: '8px 14px', borderRadius: '20px', border: 'none',
+              fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap',
+              backgroundColor: tab === t.key ? '#059669' : 'white',
+              color: tab === t.key ? 'white' : '#4a5568',
+              boxShadow: tab === t.key ? '0 2px 8px rgba(5,150,105,0.35)' : '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tasks' && (
+      <>
       {/* Sponsored task creation */}
       <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '14px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <button
@@ -334,7 +365,11 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {tab === 'payouts' && (
+      <>
       {/* Reconcile pending A2U payouts */}
       <button onClick={handleReconcile} disabled={reconciling}
         style={{ width: '100%', marginBottom: '14px', padding: '10px', backgroundColor: reconciling ? '#a0aec0' : '#2d3748', color: 'white', border: 'none', borderRadius: '10px', cursor: reconciling ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
@@ -661,11 +696,19 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {tab === 'announcements' && (
       <AdminAnnouncements notify={notify} />
+      )}
 
+      {tab === 'banners' && (
       <AdminBanners notify={notify} />
+      )}
 
+      {tab === 'users' && (
+      <>
       {/* Moderation: remove an inappropriate profile picture */}
       <div style={{ backgroundColor: '#fff5f5', border: '1.5px solid #fed7d7', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
         <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>
@@ -779,7 +822,11 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {tab === 'queue' && (
+      <>
       {/* Review queue */}
       <h3 style={{ margin: '0 0 10px', fontSize: '0.88rem', fontWeight: '700', color: '#4a5568' }}>
         📋 Manual Review Queue {queue !== null && <span style={{ color: '#a0aec0' }}>({queue.length})</span>}
@@ -842,6 +889,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           </div>
         </div>
       ))}
+      </>
+      )}
 
       <button onClick={onOpenDisputes}
         style={{ width: '100%', marginTop: '8px', backgroundColor: disputeCount > 0 ? '#c53030' : '#718096', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '0.88rem' }}>
