@@ -303,13 +303,16 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         </div>
       )}
 
-      {/* Tab bar — mirrors Zappi NG's admin layout: one section at a time */}
-      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '16px', paddingBottom: '2px' }}>
+      {/* Tab bar — mirrors Zappi NG's admin layout: one section at a time.
+          Wraps into rows instead of scrolling sideways, so every tab is
+          visible up front and the whole panel just scrolls vertically. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{
-              flexShrink: 0, padding: '8px 14px', borderRadius: '20px', border: 'none',
-              fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap',
+              flex: '1 1 30%', minWidth: '104px', padding: '9px 10px', borderRadius: '10px', border: 'none',
+              fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap',
+              textAlign: 'center',
               backgroundColor: tab === t.key ? '#059669' : 'white',
               color: tab === t.key ? 'white' : '#4a5568',
               boxShadow: tab === t.key ? '0 2px 8px rgba(5,150,105,0.35)' : '0 1px 3px rgba(0,0,0,0.06)',
