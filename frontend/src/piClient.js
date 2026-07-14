@@ -57,14 +57,34 @@ export async function openExternalLink(url) {
 }
 export async function authenticateWithPi() {
   initPi();
-  const onIncompletePaymentFound = (payment) =>
-    api('/api/payments/incomplete', { payment }).catch(console.error);
-  const auth = await window.Pi.authenticate(['username', 'payments', 'wallet_address'], onIncompletePaymentFound);
+  const auth = await window.Pi.authenticate(
+    ['username', 'payments', 'wallet_address'],
+    handleIncompletePayment
+  );
   const { sessionToken: token, user } = await api('/api/auth/verify', {
     accessToken: auth.accessToken,
   });
   sessionToken = token;
   return user;
+}
+
+/**
+ * Hand a stranded Pi payment back to our server so it can be completed (if it
+ * actually went through on-chain) or cancelled (if it didn't).
+ *
+ * Pi refuses to create a NEW payment while an incomplete one exists for that
+ * user. So if this isn't cleared, every retry fails — Pi's API returns
+ * `payment_not_found` (HTTP 404) and the user is stuck permanently, with no way
+ * to know that the fix is "clear browser data and log in again".
+ *
+ * This must therefore be passed to BOTH authenticate() and createPayment().
+ * It was previously only on authenticate(), which is why a real user hit a
+ * permanent wall on 2026-07-12.
+ */
+function handleIncompletePayment(payment) {
+  return api('/api/payments/incomplete', { payment }).catch((e) => {
+    console.error('Failed to clear incomplete payment:', e);
+  });
 }
 
 export function payForTaskFunding({ taskId, amountToPay, title }) {
@@ -76,11 +96,34 @@ export function payForTaskFunding({ taskId, amountToPay, title }) {
           api('/api/payments/approve', { paymentId, taskId }).catch(reject),
         onReadyForServerCompletion: (paymentId, txid) =>
           api('/api/payments/complete', { paymentId, txid }).then(resolve).catch(reject),
+        // Clear a stranded payment from a previous attempt so this one can
+        // proceed, instead of Pi blocking every retry forever.
+        onIncompletePaymentFound: handleIncompletePayment,
         onCancel: () => reject(new Error('Payment cancelled')),
-        onError: (error) => reject(error),
+        onError: (error) => reject(explainPaymentError(error)),
       }
     );
   });
+}
+
+/**
+ * Turn Pi's raw payment errors into something a user can act on.
+ * "Request failed with status code 404" tells them nothing; the real meaning is
+ * usually "you have a stranded payment from a previous attempt".
+ */
+function explainPaymentError(error) {
+  const msg = String(error?.message || error || '');
+  const body = JSON.stringify(error?.response?.data || {});
+  if (/payment_not_found|status code 404/i.test(msg + body)) {
+    return new Error(
+      'That payment could not be completed — you may have an unfinished payment from a previous attempt. ' +
+      'Please close the app, reopen it, and try again. If it keeps failing, sign out and sign back in.'
+    );
+  }
+  if (/insufficient|balance/i.test(msg + body)) {
+    return new Error('Not enough Pi in your wallet to cover this payment.');
+  }
+  return error instanceof Error ? error : new Error(msg || 'Payment failed');
 }
 
 /* ── Worker API ── */
