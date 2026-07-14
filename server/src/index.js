@@ -827,13 +827,14 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     const user = await currentUser(req);
     // avatar is select:false on the schema, so pull it explicitly.
     const withAvatar = await User.findById(user._id).select('+avatar').lean();
-    const [history, postedTasks, openDisputes] = await Promise.all([
+    const [history, postedTasks, openDisputes, unreadSupportCount] = await Promise.all([
       Submission.find({ worker: user._id })
         .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
       Task.find({ poster: user._id, archived: { $ne: true } }).sort({ createdAt: -1 }).limit(50).lean(),
       Dispute.find({ openedBy: user._id, status: 'open' })
         .populate({ path: 'submission', populate: { path: 'task', select: 'title' } })
         .sort({ createdAt: -1 }).lean(),
+      SupportTicket.countDocuments({ user: user._id, hasUnreadForUser: true }),
     ]);
     // Funding receipt reference for each posted task (admin-sponsored tasks
     // have no U2A payment behind them, so they simply won't have one here —
@@ -851,6 +852,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
       avatarBlocked: !!user.avatarBlocked,
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
+      unreadSupportCount,
       history: history.map((h) => ({
         title: h.task?.title, reward: toPi(h.rewardMicroPi), status: h.status, date: h.createdAt,
       })),
@@ -1449,6 +1451,9 @@ app.get('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (req,
   try {
     const ticket = await SupportTicket.findById(req.params.id).populate('user', 'username piUid').lean();
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (ticket.hasUnreadForAdmin) {
+      await SupportTicket.updateOne({ _id: ticket._id }, { $set: { hasUnreadForAdmin: false } });
+    }
     res.json({
       id: ticket._id, subject: ticket.subject, category: ticket.category, status: ticket.status,
       refId: ticket.refId, createdAt: ticket.createdAt,
@@ -1467,8 +1472,18 @@ app.post('/api/admin/support/tickets/:id/reply', requireAuth, requireAdmin, asyn
     ticket.messages.push({ from: 'admin', body });
     ticket.status = 'answered';
     ticket.hasUnreadForUser = true;
+    ticket.hasUnreadForAdmin = false;
     await ticket.save();
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Lightweight badge count for the admin Support tab — polled on an interval
+// rather than the full ticket list, which would be wasteful just to show a number.
+app.get('/api/admin/support/unread-count', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const count = await SupportTicket.countDocuments({ hasUnreadForAdmin: true });
+    res.json({ count });
   } catch (err) { next(err); }
 });
 
@@ -1633,6 +1648,7 @@ app.post('/api/support/tickets/:id/reply', requireAuth, async (req, res, next) =
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     ticket.messages.push({ from: 'user', body });
     ticket.status = 'open'; // a user reply always puts it back in the admin's queue
+    ticket.hasUnreadForAdmin = true;
     await ticket.save();
     res.json({ ok: true });
   } catch (err) { next(err); }

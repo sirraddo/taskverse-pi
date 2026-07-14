@@ -240,7 +240,7 @@ return (
 {screen === 'terms' && <TermsOfService onBack={() => setScreen(null)} />}
 {screen === 'howitworks' && <HowItWorks onBack={() => setScreen(null)} />}
 {screen === 'myTasks' && <MyPostedTasks tasks={user.postedTasks || []} onBack={() => setScreen(null)} />}
-{screen === 'support' && <SupportInbox onBack={() => setScreen(null)} />}
+{screen === 'support' && <SupportInbox onBack={() => { setScreen(null); refresh(); }} />}
 </div>
 )}
 
@@ -448,7 +448,14 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 <button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📌 My Tasks</button>
 </div>
 <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: '#b0bac8' }}>
-<span onClick={() => setScreen('support')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>🎧 Support</span>
+<span onClick={() => setScreen('support')} style={{ cursor: 'pointer', textDecoration: 'underline', position: 'relative' }}>
+🎧 Support
+{user.unreadSupportCount > 0 && (
+<span style={{ position: 'absolute', top: '-7px', right: '-10px', backgroundColor: '#e53e3e', color: 'white', borderRadius: '9px', fontSize: '0.6rem', fontWeight: '800', padding: '1px 5px', lineHeight: 1.3, minWidth: '14px', textAlign: 'center' }}>
+{user.unreadSupportCount}
+</span>
+)}
+</span>
 <span onClick={() => setScreen('howitworks')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>How It Works</span>
 <span onClick={() => setScreen('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy</span>
 <span onClick={() => setScreen('terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>

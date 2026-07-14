@@ -6,7 +6,7 @@ import AdminSettings from './AdminSettings';
 import AdminUsers from './AdminUsers';
 import AdminTransactions from './AdminTransactions';
 import AdminSupport from './AdminSupport';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -42,6 +42,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [queue, setQueue] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [disputeCount, setDisputeCount] = useState(0);
+  const [unreadSupportCount, setUnreadSupportCount] = useState(0);
   const [busyId, setBusyId] = useState(null);
 
   // Sponsored task form
@@ -273,6 +274,18 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Support unread badge — polled independently (and more often) since a
+  // new message can arrive at any time while the admin is on a different
+  // tab entirely, not just when the rest of the panel reloads.
+  const pollUnreadSupport = useCallback(() => {
+    return fetchAdminSupportUnreadCount().then((r) => setUnreadSupportCount(r.count || 0)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    pollUnreadSupport();
+    const interval = setInterval(pollUnreadSupport, 20_000);
+    return () => clearInterval(interval);
+  }, [pollUnreadSupport]);
+
   const act = async (fn, id, successMsg) => {
     setBusyId(id);
     try { await fn(id); notify(successMsg); await load(); }
@@ -319,6 +332,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{
+              position: 'relative',
               flex: '1 1 30%', minWidth: '104px', padding: '9px 10px', borderRadius: '10px', border: 'none',
               fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap',
               textAlign: 'center',
@@ -327,6 +341,15 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               boxShadow: tab === t.key ? '0 2px 8px rgba(5,150,105,0.35)' : '0 1px 3px rgba(0,0,0,0.06)',
             }}>
             {t.label}
+            {t.key === 'support' && unreadSupportCount > 0 && (
+              <span style={{
+                position: 'absolute', top: '-6px', right: '-6px', backgroundColor: '#e53e3e', color: 'white',
+                borderRadius: '9px', fontSize: '0.62rem', fontWeight: '800', padding: '1px 5px', lineHeight: 1.3,
+                minWidth: '15px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }}>
+                {unreadSupportCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -856,7 +879,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       )}
 
       {tab === 'support' && (
-      <AdminSupport notify={notify} />
+      <AdminSupport notify={notify} onUnreadChanged={pollUnreadSupport} />
       )}
 
       {tab === 'queue' && (

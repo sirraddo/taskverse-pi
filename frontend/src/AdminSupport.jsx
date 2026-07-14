@@ -7,7 +7,7 @@ const STATUS_BADGE = {
   closed: { label: 'Closed', bg: '#edf2f7', color: '#718096' },
 };
 
-function AdminTicketThread({ ticketId, onBack, onChanged }) {
+function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
   const [ticket, setTicket] = useState(null);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -15,9 +15,12 @@ function AdminTicketThread({ ticketId, onBack, onChanged }) {
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    try { setTicket(await fetchAdminTicket(ticketId)); }
+    try {
+      setTicket(await fetchAdminTicket(ticketId));
+      onUnreadChanged?.(); // viewing the thread already cleared it server-side
+    }
     catch (e) { setError(e.message || 'Could not load ticket'); }
-  }, [ticketId]);
+  }, [ticketId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -114,7 +117,7 @@ function AdminTicketThread({ ticketId, onBack, onChanged }) {
   );
 }
 
-export default function AdminSupport({ notify }) {
+export default function AdminSupport({ notify, onUnreadChanged }) {
   const [status, setStatusFilter] = useState('');
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -146,7 +149,7 @@ export default function AdminSupport({ notify }) {
       </p>
 
       {openTicketId ? (
-        <AdminTicketThread ticketId={openTicketId} onBack={() => setOpenTicketId(null)} onChanged={() => load(status)} />
+        <AdminTicketThread ticketId={openTicketId} onBack={() => setOpenTicketId(null)} onChanged={() => load(status)} onUnreadChanged={onUnreadChanged} />
       ) : (
         <>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>

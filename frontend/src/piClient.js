@@ -277,6 +277,7 @@ export const fetchAdminTickets = (params = {}) => {
 export const fetchAdminTicket = (id) => api(`/api/admin/support/tickets/${id}`);
 export const replyToTicketAsAdmin = (id, message) => api(`/api/admin/support/tickets/${id}/reply`, { message });
 export const setTicketStatus = (id, status) => api(`/api/admin/support/tickets/${id}`, { status }, 'PATCH');
+export const fetchAdminSupportUnreadCount = () => api('/api/admin/support/unread-count');
 
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio

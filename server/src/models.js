@@ -342,6 +342,10 @@ const supportTicketSchema = new Schema(
     // Flips true whenever the admin posts a reply, cleared when the user
     // opens the ticket — powers a simple unread badge for the user.
     hasUnreadForUser: { type: Boolean, default: false },
+    // Mirror image for the admin side: true on ticket creation and on every
+    // user reply, cleared when the admin opens or replies to the ticket —
+    // powers the unread badge in the admin Support tab.
+    hasUnreadForAdmin: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
