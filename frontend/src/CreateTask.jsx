@@ -43,6 +43,7 @@ const [requireManualReview, setRequireManualReview] = useState(false);
 const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
 const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+const [receiptRefId, setReceiptRefId] = useState(null);
 
 useEffect(() => {
   fetchSettings().then((s) => s && setSettings(s)).catch(() => {});
@@ -73,7 +74,8 @@ requireScreenshot,
 requireManualReview,
 });
 // 2. Real Pi wallet payment (rewards + platform fee → app wallet)
-await payForTaskFunding({ taskId, amountToPay, title });
+const completed = await payForTaskFunding({ taskId, amountToPay, title });
+setReceiptRefId(completed?.refId || null);
 setPhase('done');
 onPublished?.(); // parent refetches the feed
 } catch (err) {
@@ -96,6 +98,13 @@ return (
 <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🚀</div>
 <p style={{ color: '#276749', fontWeight: '700', fontSize: '1rem', margin: 0 }}>Payment confirmed — your gig is live!</p>
 <p style={{ color: '#718096', fontSize: '0.82rem', marginTop: '6px' }}>Workers can find and start it right away.</p>
+{receiptRefId && (
+<div style={{ marginTop: '16px', display: 'inline-block', backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 16px' }}>
+<div style={{ fontSize: '0.68rem', color: '#a0aec0', fontWeight: '700', letterSpacing: '0.03em' }}>PAYMENT REFERENCE</div>
+<div style={{ fontSize: '0.9rem', color: '#2d3748', fontWeight: '800', fontFamily: 'monospace', marginTop: '3px' }}>{receiptRefId}</div>
+<div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '3px' }}>Save this — quote it if you ever need support with this payment.</div>
+</div>
+)}
 </div>
 ) : (
 <div>

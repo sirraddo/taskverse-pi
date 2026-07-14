@@ -38,6 +38,11 @@ return (
 <h3 style={{ margin: 0, fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
 {task.title}
 </h3>
+{task.fundingRefId && (
+<div style={{ fontSize: '0.65rem', color: '#a0aec0', marginTop: '2px', fontFamily: 'monospace' }}>
+Ref: {task.fundingRefId}
+</div>
+)}
 </div>
 <div style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '52px', flexShrink: 0, marginLeft: '10px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{Number(task.reward).toFixed(2)}</div>

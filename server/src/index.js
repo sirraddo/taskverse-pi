@@ -522,14 +522,17 @@ app.post('/api/payments/complete', requireAuth, async (req, res, next) => {
     const user = await currentUser(req);
     const payment = await Payment.findOne({ piPaymentId: paymentId, user: user._id });
     if (!payment) return res.status(404).json({ error: 'Unknown payment' });
-    if (payment.status === 'completed') return res.json({ ok: true, idempotent: true });
+    if (payment.status === 'completed') {
+      if (!payment.refId) await payment.save(); // backfill on the idempotent-retry path too
+      return res.json({ ok: true, idempotent: true, refId: payment.refId });
+    }
     await pi.completePayment(paymentId, txid);
-    payment.status = 'completed'; payment.txid = txid; await payment.save();
+    payment.status = 'completed'; payment.txid = txid; await payment.save(); // assigns refId if missing
     const task = await Task.findByIdAndUpdate(payment.task,
       { status: 'live', fundingPaymentId: paymentId }, { new: true });
     await PlatformLedger.create({ task: task._id, feeMicroPi: task.platformFeeMicroPi, sourcePaymentId: paymentId });
     if (!user.isKycVerified) { user.isKycVerified = true; await user.save(); }
-    res.json({ ok: true, taskStatus: 'live' });
+    res.json({ ok: true, taskStatus: 'live', refId: payment.refId });
   } catch (err) { next(err); }
 });
 
@@ -832,6 +835,13 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
         .populate({ path: 'submission', populate: { path: 'task', select: 'title' } })
         .sort({ createdAt: -1 }).lean(),
     ]);
+    // Funding receipt reference for each posted task (admin-sponsored tasks
+    // have no U2A payment behind them, so they simply won't have one here —
+    // that's correct, not a bug).
+    const fundingPayments = await Payment.find({
+      task: { $in: postedTasks.map((t) => t._id) }, direction: 'U2A', purpose: 'task_funding',
+    }).select('task refId').lean();
+    const fundingRefByTask = Object.fromEntries(fundingPayments.map((p) => [p.task.toString(), p.refId]));
     res.json({
       username: user.username,
       isAdmin: isAdmin(user.username),
@@ -847,6 +857,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
       postedTasks: postedTasks.map((t) => ({
         id: t._id, title: t.title, slots: t.slots, slotsFilled: t.slotsFilled,
         status: t.status, reward: toPi(t.rewardMicroPi), createdAt: t.createdAt,
+        fundingRefId: fundingRefByTask[t._id.toString()] || null,
       })),
       openDisputes: openDisputes.map((d) => ({
         id: d._id,
