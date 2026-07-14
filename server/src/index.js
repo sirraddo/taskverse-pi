@@ -1321,6 +1321,84 @@ app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+/* ── Admin: transactions ──────────────────────────────────────────
+   Every Payment record — task funding (U2A), worker payouts (A2U), and
+   withdrawals — in one browsable, filterable place, each with a short
+   refId a user can quote in a support message for a direct lookup. */
+
+// Any Payment missing a refId (created via a findOneAndUpdate upsert, which
+// bypasses the pre('save') hook in models.js) gets one assigned the first
+// time it's viewed here — self-healing, no migration script needed.
+async function backfillRefIds(paymentDocs) {
+  const missing = paymentDocs.filter((p) => !p.refId);
+  if (missing.length === 0) return;
+  const full = await Payment.find({ _id: { $in: missing.map((p) => p._id) } });
+  for (const doc of full) {
+    // eslint-disable-next-line no-await-in-loop
+    await doc.save(); // pre('save') assigns refId when missing
+  }
+  const byId = Object.fromEntries(full.map((d) => [d._id.toString(), d.refId]));
+  for (const p of missing) p.refId = byId[p._id.toString()] || p.refId;
+}
+
+app.get('/api/admin/transactions', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const mapPayment = (p) => ({
+      id: p._id, refId: p.refId, direction: p.direction, purpose: p.purpose, status: p.status,
+      amountPi: toPi(p.amountMicroPi), piPaymentId: p.piPaymentId, txid: p.txid || null,
+      user: p.user ? { id: p.user._id, username: p.user.username, piUid: p.user.piUid } : null,
+      task: p.task ? { id: p.task._id, title: p.task.title } : null,
+      createdAt: p.createdAt, updatedAt: p.updatedAt,
+    });
+
+    const ref = String(req.query.ref || '').trim().toUpperCase();
+
+    // Exact refId lookup — "the quick and straight look-up" — short-circuits
+    // all other filters/pagination since it's a single-record answer.
+    if (ref) {
+      const normalizedRef = ref.startsWith('TXV-') ? ref : `TXV-${ref}`;
+      let payment = await Payment.findOne({ refId: normalizedRef })
+        .populate('user', 'username piUid').populate('task', 'title').lean();
+      if (!payment) {
+        // Also accept a bare piPaymentId or txid, for older/edge-case records.
+        payment = await Payment.findOne({ $or: [{ piPaymentId: ref }, { txid: ref }] })
+          .populate('user', 'username piUid').populate('task', 'title').lean();
+      }
+      if (!payment) return res.status(404).json({ error: `No transaction matches "${req.query.ref}".` });
+      if (!payment.refId) await backfillRefIds([payment]);
+      return res.json({ transactions: [mapPayment(payment)], total: 1, page: 1, limit: 1, hasMore: false });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const filter = {};
+    if (req.query.direction && ['U2A', 'A2U'].includes(req.query.direction)) filter.direction = req.query.direction;
+    if (req.query.purpose && ['task_funding', 'worker_payout', 'withdrawal'].includes(req.query.purpose)) filter.purpose = req.query.purpose;
+    if (req.query.status && ['created', 'approved', 'completed', 'cancelled', 'failed'].includes(req.query.status)) filter.status = req.query.status;
+
+    const userQuery = String(req.query.user || '').trim();
+    if (userQuery) {
+      const rx = new RegExp(escapeRegex(userQuery), 'i');
+      const matchingUsers = await User.find({ $or: [{ username: rx }, { piUid: rx }] }).select('_id').lean();
+      filter.user = { $in: matchingUsers.map((u) => u._id) };
+    }
+
+    const [rows, total] = await Promise.all([
+      Payment.find(filter)
+        .populate('user', 'username piUid').populate('task', 'title')
+        .sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Payment.countDocuments(filter),
+    ]);
+
+    await backfillRefIds(rows);
+
+    res.json({
+      transactions: rows.map(mapPayment),
+      total, page, limit, hasMore: page * limit < total,
+    });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: user list & search ────────────────────────────────────
    Replaces pasting a raw piUid into a box blindly — browse/search users,
    then act on the row directly (ban, unblock avatar, look up payments). */
@@ -1872,7 +1950,9 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     try {
       const submissions = await Submission.find({ worker: req.session.userId })
         .sort({ createdAt: -1 }).limit(100)
-        .populate('task', 'title rewardMicroPi').lean();
+        .populate('task', 'title rewardMicroPi')
+        .populate('payout', 'refId status')
+        .lean();
       const totalEarned = submissions
         .filter(s => ['auto_approved','approved'].includes(s.status))
         .reduce((sum, s) => sum + (s.rewardMicroPi || 0), 0) / 1e6;

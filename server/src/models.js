@@ -171,9 +171,50 @@ enum: ['created', 'approved', 'completed', 'cancelled', 'failed'],
 default: 'created',
 index: true,
 },
+// Short, easy-to-quote support reference (e.g. "TXV-4K7QXPM") — separate from
+// piPaymentId (Pi's own long identifier) and txid (the on-chain hash), which
+// are both awkward for a user to read out or type into a support chat.
+// No DB-level unique constraint on purpose: some Payment writes go through
+// findOneAndUpdate() upserts that never run the pre('save') hook below, so
+// this field is deliberately backfilled lazily wherever it's missing (see
+// backfillRefIds() in index.js) rather than being guaranteed at write time.
+// A hard unique index would risk a rare collision throwing on a real payment
+// save — the generator below already avoids collisions in practice.
+refId: { type: String, index: true, sparse: true },
 },
 { timestamps: true }
 );
+
+// Unambiguous alphabet — no 0/O/1/I/L — so a refId is safe to read aloud or
+// type from a screenshot without misreading a character.
+const REF_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export function randomRefCode(len = 7) {
+  let s = '';
+  for (let i = 0; i < len; i++) s += REF_ALPHABET[Math.floor(Math.random() * REF_ALPHABET.length)];
+  return s;
+}
+
+// Covers Payment.create() / .save() call sites. findOneAndUpdate() upserts
+// bypass this — those get their refId lazily on first admin read instead.
+paymentSchema.pre('save', async function (next) {
+  if (this.refId) return next();
+  try {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = `TXV-${randomRefCode(7)}`;
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await this.constructor.exists({ refId: candidate });
+      if (!exists) { this.refId = candidate; break; }
+    }
+    if (!this.refId) {
+      // Practically unreachable (would need 5 collisions in a row out of
+      // 33^7 possibilities) — guarantees a value either way.
+      this.refId = `TXV-${randomRefCode(4)}${Date.now().toString(36).toUpperCase().slice(-4)}`;
+    }
+  } catch (e) {
+    // Never let a refId hiccup block a real payment from saving.
+  }
+  next();
+});
 
 /* ── PlatformLedger ──────────────────────────────────────────────
 * Append-only record of the 5% fee retained on each funded task.

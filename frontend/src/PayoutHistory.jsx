@@ -34,6 +34,11 @@ export default function PayoutHistory({ onBack }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 'bold', color: '#2d3748', fontSize: '0.9rem' }}>{sub.task?.title || 'Task removed'}</div>
               <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>{date}</div>
+              {sub.payout?.refId && (
+                <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '2px' }}>
+                  Ref: <span style={{ fontFamily: 'monospace', color: '#718096' }}>{sub.payout.refId}</span>
+                </div>
+              )}
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 'bold', color: isPaid ? '#48bb78' : '#e53e3e' }}>{isPaid ? '+' : ''}{(sub.rewardMicroPi / 1e6).toFixed(2)} &#960;</div>
