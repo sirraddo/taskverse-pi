@@ -1,3 +1,4 @@
+import AnnouncementBanner from './AnnouncementBanner';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import HowItWorks from './HowItWorks';
 import PrivacyPolicy from './PrivacyPolicy';
@@ -271,6 +272,9 @@ return (
 <div style={{ fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-1px', lineHeight: 1.1 }}>{Number(user.balance ?? 0).toFixed(2)} <span style={{ fontSize: '1rem', opacity: 0.85 }}>π</span></div>
 <div style={{ fontSize: '0.7rem', opacity: 0.65, marginTop: '4px' }}>✅ {user.approvedCount ?? 0} {t.tasksDone}</div>
 </div>
+
+{/* Admin announcement — shown when there's something to say. */}
+<AnnouncementBanner />
 
 {/* One-time country prompt — shows until the user sets a country.
     Helps them see country-targeted tasks; dismissable for the session. */}

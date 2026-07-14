@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -847,6 +847,117 @@ app.get('/api/avatar/:piUid', requireAuth, async (req, res, next) => {
   try {
     const u = await User.findOne({ piUid: req.params.piUid }).select('+avatar').lean();
     res.json({ avatar: (u && !u.avatarBlocked && u.avatar) ? u.avatar : '' });
+  } catch (err) { next(err); }
+});
+
+/* ── Announcements ───────────────────────────────────────────────
+   Lets the operator talk to users (payout delays, maintenance, new features)
+   without needing a code deploy. */
+
+// Worker: the current announcement, if any and if not already dismissed.
+app.get('/api/announcement', requireAuth, async (req, res, next) => {
+  try {
+    const user = await currentUser(req);
+    const a = await Announcement.findOne({ active: true }).sort({ createdAt: -1 }).lean();
+    if (!a) return res.json({ announcement: null });
+    const dismissed = (a.dismissedBy || []).some((id) => String(id) === String(user._id));
+    if (dismissed) return res.json({ announcement: null });
+    res.json({
+      announcement: {
+        id: a._id,
+        title: a.title,
+        body: a.body,
+        level: a.level,
+        linkUrl: a.linkUrl || '',
+        linkLabel: a.linkLabel || '',
+        createdAt: a.createdAt,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// Worker: dismiss it (per-user, so it doesn't nag).
+app.post('/api/announcement/:id/dismiss', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const user = await currentUser(req);
+    await Announcement.updateOne(
+      { _id: req.params.id },
+      { $addToSet: { dismissedBy: user._id } }
+    );
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Admin: list recent announcements (so you can see what you've sent).
+app.get('/api/admin/announcements', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const list = await Announcement.find()
+      .sort({ createdAt: -1 }).limit(20)
+      .select('title body level active linkUrl linkLabel createdAt dismissedBy')
+      .lean();
+    res.json({
+      announcements: list.map((a) => ({
+        id: a._id,
+        title: a.title,
+        body: a.body,
+        level: a.level,
+        active: a.active,
+        linkUrl: a.linkUrl || '',
+        linkLabel: a.linkLabel || '',
+        dismissCount: (a.dismissedBy || []).length,
+        createdAt: a.createdAt,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// Admin: publish a new announcement. Only one is active at a time, so
+// publishing deactivates the others — no confusing stack of banners.
+app.post('/api/admin/announcements', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const title = String(req.body?.title || '').trim();
+    const body = String(req.body?.body || '').trim();
+    const level = ['info', 'warning', 'success'].includes(req.body?.level) ? req.body.level : 'info';
+    const linkUrl = String(req.body?.linkUrl || '').trim();
+    const linkLabel = String(req.body?.linkLabel || '').trim().slice(0, 40);
+
+    if (!title || !body) return res.status(400).json({ error: 'Title and message are required.' });
+    if (title.length > 80) return res.status(400).json({ error: 'Title is too long (max 80).' });
+    if (body.length > 600) return res.status(400).json({ error: 'Message is too long (max 600).' });
+    // Only allow real web links (this is rendered as a clickable CTA).
+    if (linkUrl && !/^https?:\/\//i.test(linkUrl)) {
+      return res.status(400).json({ error: 'Link must start with http:// or https://' });
+    }
+
+    const admin = await currentUser(req);
+    await Announcement.updateMany({ active: true }, { $set: { active: false } });
+    const a = await Announcement.create({
+      title, body, level, linkUrl, linkLabel, active: true, createdBy: admin._id,
+    });
+    res.status(201).json({ ok: true, id: a._id });
+  } catch (err) { next(err); }
+});
+
+// Admin: take the current announcement down (or bring one back).
+app.patch('/api/admin/announcements/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const active = Boolean(req.body?.active);
+    if (active) await Announcement.updateMany({ active: true }, { $set: { active: false } });
+    const a = await Announcement.findByIdAndUpdate(
+      req.params.id, { $set: { active } }, { new: true }
+    );
+    if (!a) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true, active: a.active });
+  } catch (err) { next(err); }
+});
+
+app.delete('/api/admin/announcements/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    await Announcement.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

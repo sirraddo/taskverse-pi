@@ -191,9 +191,32 @@ sourcePaymentId: { type: String, required: true },
 export const microPi = (pi) => Math.round(Number(pi) * 1_000_000);
 export const toPi = (micro) => micro / 1_000_000;
 
+/* ── Announcements ───────────────────────────────────────────────
+   Admin-posted messages shown to users in the app. Lets the operator
+   communicate (payout delays, maintenance, new features) without a code deploy.
+   Only ONE announcement is active at a time — `active:true`. Publishing a new
+   one deactivates the rest, so there's never a confusing stack of banners. */
+const announcementSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 80 },
+    body: { type: String, required: true, trim: true, maxlength: 600 },
+    // Visual treatment. 'info' = neutral, 'warning' = attention, 'success' = good news.
+    level: { type: String, enum: ['info', 'warning', 'success'], default: 'info' },
+    active: { type: Boolean, default: true, index: true },
+    // Optional call-to-action.
+    linkUrl: { type: String, default: '' },
+    linkLabel: { type: String, default: '', maxlength: 40 },
+    // Users can dismiss it; we remember who so it doesn't nag.
+    dismissedBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true }
+);
+
 export const User = mongoose.model('User', userSchema);
 export const Task = mongoose.model('Task', taskSchema);
 export const Submission = mongoose.model('Submission', submissionSchema);
 export const Dispute = mongoose.model('Dispute', disputeSchema);
 export const Payment = mongoose.model('Payment', paymentSchema);
 export const PlatformLedger = mongoose.model('PlatformLedger', platformLedgerSchema);
+export const Announcement = mongoose.model('Announcement', announcementSchema);

@@ -215,3 +215,13 @@ export function resizeImageToDataUrl(file, max = 256, quality = 0.82) {
     reader.readAsDataURL(file);
   });
 }
+
+/* ── Announcements ── */
+export const fetchAnnouncement = () => api('/api/announcement');
+export const dismissAnnouncement = (id) => api(`/api/announcement/${id}/dismiss`, {});
+export const fetchAdminAnnouncements = () => api('/api/admin/announcements');
+export const createAnnouncement = (payload) => api('/api/admin/announcements', payload);
+export const setAnnouncementActive = (id, active) =>
+  api(`/api/admin/announcements/${id}`, { active }, 'PATCH');
+export const deleteAnnouncement = (id) =>
+  api(`/api/admin/announcements/${id}`, undefined, 'DELETE');
