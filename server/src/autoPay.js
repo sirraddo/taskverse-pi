@@ -109,20 +109,21 @@ export async function payWorkerConsolidated(workerId, { memo = 'TaskVerse task r
     const errStr = `${e.message || ''} ${e.piBody ? JSON.stringify(e.piBody) : ''}`;
     const noDestination = errStr.includes('op_no_destination');
     let skipped = false;
+    let skipReason = null;
     if ((e.step === 'createPayment' && e.httpStatus === 404) ||
         (e.step === 'submitPayment' && noDestination)) {
-      const reason = noDestination
+      skipReason = noDestination
         ? 'recipient wallet not activated on-chain (op_no_destination at submitPayment)'
         : 'recipient unresolvable (Pi 404 at createPayment)';
       try {
         await Submission.updateMany(
           { _id: { $in: subIds } },
-          { $set: { payoutSkipped: { reason, httpStatus: e.httpStatus ?? 400, at: new Date() } } }
+          { $set: { payoutSkipped: { reason: skipReason, httpStatus: e.httpStatus ?? 400, at: new Date() } } }
         );
         skipped = true;
       } catch (_) { /* leave queued */ }
     }
-    return { ok: false, worker: worker.username, error: e.message, step: e.step ?? null, httpStatus: e.httpStatus ?? null, skipped, covered: 0 };
+    return { ok: false, worker: worker.username, error: e.message, step: e.step ?? null, httpStatus: e.httpStatus ?? null, skipped, skipReason, covered: 0 };
   }
 }
 
@@ -247,13 +248,14 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
         if ((e.step === 'createPayment' && e.httpStatus === 404) ||
             (e.step === 'submitPayment' && _noDest)) {
           try {
+            const _skipReason = _noDest ? 'recipient wallet not activated on-chain (op_no_destination)' : 'recipient unresolvable (Pi 404 at createPayment)';
             sub.payoutSkipped = {
-              reason: _noDest ? 'recipient wallet not activated on-chain (op_no_destination)' : 'recipient unresolvable (Pi 404 at createPayment)',
+              reason: _skipReason,
               httpStatus: e.httpStatus ?? 400, at: new Date(),
             };
             await sub.save();
             summary.skippedUnpayable++;
-            summary.results.push({ id: sub._id, worker: sub.worker?.username, skipped: true });
+            summary.results.push({ id: sub._id, worker: sub.worker?.username, skipped: true, skipReason: _skipReason });
             done = true;
             continue;
           } catch (_) { /* fall through */ }

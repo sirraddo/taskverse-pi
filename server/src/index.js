@@ -586,15 +586,18 @@ app.get('/api/admin/unpayable-submissions', requireAuth, requireAdmin, async (re
     const byWorker = {};
     for (const it of items) {
       const key = `${it.worker}|${it.piUid || ''}`;
-      (byWorker[key] = byWorker[key] || { worker: it.worker, piUid: it.piUid, count: 0, totalPi: 0 });
+      (byWorker[key] = byWorker[key] || { worker: it.worker, piUid: it.piUid, count: 0, totalPi: 0, reasons: new Set() });
       byWorker[key].count++;
       byWorker[key].totalPi += it.pi;
+      if (it.reason) byWorker[key].reasons.add(it.reason);
     }
 
     res.json({
       total: items.length,
       totalPi: Number(items.reduce((a, b) => a + b.pi, 0).toFixed(6)),
-      byWorker: Object.values(byWorker).sort((a, b) => b.count - a.count),
+      byWorker: Object.values(byWorker)
+        .map((w) => ({ ...w, reasons: [...w.reasons] }))
+        .sort((a, b) => b.count - a.count),
       items,
     });
   } catch (err) { next(err); }

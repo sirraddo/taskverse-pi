@@ -545,7 +545,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               let line, color;
               if (r.paymentId) { line = `✓ @${r.worker} ${r.pi}π · ${r.paymentId}`; color = '#166534'; }
               else if (r.info) { line = `⏳ @${r.worker}: ${r.info}`; color = '#b45309'; }
-              else if (r.skipped) { line = `⤼ @${r.worker}: skipped (unpayable, ${r.httpStatus})`; color = '#6b7280'; }
+              else if (r.skipped) { line = `⤼ @${r.worker}: ${r.skipReason || `skipped (unpayable, ${r.httpStatus})`}`; color = '#6b7280'; }
               else if (r.skippedDueToStop) { line = `· ${r.id}: not attempted (cooldown stop)`; color = '#9ca3af'; }
               else if (r.stopped) { line = `■ stopped: ${r.reason}`; color = '#c53030'; }
               else if (r.error) { line = `✗ ${r.worker || r.id}: ${r.error}`; color = '#c53030'; }
@@ -694,7 +694,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             {(consResult.results || []).filter(r => r.paymentId || r.error || r.skipped).map((r, i) => (
               <div key={i} style={{ marginTop: '3px', fontFamily: 'monospace', fontSize: '0.66rem', color: r.paymentId ? '#166534' : (r.skipped ? '#6b7280' : '#c53030'), wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
                 {r.paymentId ? `✓ @${r.worker} ${r.pi}π (${r.covered} task${r.covered === 1 ? '' : 's'})`
-                  : r.skipped ? `⤼ @${r.worker}: skipped (unpayable)`
+                  : r.skipped ? `⤼ @${r.worker}: ${r.skipReason || 'skipped (unpayable)'}`
                   : `✗ @${r.worker}: ${r.error}`}
               </div>
             ))}
@@ -758,6 +758,11 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               <div key={i} style={{ fontSize: '0.7rem', color: '#475569', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '7px 9px', marginBottom: '5px', fontFamily: 'monospace' }}>
                 @{w.worker} · {w.count} sub{w.count === 1 ? '' : 's'} · {Number(w.totalPi.toFixed(4))}π
                 {w.piUid && <div style={{ color: '#94a3b8', fontSize: '0.64rem', marginTop: '2px' }}>uid {w.piUid}</div>}
+                {w.reasons?.length > 0 && (
+                  <div style={{ color: '#b45309', fontSize: '0.64rem', marginTop: '3px', fontFamily: 'inherit' }}>
+                    ⚠️ {w.reasons.join(' · ')}
+                  </div>
+                )}
               </div>
             ))}
             {unpayable.total === 0 && (
