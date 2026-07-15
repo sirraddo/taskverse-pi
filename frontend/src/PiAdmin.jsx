@@ -8,7 +8,7 @@ import AdminTransactions from './AdminTransactions';
 import AdminSupport from './AdminSupport';
 import AdminAuditLog from './AdminAuditLog';
 import AdminOverview from './AdminOverview';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount, bulkApproveSubmissions } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -48,6 +48,9 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [disputeCount, setDisputeCount] = useState(0);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
   const [busyId, setBusyId] = useState(null);
+  const [selectedQueueIds, setSelectedQueueIds] = useState(new Set());
+  const [bulkApproveConfirm, setBulkApproveConfirm] = useState(false);
+  const [bulkApproveBusy, setBulkApproveBusy] = useState(false);
 
   // Sponsored task form
   const [showForm, setShowForm] = useState(false);
@@ -295,6 +298,28 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
     try { await fn(id); notify(successMsg); await load(); }
     catch (err) { notify('Warning: ' + err.message); }
     finally { setBusyId(null); }
+  };
+
+  const toggleQueueSelect = (id) => {
+    setSelectedQueueIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const executeBulkApprove = async () => {
+    setBulkApproveConfirm(false);
+    setBulkApproveBusy(true);
+    try {
+      const ids = [...selectedQueueIds];
+      const res = await bulkApproveSubmissions(ids);
+      notify(`✅ Bulk approve: ${res.approved}/${res.attempted} paid${res.failed ? `, ${res.failed} failed` : ''}`);
+      setSelectedQueueIds(new Set());
+      await load();
+    } catch (err) {
+      notify('Warning: ' + err.message);
+    } finally { setBulkApproveBusy(false); }
   };
 
   const handleCreateTask = async () => {
@@ -907,12 +932,37 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         </p>
       )}
 
+      {queue?.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setSelectedQueueIds(selectedQueueIds.size === queue.length ? new Set() : new Set(queue.map((s) => s._id)))}
+            style={{ padding: '6px 12px', borderRadius: '8px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-muted)', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+            {selectedQueueIds.size === queue.length ? 'Clear selection' : `Select all (${queue.length})`}
+          </button>
+          {selectedQueueIds.size > 0 && (
+            <button
+              onClick={() => setBulkApproveConfirm(true)}
+              disabled={bulkApproveBusy || selectedQueueIds.size > 20}
+              style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', backgroundColor: (bulkApproveBusy || selectedQueueIds.size > 20) ? '#a0aec0' : '#48bb78', color: 'white', fontSize: '0.76rem', fontWeight: '700', cursor: (bulkApproveBusy || selectedQueueIds.size > 20) ? 'not-allowed' : 'pointer' }}>
+              {bulkApproveBusy ? 'Approving…' : `✅ Bulk approve (${selectedQueueIds.size})`}
+            </button>
+          )}
+          {selectedQueueIds.size > 20 && (
+            <span style={{ fontSize: '0.72rem', color: '#c53030' }}>Max 20 at a time — deselect a few.</span>
+          )}
+        </div>
+      )}
+
       {queue?.map((sub) => (
-        <div key={sub._id} style={{ backgroundColor: 'var(--surface)', padding: '16px', marginBottom: '12px', borderRadius: '10px', boxShadow: '0 2px 6px var(--shadow-color)' }}>
+        <div key={sub._id} style={{ backgroundColor: 'var(--surface)', padding: '16px', marginBottom: '12px', borderRadius: '10px', boxShadow: '0 2px 6px var(--shadow-color)', border: selectedQueueIds.has(sub._id) ? '1.5px solid #48bb78' : '1.5px solid transparent' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-            <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: '700', color: 'var(--text)', flex: 1 }}>
-              {sub.task?.title}
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', flex: 1 }}>
+              <input type="checkbox" checked={selectedQueueIds.has(sub._id)} onChange={() => toggleQueueSelect(sub._id)}
+                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: '#48bb78', flexShrink: 0, cursor: 'pointer' }} />
+              <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: '700', color: 'var(--text)', flex: 1 }}>
+                {sub.task?.title}
+              </h4>
+            </div>
             <span style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '3px 8px', borderRadius: '8px', fontWeight: '800', fontSize: '0.78rem', flexShrink: 0, marginLeft: '8px' }}>
               {(sub.task?.rewardMicroPi / 1e6).toFixed(2)} π
             </span>
@@ -959,6 +1009,48 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         </div>
       ))}
       </>
+      )}
+
+      {bulkApproveConfirm && (
+        <div
+          onClick={() => setBulkApproveConfirm(false)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: '380px', backgroundColor: 'var(--surface)', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+          >
+            <div style={{ background: 'linear-gradient(135deg, #16a34a, #059669)', padding: '18px 20px', color: 'white' }}>
+              <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>✅</div>
+              <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Confirm bulk approve</div>
+              <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real A2U payouts — moves funds on-chain</div>
+            </div>
+            <div style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: '0.82rem', color: '#334155', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '10px 12px' }}>
+                Approve & pay {selectedQueueIds.size} submission{selectedQueueIds.size === 1 ? '' : 's'}
+              </div>
+              <ul style={{ margin: '12px 0 0', padding: '0 0 0 18px', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.6 }}>
+                <li>Each one triggers a real A2U payment, paced automatically.</li>
+                <li>This can take a little while for a large selection — don't close the tab.</li>
+                <li>Anything that fails (e.g. escrow exhausted) is skipped, not retried — it'll show in the result summary.</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', padding: '0 20px 20px' }}>
+              <button
+                onClick={() => setBulkApproveConfirm(false)}
+                style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: '#475569', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeBulkApprove}
+                style={{ flex: 1.4, padding: '11px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #16a34a, #059669)', color: 'white', fontWeight: 800, fontSize: '0.84rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,150,105,0.35)' }}
+              >
+                Confirm &amp; Approve
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <button onClick={onOpenDisputes}

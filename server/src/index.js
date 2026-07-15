@@ -736,6 +736,47 @@ app.get('/api/admin/queue', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+// Bulk-approve — same per-item logic as the single approve route (settleApproval),
+// just looped with pacing between each real A2U call so a batch doesn't hammer
+// Pi's rate limits the way a naive Promise.all over N approvals would. Capped
+// at 20 per request: keeps a single admin click bounded to under a minute and
+// makes an accidental "select everything" mistake much less costly.
+const BULK_APPROVE_MAX = 20;
+const BULK_APPROVE_DELAY_MS = 2500;
+app.post('/api/admin/queue/bulk-approve', requireAuth, requireAdmin, requireFeature('payouts', 'Payouts'), async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : [];
+    if (ids.length === 0) return res.status(400).json({ error: 'No submissions selected.' });
+    if (ids.length > BULK_APPROVE_MAX) {
+      return res.status(400).json({ error: `Approve at most ${BULK_APPROVE_MAX} at a time — you selected ${ids.length}.` });
+    }
+    for (const id of ids) {
+      if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: `Invalid submission id: ${id}` });
+    }
+
+    const results = [];
+    for (const id of ids) {
+      try {
+        const sub = await Submission.findOneAndUpdate(
+          { _id: id, status: 'pending' }, { status: 'approved' }, { new: true });
+        if (!sub) { results.push({ id, ok: false, error: 'Not in pending queue (already handled?)' }); continue; }
+        await settleApproval(sub._id);
+        results.push({ id, ok: true });
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message || 'Unknown error' });
+      }
+      // Pace real A2U calls — same reasoning as autoPay.js's batch pacing.
+      // eslint-disable-next-line no-await-in-loop
+      if (ids.indexOf(id) < ids.length - 1) await new Promise((r) => setTimeout(r, BULK_APPROVE_DELAY_MS));
+    }
+
+    const approved = results.filter((r) => r.ok).length;
+    const failed = results.length - approved;
+    res.json({ ok: true, attempted: results.length, approved, failed, results });
+    await logAdminAction(req, 'submission.bulk_approve', { details: `Approved ${approved}/${results.length} selected submission(s)${failed ? `, ${failed} failed` : ''}` });
+  } catch (err) { next(err); }
+});
+
 app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, requireFeature('payouts', 'Payouts'), async (req, res, next) => {
   try {
     const sub = await Submission.findOneAndUpdate(

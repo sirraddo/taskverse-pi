@@ -168,6 +168,7 @@ export const submitDisputeStatement = (id, statement) =>
 /* ── Admin API ── */
 export const fetchAdminQueue = () => api('/api/admin/queue');
 export const approveSubmission= (id) => api(`/api/admin/submissions/${id}/approve`, {});
+export const bulkApproveSubmissions = (ids) => api('/api/admin/queue/bulk-approve', { ids });
 export const rejectSubmission = (id) => api(`/api/admin/submissions/${id}/reject`, {});
 export const fetchDisputes = () => api('/api/admin/disputes');
 export const resolveDispute = (id, d, note='')=> api(`/api/admin/disputes/${id}/resolve`, { decision: d, note });
