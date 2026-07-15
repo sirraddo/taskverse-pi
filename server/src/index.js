@@ -47,15 +47,26 @@ const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
    coded to the spec and fails safe (silently skips sending) wherever
    support is missing, rather than erroring. Configure with:
      VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY  (generate via `npx web-push generate-vapid-keys`)
-     VAPID_SUBJECT (mailto: address or https:// URL — required by the spec) */
+     VAPID_SUBJECT (mailto: address or https:// URL — required by the spec)
+
+   IMPORTANT: webpush.setVapidDetails() throws SYNCHRONOUSLY if the subject
+   isn't a valid mailto:/https:// URL or the keys are malformed — and this
+   runs at module load time, so an unhandled throw here would crash the
+   entire server on boot over what should be a non-critical, optional
+   feature. Wrapped in try/catch so a bad value just disables push instead. */
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
-const PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
-if (PUSH_CONFIGURED) {
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
-    VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
-  );
+let PUSH_CONFIGURED = false;
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+      VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
+    );
+    PUSH_CONFIGURED = true;
+  } catch (e) {
+    console.error('[push] Invalid VAPID_SUBJECT/VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY — push notifications disabled:', e.message);
+  }
 } else {
   console.warn('[push] VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — push notifications are disabled.');
 }
