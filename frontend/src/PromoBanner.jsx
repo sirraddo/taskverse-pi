@@ -51,7 +51,7 @@ export default function PromoBanner() {
               aria-label={`Show banner ${idx + 1}`}
               style={{
                 width: idx === i ? '16px' : '6px', height: '6px', borderRadius: '3px', border: 'none',
-                backgroundColor: idx === i ? '#059669' : '#cbd5e0', cursor: 'pointer', padding: 0,
+                backgroundColor: idx === i ? '#059669' : 'var(--border-strong)', cursor: 'pointer', padding: 0,
                 transition: 'width 0.15s ease',
               }}
             />

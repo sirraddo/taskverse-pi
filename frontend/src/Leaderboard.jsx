@@ -37,8 +37,8 @@ export default function Leaderboard({ onBack }) {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
-        <h2 style={{ margin: 0 }}>🏆 Leaderboard</h2>
+        <button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>← Back</button>
+        <h2 style={{ margin: 0, color: 'var(--text)' }}>🏆 Leaderboard</h2>
       </div>
 
       {/* Period tabs */}
@@ -46,9 +46,9 @@ export default function Leaderboard({ onBack }) {
         {PERIODS.map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)}
             style={{ flex: 1, padding: '8px 0', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.78rem',
-              backgroundColor: period === p.key ? '#059669' : 'white',
-              color: period === p.key ? 'white' : '#718096',
-              boxShadow: period === p.key ? '0 2px 8px rgba(5,150,105,0.4)' : '0 1px 3px rgba(0,0,0,0.07)',
+              backgroundColor: period === p.key ? '#059669' : 'var(--surface)',
+              color: period === p.key ? 'white' : 'var(--text-faint)',
+              boxShadow: period === p.key ? '0 2px 8px rgba(5,150,105,0.4)' : '0 1px 3px var(--shadow-color)',
               transition: 'all 0.15s ease' }}>
             {p.label}
           </button>
@@ -57,12 +57,12 @@ export default function Leaderboard({ onBack }) {
 
       {/* Skeleton */}
       {(entries === null || loading) && [1,2,3].map(i => (
-        <div key={i} style={{ height: '64px', backgroundColor: '#edf2f7', borderRadius: '10px', marginBottom: '10px', animation: 'shimmer 1.4s infinite', background: 'linear-gradient(90deg,#edf2f7 25%,#e2e8f0 50%,#edf2f7 75%)', backgroundSize: '200% 100%' }} />
+        <div key={i} style={{ height: '64px', backgroundColor: 'var(--surface-alt)', borderRadius: '10px', marginBottom: '10px', animation: 'shimmer 1.4s infinite', background: 'linear-gradient(90deg,var(--surface-alt) 25%,var(--border) 50%,var(--surface-alt) 75%)', backgroundSize: '200% 100%' }} />
       ))}
 
       {/* Empty */}
       {entries !== null && !loading && entries.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 20px', color: '#a0aec0' }}>
+        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-faintest)' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🏅</div>
           <p style={{ fontWeight: '600', margin: 0 }}>No entries yet for this period</p>
           <p style={{ fontSize: '0.82rem', marginTop: '4px' }}>Complete tasks to appear here!</p>
@@ -71,13 +71,13 @@ export default function Leaderboard({ onBack }) {
 
       {/* Entries */}
       {!loading && (entries || []).map((entry, index) => (
-        <div key={entry.username} style={{ backgroundColor: 'white', padding: '14px 16px', borderRadius: '12px', marginBottom: '8px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div key={entry.username} style={{ backgroundColor: 'var(--surface)', padding: '14px 16px', borderRadius: '12px', marginBottom: '8px', boxShadow: '0 1px 6px var(--shadow-color)', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontSize: '1.4rem', width: '34px', textAlign: 'center', flexShrink: 0 }}>
-            {index < 3 ? medals[index] : <span style={{ fontWeight: '800', color: '#a0aec0', fontSize: '0.95rem' }}>#{index + 1}</span>}
+            {index < 3 ? medals[index] : <span style={{ fontWeight: '800', color: 'var(--text-faintest)', fontSize: '0.95rem' }}>#{index + 1}</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: '700', color: '#2d3748', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.username}</div>
-            <div style={{ fontSize: '0.73rem', color: '#a0aec0', marginTop: '1px' }}>
+            <div style={{ fontWeight: '700', color: 'var(--text-secondary)', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.username}</div>
+            <div style={{ fontSize: '0.73rem', color: 'var(--text-faintest)', marginTop: '1px' }}>
               {entry.tasksCompleted || 0} task{entry.tasksCompleted !== 1 ? 's' : ''} completed
             </div>
           </div>

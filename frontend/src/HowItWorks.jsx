@@ -24,11 +24,11 @@ export default function HowItWorks({ onClose, onBack }) {
   const dismiss = onClose || onBack || (() => {});
 
   return (
-    <div style={{ maxWidth: '500px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', lineHeight: 1.7, color: '#2d3748', backgroundColor: '#f9f9f9', minHeight: '100vh' }}>
+    <div style={{ maxWidth: '500px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', lineHeight: 1.7, color: 'var(--text-secondary)', backgroundColor: 'var(--bg)', minHeight: '100vh' }}>
 
       {/* Back button — only shown when opened from the feed (onBack prop) */}
       {onBack && !onClose && (
-        <button onClick={dismiss} style={{ marginBottom: '16px', background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <button onClick={dismiss} style={{ marginBottom: '16px', background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>
           ← Back
         </button>
       )}
@@ -37,39 +37,39 @@ export default function HowItWorks({ onClose, onBack }) {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
           <Logo size={72} />
         </div>
-        <h1 style={{ fontSize: '1.6rem', color: '#1a202c', margin: 0 }}>TaskVerse Earn</h1>
+        <h1 style={{ fontSize: '1.6rem', color: 'var(--text)', margin: 0 }}>TaskVerse Earn</h1>
         <p style={{ color: '#059669', fontWeight: 'bold', margin: '6px 0 0' }}>Earn Pi. Anywhere. Anytime.</p>
-        <p style={{ color: '#718096', fontSize: '0.9rem', marginTop: '10px' }}>
+        <p style={{ color: 'var(--text-faint)', fontSize: '0.9rem', marginTop: '10px' }}>
           The micro-task marketplace built for the Pi Network ecosystem.
         </p>
       </div>
 
-      <h2 style={{ fontSize: '1rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', margin: '24px 0 12px' }}>How It Works</h2>
+      <h2 style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: '24px 0 12px' }}>How It Works</h2>
       {STEPS.map((step, i) => (
-        <div key={i} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', backgroundColor: 'white', padding: '14px', borderRadius: '12px', marginBottom: '10px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+        <div key={i} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '12px', marginBottom: '10px', boxShadow: '0 1px 6px var(--shadow-color)' }}>
           <div style={{ fontSize: '1.8rem', lineHeight: 1, flexShrink: 0 }}>{step.icon}</div>
           <div>
-            <div style={{ fontWeight: '700', color: '#2d3748', marginBottom: '4px' }}>{step.title}</div>
-            <div style={{ color: '#718096', fontSize: '0.85rem', lineHeight: 1.5 }}>{step.desc}</div>
+            <div style={{ fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '4px' }}>{step.title}</div>
+            <div style={{ color: 'var(--text-faint)', fontSize: '0.85rem', lineHeight: 1.5 }}>{step.desc}</div>
           </div>
         </div>
       ))}
 
       <div style={{ display: 'flex', gap: '10px', margin: '24px 0', textAlign: 'center' }}>
         {[['⚡', 'Instant', 'Auto-payouts'], ['🔒', 'Secure', 'Pi SDK auth'], ['🌐', 'Global', 'All pioneers']].map(([icon, label, sub]) => (
-          <div key={label} style={{ flex: 1, backgroundColor: 'white', padding: '14px 8px', borderRadius: '12px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+          <div key={label} style={{ flex: 1, backgroundColor: 'var(--surface)', padding: '14px 8px', borderRadius: '12px', boxShadow: '0 1px 6px var(--shadow-color)' }}>
             <div style={{ fontSize: '1.4rem' }}>{icon}</div>
-            <div style={{ fontWeight: '700', color: '#2d3748', fontSize: '0.9rem' }}>{label}</div>
-            <div style={{ color: '#a0aec0', fontSize: '0.75rem' }}>{sub}</div>
+            <div style={{ fontWeight: '700', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{label}</div>
+            <div style={{ color: 'var(--text-faintest)', fontSize: '0.75rem' }}>{sub}</div>
           </div>
         ))}
       </div>
 
-      <h2 style={{ fontSize: '1rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', margin: '24px 0 12px' }}>FAQ</h2>
+      <h2 style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: '24px 0 12px' }}>FAQ</h2>
       {FAQS.map((faq, i) => (
-        <div key={i} style={{ backgroundColor: 'white', padding: '14px', borderRadius: '12px', marginBottom: '10px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontWeight: '700', color: '#2d3748', marginBottom: '6px' }}>{faq.q}</div>
-          <div style={{ color: '#718096', fontSize: '0.85rem' }}>{faq.a}</div>
+        <div key={i} style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '12px', marginBottom: '10px', boxShadow: '0 1px 6px var(--shadow-color)' }}>
+          <div style={{ fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>{faq.q}</div>
+          <div style={{ color: 'var(--text-faint)', fontSize: '0.85rem' }}>{faq.a}</div>
         </div>
       ))}
 
@@ -77,7 +77,7 @@ export default function HowItWorks({ onClose, onBack }) {
         style={{ width: '100%', marginTop: '24px', padding: '14px', background: 'linear-gradient(135deg, #059669, #047857)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(5,150,105,0.4)' }}>
         {onClose ? 'Get Started — Earn Pi Now 🚀' : 'Got It ✔'}
       </button>
-      <p style={{ textAlign: 'center', color: '#a0aec0', fontSize: '0.75rem', marginTop: '12px' }}>Available exclusively inside Pi Browser</p>
+      <p style={{ textAlign: 'center', color: 'var(--text-faintest)', fontSize: '0.75rem', marginTop: '12px' }}>Available exclusively inside Pi Browser</p>
     </div>
   );
 }

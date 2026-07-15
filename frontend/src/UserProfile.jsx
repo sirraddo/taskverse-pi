@@ -64,7 +64,7 @@ return (
 ⚠️ Disputed — {dispute.taskTitle}
 </div>
 {dispute.proofText && (
-<div style={{ fontSize: '0.76rem', color: '#718096', backgroundColor: '#f7fafc', padding: '8px 10px', borderRadius: '8px', marginBottom: '8px', lineHeight: 1.4 }}>
+<div style={{ fontSize: '0.76rem', color: 'var(--text-faint)', backgroundColor: 'var(--surface-alt)', padding: '8px 10px', borderRadius: '8px', marginBottom: '8px', lineHeight: 1.4 }}>
 Your proof: {dispute.proofText.slice(0, 120)}{dispute.proofText.length > 120 ? '…' : ''}
 </div>
 )}
@@ -74,14 +74,14 @@ Your proof: {dispute.proofText.slice(0, 120)}{dispute.proofText.length > 120 ? '
 </div>
 ) : (
 <div>
-<label style={{ fontSize: '0.68rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>YOUR APPEAL STATEMENT</label>
+<label style={{ fontSize: '0.68rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>YOUR APPEAL STATEMENT</label>
 <textarea
 value={text}
 onChange={e => { setText(e.target.value); setErr(null); }}
 placeholder="Explain why this should be approved… (links, context, evidence)"
 rows={3}
 maxLength={2000}
-style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none' }}
+style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid var(--border)', fontSize: '0.82rem', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none', backgroundColor: 'var(--surface)', color: 'var(--text-secondary)' }}
 />
 {err && <div style={{ color: '#c53030', fontSize: '0.75rem', marginTop: '3px' }}>{err}</div>}
 <button onClick={submit} disabled={sending}
@@ -154,8 +154,8 @@ return (
 
 {/* Back button */}
 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-<button onClick={onBack} style={{ background: 'none', border: '1.5px solid #e2e8f0', padding: '6px 14px', borderRadius: '20px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600', color: '#4a5568' }}>← Back</button>
-<span style={{ fontWeight: '700', color: '#2d3748', fontSize: '1rem' }}>My Profile</span>
+<button onClick={onBack} style={{ background: 'none', border: '1.5px solid var(--border)', padding: '6px 14px', borderRadius: '20px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600', color: 'var(--text-muted)' }}>← Back</button>
+<span style={{ fontWeight: '700', color: 'var(--text-secondary)', fontSize: '1rem' }}>My Profile</span>
 {openDisputes.length > 0 && (
 <span style={{ backgroundColor: '#c53030', color: 'white', borderRadius: '20px', padding: '2px 8px', fontSize: '0.65rem', fontWeight: '800', marginLeft: 'auto' }}>
 {openDisputes.length} DISPUTE{openDisputes.length > 1 ? 'S' : ''}
@@ -213,44 +213,44 @@ return (
 { label: 'Total Earned', value: totalEarned.toFixed(2) + ' π', icon: '💰' },
 { label: 'Pending', value: pendingCount, icon: '⏳' },
 ].map(stat => (
-<div key={stat.label} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+<div key={stat.label} style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 8px var(--shadow-color)' }}>
 <div style={{ fontSize: '1.2rem', marginBottom: '2px' }}>{stat.icon}</div>
-<div style={{ fontSize: '1rem', fontWeight: '800', color: '#2d3748', lineHeight: 1 }}>{stat.value}</div>
-<div style={{ fontSize: '0.62rem', color: '#a0aec0', fontWeight: '600', marginTop: '2px' }}>{stat.label}</div>
+<div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-secondary)', lineHeight: 1 }}>{stat.value}</div>
+<div style={{ fontSize: '0.62rem', color: 'var(--text-faintest)', fontWeight: '600', marginTop: '2px' }}>{stat.label}</div>
 </div>
 ))}
 </div>
 
 {/* Country selector — enables country-targeted tasks */}
-<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-<h4 style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: '700', color: '#4a5568' }}>🌍 My Country</h4>
-<p style={{ margin: '0 0 8px', fontSize: '0.72rem', color: '#a0aec0' }}>Some tasks are only available in specific countries. Set yours so you can see and complete them.</p>
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
+<h4 style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🌍 My Country</h4>
+<p style={{ margin: '0 0 8px', fontSize: '0.72rem', color: 'var(--text-faintest)' }}>Some tasks are only available in specific countries. Set yours so you can see and complete them.</p>
 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 <select value={country} disabled={savingCountry} onChange={(e) => saveCountry(e.target.value)}
-style={{ flex: 1, padding: '9px 10px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', color: '#2d3748', backgroundColor: 'white' }}>
+style={{ flex: 1, padding: '9px 10px', borderRadius: '10px', border: '1.5px solid var(--border)', fontSize: '0.85rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)' }}>
 {PROFILE_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
 </select>
-{savingCountry && <span style={{ fontSize: '0.72rem', color: '#a0aec0' }}>Saving…</span>}
+{savingCountry && <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)' }}>Saving…</span>}
 {countrySaved && !savingCountry && <span style={{ fontSize: '0.72rem', color: '#38a169', fontWeight: 700 }}>✓ Saved</span>}
 </div>
 </div>
-<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-<h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', fontWeight: '700', color: '#4a5568' }}>🎖️ Achievements</h4>
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
+<h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🎖️ Achievements</h4>
 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
 {ACHIEVEMENTS.map(a => {
 const unlocked = count >= a.threshold;
 return (
 <div key={a.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', opacity: unlocked ? 1 : 0.35, transition: 'opacity 0.2s' }}>
-<div style={{ width: '44px', height: '44px', borderRadius: '50%', background: unlocked ? (a.color + '22') : '#edf2f7', border: unlocked ? ('2px solid ' + a.color) : '2px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>
+<div style={{ width: '44px', height: '44px', borderRadius: '50%', background: unlocked ? (a.color + '22') : 'var(--surface-alt)', border: unlocked ? ('2px solid ' + a.color) : '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>
 {a.icon}
 </div>
-<span style={{ fontSize: '0.55rem', color: '#718096', fontWeight: '700', textAlign: 'center', maxWidth: '48px' }}>{a.label}</span>
+<span style={{ fontSize: '0.55rem', color: 'var(--text-faint)', fontWeight: '700', textAlign: 'center', maxWidth: '48px' }}>{a.label}</span>
 </div>
 );
 })}
 </div>
 {next && (
-<div style={{ marginTop: '10px', fontSize: '0.72rem', color: '#a0aec0', textAlign: 'center' }}>
+<div style={{ marginTop: '10px', fontSize: '0.72rem', color: 'var(--text-faintest)', textAlign: 'center' }}>
 {next.threshold - count} more task{(next.threshold - count) !== 1 ? 's' : ''} to unlock <strong>{next.label}</strong> {next.icon}
 </div>
 )}
@@ -280,10 +280,10 @@ return (
 )}
 
 {/* Submission history */}
-<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-<h4 style={{ margin: '0 0 12px', fontSize: '0.85rem', fontWeight: '700', color: '#4a5568' }}>📋 Recent Submissions</h4>
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
+<h4 style={{ margin: '0 0 12px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>📋 Recent Submissions</h4>
 {history.length === 0 && (
-<div style={{ textAlign: 'center', padding: '24px', color: '#a0aec0' }}>
+<div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-faintest)' }}>
 <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🎯</div>
 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '600' }}>No submissions yet</p>
 <p style={{ margin: '4px 0 0', fontSize: '0.72rem' }}>Pick a task from the feed to get started!</p>
@@ -292,13 +292,13 @@ return (
 {history.map((item, index) => {
 const st = STATUS_COLORS[item.status] || { bg: '#f7fafc', text: '#718096', label: item.status };
 return (
-<div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: index < history.length - 1 ? '1px solid #f0f4f8' : 'none', gap: '8px' }}>
+<div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: index < history.length - 1 ? '1px solid var(--border)' : 'none', gap: '8px' }}>
 <div style={{ flex: 1 }}>
-<div style={{ fontSize: '0.82rem', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{item.title || 'Task removed'}</div>
-<div style={{ fontSize: '0.7rem', color: '#a0aec0', marginTop: '1px' }}>{item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+<div style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--text-secondary)', lineHeight: 1.3 }}>{item.title || 'Task removed'}</div>
+<div style={{ fontSize: '0.7rem', color: 'var(--text-faintest)', marginTop: '1px' }}>{item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
 </div>
 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-<div style={{ fontWeight: '700', color: ['approved','auto_approved'].includes(item.status) ? '#276749' : '#718096', fontSize: '0.82rem' }}>
+<div style={{ fontWeight: '700', color: ['approved','auto_approved'].includes(item.status) ? '#276749' : 'var(--text-faint)', fontSize: '0.82rem' }}>
 {['approved','auto_approved'].includes(item.status) ? '+' : ''}{item.reward} π
 </div>
 <span style={{ backgroundColor: st.bg, color: st.text, padding: '2px 7px', borderRadius: '10px', fontSize: '0.62rem', fontWeight: '700' }}>{st.label}</span>
