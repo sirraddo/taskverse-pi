@@ -1385,6 +1385,36 @@ async function backfillRefIds(paymentDocs) {
   for (const p of missing) p.refId = byId[p._id.toString()] || p.refId;
 }
 
+// Shared between the JSON list route and the CSV export below, so the two
+// never drift out of sync on what "direction=A2U&status=failed" etc. means.
+async function buildTransactionFilter(req) {
+  const filter = {};
+  if (req.query.direction && ['U2A', 'A2U'].includes(req.query.direction)) filter.direction = req.query.direction;
+  if (req.query.purpose && ['task_funding', 'worker_payout', 'withdrawal'].includes(req.query.purpose)) filter.purpose = req.query.purpose;
+  if (req.query.status && ['created', 'approved', 'completed', 'cancelled', 'failed'].includes(req.query.status)) filter.status = req.query.status;
+
+  const userQuery = String(req.query.user || '').trim();
+  if (userQuery) {
+    const rx = new RegExp(escapeRegex(userQuery), 'i');
+    const matchingUsers = await User.find({ $or: [{ username: rx }, { piUid: rx }] }).select('_id').lean();
+    filter.user = { $in: matchingUsers.map((u) => u._id) };
+  }
+  return filter;
+}
+
+// Minimal RFC 4180 CSV cell escaping — wrap in quotes and double any quote
+// inside if the value contains a comma, quote, or newline.
+function csvCell(value) {
+  const s = value === null || value === undefined ? '' : String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function toCsv(headers, rows) {
+  const lines = [headers.map(csvCell).join(',')];
+  for (const row of rows) lines.push(row.map(csvCell).join(','));
+  return lines.join('\r\n');
+}
+const CSV_EXPORT_MAX_ROWS = 5000;
+
 app.get('/api/admin/transactions', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const mapPayment = (p) => ({
@@ -1415,17 +1445,7 @@ app.get('/api/admin/transactions', requireAuth, requireAdmin, async (req, res, n
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const filter = {};
-    if (req.query.direction && ['U2A', 'A2U'].includes(req.query.direction)) filter.direction = req.query.direction;
-    if (req.query.purpose && ['task_funding', 'worker_payout', 'withdrawal'].includes(req.query.purpose)) filter.purpose = req.query.purpose;
-    if (req.query.status && ['created', 'approved', 'completed', 'cancelled', 'failed'].includes(req.query.status)) filter.status = req.query.status;
-
-    const userQuery = String(req.query.user || '').trim();
-    if (userQuery) {
-      const rx = new RegExp(escapeRegex(userQuery), 'i');
-      const matchingUsers = await User.find({ $or: [{ username: rx }, { piUid: rx }] }).select('_id').lean();
-      filter.user = { $in: matchingUsers.map((u) => u._id) };
-    }
+    const filter = await buildTransactionFilter(req);
 
     const [rows, total] = await Promise.all([
       Payment.find(filter)
@@ -1440,6 +1460,31 @@ app.get('/api/admin/transactions', requireAuth, requireAdmin, async (req, res, n
       transactions: rows.map(mapPayment),
       total, page, limit, hasMore: page * limit < total,
     });
+  } catch (err) { next(err); }
+});
+
+// Same filters as the JSON list above, unpaginated (capped at 5000 rows) and
+// streamed back as a CSV file instead of JSON.
+app.get('/api/admin/transactions/export.csv', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const filter = await buildTransactionFilter(req);
+    const rows = await Payment.find(filter)
+      .populate('user', 'username piUid').populate('task', 'title')
+      .sort({ createdAt: -1 }).limit(CSV_EXPORT_MAX_ROWS).lean();
+    await backfillRefIds(rows);
+
+    const csv = toCsv(
+      ['Reference', 'Direction', 'Purpose', 'Status', 'Amount (π)', 'Username', 'PiUid', 'Task', 'Pi Payment ID', 'Txid', 'Created At'],
+      rows.map((p) => [
+        p.refId || '', p.direction, p.purpose, p.status, toPi(p.amountMicroPi),
+        p.user?.username || '', p.user?.piUid || '', p.task?.title || '',
+        p.piPaymentId, p.txid || '', p.createdAt.toISOString(),
+      ])
+    );
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="taskverse-transactions-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+    await logAdminAction(req, 'transactions.export_csv', { details: `Exported ${rows.length} row(s)` });
   } catch (err) { next(err); }
 });
 
@@ -1562,18 +1607,23 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function buildUserFilter(req) {
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  const filter = {};
+  if (q) {
+    const rx = new RegExp(escapeRegex(q), 'i');
+    filter.$or = [{ username: rx }, { piUid: rx }];
+  }
+  if (req.query.banned === 'true') filter.isBanned = true;
+  if (req.query.banned === 'false') filter.isBanned = false;
+  return filter;
+}
+
 app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const q = String(req.query.q || '').trim().slice(0, 100);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const filter = {};
-    if (q) {
-      const rx = new RegExp(escapeRegex(q), 'i');
-      filter.$or = [{ username: rx }, { piUid: rx }];
-    }
-    if (req.query.banned === 'true') filter.isBanned = true;
-    if (req.query.banned === 'false') filter.isBanned = false;
+    const filter = buildUserFilter(req);
 
     const [rows, total] = await Promise.all([
       User.find(filter)
@@ -1594,6 +1644,32 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res, next) =>
       })),
       total, page, limit, hasMore: page * limit < total,
     });
+  } catch (err) { next(err); }
+});
+
+// Same filters as the JSON list above, unpaginated (capped at 5000 rows) and
+// streamed back as a CSV file instead of JSON.
+app.get('/api/admin/users/export.csv', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const filter = buildUserFilter(req);
+    const rows = await User.find(filter)
+      .select('piUid username balanceMicroPi approvedCount rejectedCount isBanned avatarBlocked country lastLoginAt createdAt')
+      .sort({ createdAt: -1 })
+      .limit(CSV_EXPORT_MAX_ROWS)
+      .lean();
+
+    const csv = toCsv(
+      ['Username', 'PiUid', 'Balance (π)', 'Approved', 'Rejected', 'Banned', 'Avatar Blocked', 'Country', 'Last Login', 'Joined'],
+      rows.map((u) => [
+        u.username, u.piUid, toPi(u.balanceMicroPi), u.approvedCount, u.rejectedCount,
+        u.isBanned ? 'yes' : 'no', u.avatarBlocked ? 'yes' : 'no', u.country || '',
+        u.lastLoginAt ? u.lastLoginAt.toISOString() : '', u.createdAt.toISOString(),
+      ])
+    );
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="taskverse-users-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+    await logAdminAction(req, 'users.export_csv', { details: `Exported ${rows.length} row(s)` });
   } catch (err) { next(err); }
 });
 

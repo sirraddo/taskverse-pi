@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAdminTransactions } from './piClient';
+import { fetchAdminTransactions, exportAdminTransactionsCsv } from './piClient';
 
 const PAGE_SIZE = 20;
 
@@ -61,7 +61,15 @@ export default function AdminTransactions({ notify }) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const debounceRef = useRef(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try { await exportAdminTransactionsCsv({ direction, purpose, status, user: userQuery }); }
+    catch (e) { notify?.('⚠️ ' + (e.message || 'Export failed')); }
+    finally { setExporting(false); }
+  };
 
   const load = useCallback(async (p, filters) => {
     setLoading(true);
@@ -163,9 +171,15 @@ export default function AdminTransactions({ notify }) {
           <option value="failed">Failed</option>
         </select>
       </div>
-      <input value={userQuery} onChange={(e) => onUserQueryChange(e.target.value)}
-        placeholder="Filter by username or piUid…"
-        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', outline: 'none', marginBottom: '10px' }} />
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+        <input value={userQuery} onChange={(e) => onUserQueryChange(e.target.value)}
+          placeholder="Filter by username or piUid…"
+          style={{ flex: 1, boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', outline: 'none' }} />
+        <button onClick={handleExport} disabled={exporting}
+          style={{ padding: '9px 12px', borderRadius: '9px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: '700', cursor: exporting ? 'not-allowed' : 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {exporting ? '…' : '⬇️ CSV'}
+        </button>
+      </div>
 
       {loading ? (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>

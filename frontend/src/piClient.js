@@ -29,6 +29,34 @@ async function api(path, body, method) {
   return data;
 }
 
+// For file-download endpoints (CSV exports) — a plain <a href> can't attach
+// the Bearer auth header, so this fetches with auth like api() does, but
+// reads the response as a blob and triggers the save-as dialog itself
+// instead of parsing JSON.
+async function downloadFile(path, fallbackFilename) {
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      'Bypass-Tunnel-Reminder': 'true',
+      'ngrok-skip-browser-warning': 'true',
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    let msg = `Export failed (${res.status})`;
+    try { msg = (await res.json()).error || msg; } catch { /* non-JSON error body */ }
+    throw new Error(msg);
+  }
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match ? match[1] : fallbackFilename;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function initPi() {
   if (!window.Pi) throw new Error('Pi SDK not loaded — open this app inside the Pi Browser.');
   window.Pi.init({ version: '2.0', sandbox: import.meta.env.VITE_PI_SANDBOX === 'true' });
@@ -290,12 +318,22 @@ export const fetchAdminUsers = (q, page = 1, limit = 20) => {
   return api(`/api/admin/users?${params.toString()}`);
 };
 export const setUserBanned = (id, banned) => api(`/api/admin/users/${id}/ban`, { banned }, 'PATCH');
+export const exportAdminUsersCsv = (q) => {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  return downloadFile(`/api/admin/users/export.csv?${params.toString()}`, 'taskverse-users.csv');
+};
 
 /* ── Admin: transactions (all Payment records, refId lookup) ── */
 export const fetchAdminTransactions = (params = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
   return api(`/api/admin/transactions?${q.toString()}`);
+};
+export const exportAdminTransactionsCsv = (params = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+  return downloadFile(`/api/admin/transactions/export.csv?${q.toString()}`, 'taskverse-transactions.csv');
 };
 
 /* ── Support tickets (user-facing) ── */
