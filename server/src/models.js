@@ -361,4 +361,25 @@ export const Announcement = mongoose.model('Announcement', announcementSchema);
 export const Banner = mongoose.model('Banner', bannerSchema);
 export const FeatureFlag = mongoose.model('FeatureFlag', featureFlagSchema);
 export const PlatformSettings = mongoose.model('PlatformSettings', platformSettingsSchema);
+/* ── Admin audit log ──────────────────────────────────────────────
+   "Who did what" for every admin write action — approvals, bans, flag
+   flips, settings edits, etc. Since ADMIN_USERNAMES can list more than
+   one admin, there was previously no record of which one did what.
+   `admin` is null for the one route that can run unattended (the cron
+   auto-reconcile job) — `adminUsername` is denormalized so the log stays
+   readable even if that user account is ever deleted. */
+const adminAuditLogSchema = new Schema(
+  {
+    admin: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    adminUsername: { type: String, default: 'system' },
+    action: { type: String, required: true, index: true },
+    targetType: { type: String, default: '' },
+    targetId: { type: String, default: '' },
+    details: { type: String, default: '', maxlength: 500 },
+  },
+  { timestamps: true }
+);
+adminAuditLogSchema.index({ createdAt: -1 });
+
 export const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);
+export const AdminAuditLog = mongoose.model('AdminAuditLog', adminAuditLogSchema);

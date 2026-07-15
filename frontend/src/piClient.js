@@ -315,6 +315,13 @@ export const replyToTicketAsAdmin = (id, message) => api(`/api/admin/support/tic
 export const setTicketStatus = (id, status) => api(`/api/admin/support/tickets/${id}`, { status }, 'PATCH');
 export const fetchAdminSupportUnreadCount = () => api('/api/admin/support/unread-count');
 
+/* ── Admin: audit log ── */
+export const fetchAdminAuditLog = (params = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+  return api(`/api/admin/audit-log?${q.toString()}`);
+};
+
 /**
  * Like resizeImageToDataUrl, but fits/crops to a wide banner aspect ratio
  * (16:7 by default) instead of a square, and keeps a slightly larger JPEG

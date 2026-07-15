@@ -6,6 +6,7 @@ import AdminSettings from './AdminSettings';
 import AdminUsers from './AdminUsers';
 import AdminTransactions from './AdminTransactions';
 import AdminSupport from './AdminSupport';
+import AdminAuditLog from './AdminAuditLog';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount } from './piClient';
 
 const inputStyle = {
@@ -26,6 +27,7 @@ const TABS = [
   { key: 'flags', label: '🚩 Flags' },
   { key: 'settings', label: '⚙️ Settings' },
   { key: 'users', label: '👤 Users' },
+  { key: 'audit', label: '📜 Audit Log' },
 ];
 
 /**
@@ -876,6 +878,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         )}
       </div>
       </>
+      )}
+
+      {tab === 'audit' && (
+      <AdminAuditLog notify={notify} />
       )}
 
       {tab === 'support' && (

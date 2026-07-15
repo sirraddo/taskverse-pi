@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -125,6 +125,21 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
+}
+
+// Records "who did what" for the admin audit log. Takes req so it can pull
+// the admin's identity straight off the session (no extra DB lookup) — pass
+// null instead of req for the one route that can run unattended (the cron
+// auto-reconcile job), which logs as 'system'. Never throws: a logging
+// failure must never block or roll back the actual admin action.
+async function logAdminAction(req, action, { targetType = '', targetId = '', details = '' } = {}) {
+  try {
+    await AdminAuditLog.create({
+      admin: req?.session?.userId || null,
+      adminUsername: req?.session?.username || 'system',
+      action, targetType, targetId: String(targetId || ''), details,
+    });
+  } catch (_) { /* logging is best-effort */ }
 }
 
 /* ── Feature flags ──────────────────────────────────────────────
@@ -320,6 +335,9 @@ app.post('/api/admin/balance-fix', requireAuth, requireAdmin, async (req, res, n
       applied.push({ username: u.username, piUid: u.piUid, fromPi: toPi(u.balanceMicroPi), toPi: toPi(correctMicro) });
     }
     res.json({ ok: true, applied: applied.length, changes: applied });
+    if (applied.length > 0) {
+      await logAdminAction(req, 'balance.fix', { details: `Corrected ${applied.length} user balance(s)${req.body?.piUid ? ` (scoped to ${req.body.piUid})` : ''}` });
+    }
   } catch (err) { next(err); }
 });
 
@@ -725,6 +743,7 @@ app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, requir
     if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
     await settleApproval(sub._id);
     res.json({ ok: true });
+    await logAdminAction(req, 'submission.approve', { targetType: 'Submission', targetId: sub._id, details: `Approved & paid submission for task ${sub.task}` });
   } catch (err) { next(err); }
 });
 
@@ -736,6 +755,7 @@ app.post('/api/admin/submissions/:id/reject', requireAuth, requireAdmin, async (
     await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
     await Dispute.create({ submission: sub._id, openedBy: sub.worker });
     res.json({ ok: true, movedTo: 'disputes' });
+    await logAdminAction(req, 'submission.reject', { targetType: 'Submission', targetId: sub._id, details: `Rejected submission, moved to appeals` });
   } catch (err) { next(err); }
 });
 
@@ -766,6 +786,7 @@ app.post('/api/admin/disputes/:id/resolve', requireAuth, requireAdmin, async (re
     dispute.resolutionNote = note;
     await dispute.save();
     res.json({ ok: true, status: dispute.status });
+    await logAdminAction(req, 'dispute.resolve', { targetType: 'Dispute', targetId: dispute._id, details: `${decision === 'overturn' ? 'Overturned (paid)' : 'Upheld (rejection final)'}${note ? ` — "${note.slice(0, 120)}"` : ''}` });
   } catch (err) { next(err); }
 });
 
@@ -816,6 +837,7 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
       slots: slotCount,
       rewardPi: toPi(rewardMicro),
     });
+    await logAdminAction(req, 'task.create_sponsored', { targetType: 'Task', targetId: task._id, details: `"${task.title}" — ${slotCount} slots × ${toPi(rewardMicro)}π (fee-free)` });
   } catch (err) { next(err); }
 });
 
@@ -1029,6 +1051,7 @@ app.post('/api/admin/announcements', requireAuth, requireAdmin, async (req, res,
       title, body, level, linkUrl, linkLabel, active: true, createdBy: admin._id,
     });
     res.status(201).json({ ok: true, id: a._id });
+    await logAdminAction(req, 'announcement.create', { targetType: 'Announcement', targetId: a._id, details: `"${title}" (${level})` });
   } catch (err) { next(err); }
 });
 
@@ -1043,6 +1066,7 @@ app.patch('/api/admin/announcements/:id', requireAuth, requireAdmin, async (req,
     );
     if (!a) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true, active: a.active });
+    await logAdminAction(req, 'announcement.toggle', { targetType: 'Announcement', targetId: a._id, details: active ? 'Activated' : 'Deactivated' });
   } catch (err) { next(err); }
 });
 
@@ -1051,6 +1075,7 @@ app.delete('/api/admin/announcements/:id', requireAuth, requireAdmin, async (req
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
     await Announcement.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
+    await logAdminAction(req, 'announcement.delete', { targetType: 'Announcement', targetId: req.params.id });
   } catch (err) { next(err); }
 });
 
@@ -1124,6 +1149,7 @@ app.post('/api/admin/banners', requireAuth, requireAdmin, async (req, res, next)
       title, image, linkUrl, linkLabel, order, active: true, createdBy: admin._id,
     });
     res.status(201).json({ ok: true, id: b._id });
+    await logAdminAction(req, 'banner.create', { targetType: 'Banner', targetId: b._id, details: `"${title}"` });
   } catch (err) { next(err); }
 });
 
@@ -1156,6 +1182,7 @@ app.patch('/api/admin/banners/:id', requireAuth, requireAdmin, async (req, res, 
     const b = await Banner.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
     if (!b) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
+    await logAdminAction(req, 'banner.update', { targetType: 'Banner', targetId: b._id, details: Object.keys(updates).join(', ') });
   } catch (err) { next(err); }
 });
 
@@ -1164,6 +1191,7 @@ app.delete('/api/admin/banners/:id', requireAuth, requireAdmin, async (req, res,
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
     await Banner.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
+    await logAdminAction(req, 'banner.delete', { targetType: 'Banner', targetId: req.params.id });
   } catch (err) { next(err); }
 });
 
@@ -1223,6 +1251,7 @@ app.post('/api/admin/flags', requireAuth, requireAdmin, async (req, res, next) =
     const admin = await currentUser(req);
     await FeatureFlag.create({ key, enabled: key !== 'maintenance', updatedBy: admin._id });
     res.status(201).json({ ok: true });
+    await logAdminAction(req, 'flag.create', { targetType: 'FeatureFlag', targetId: key, details: `Created "${key}"` });
   } catch (err) { next(err); }
 });
 
@@ -1238,14 +1267,17 @@ app.patch('/api/admin/flags/:key', requireAuth, requireAdmin, async (req, res, n
       { key }, { $set: { enabled, updatedBy: admin._id } }, { new: true, upsert: true }
     );
     res.json({ ok: true, enabled: flag.enabled });
+    await logAdminAction(req, 'flag.toggle', { targetType: 'FeatureFlag', targetId: key, details: `"${key}" set enabled=${flag.enabled}` });
   } catch (err) { next(err); }
 });
 
 // Admin: delete a flag row (reverts that feature to its default: enabled).
 app.delete('/api/admin/flags/:key', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    await FeatureFlag.findOneAndDelete({ key: String(req.params.key || '').trim() });
+    const key = String(req.params.key || '').trim();
+    await FeatureFlag.findOneAndDelete({ key });
     res.json({ ok: true });
+    await logAdminAction(req, 'flag.delete', { targetType: 'FeatureFlag', targetId: key, details: `Removed "${key}" (reverts to default)` });
   } catch (err) { next(err); }
 });
 
@@ -1329,6 +1361,7 @@ app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, nex
       'global', { $set: { ...updates, updatedBy: admin._id } }, { upsert: true }
     );
     res.json({ ok: true, settings: await getPlatformSettings() });
+    await logAdminAction(req, 'settings.update', { targetType: 'PlatformSettings', details: Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ') });
   } catch (err) { next(err); }
 });
 
@@ -1473,6 +1506,7 @@ app.post('/api/admin/support/tickets/:id/reply', requireAuth, requireAdmin, asyn
     ticket.hasUnreadForAdmin = false;
     await ticket.save();
     res.json({ ok: true });
+    await logAdminAction(req, 'support.reply', { targetType: 'SupportTicket', targetId: ticket._id, details: `Replied to "${ticket.subject}"` });
   } catch (err) { next(err); }
 });
 
@@ -1491,6 +1525,32 @@ app.patch('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (re
     const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, { $set: { status: req.body.status } }, { new: true });
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     res.json({ ok: true, status: ticket.status });
+    await logAdminAction(req, 'support.status_change', { targetType: 'SupportTicket', targetId: ticket._id, details: `Set status to ${ticket.status}` });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: audit log ─────────────────────────────────────────────
+   Read-only view of everything logAdminAction() has recorded. Filterable
+   by admin username and action prefix (e.g. 'user.' catches ban+unban). */
+app.get('/api/admin/audit-log', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const filter = {};
+    if (req.query.admin) filter.adminUsername = String(req.query.admin).trim().toLowerCase();
+    if (req.query.action) filter.action = new RegExp('^' + escapeRegex(String(req.query.action).trim()));
+
+    const [rows, total] = await Promise.all([
+      AdminAuditLog.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      AdminAuditLog.countDocuments(filter),
+    ]);
+    res.json({
+      entries: rows.map((r) => ({
+        id: r._id, adminUsername: r.adminUsername, action: r.action,
+        targetType: r.targetType, targetId: r.targetId, details: r.details, createdAt: r.createdAt,
+      })),
+      total, page, limit, hasMore: page * limit < total,
+    });
   } catch (err) { next(err); }
 });
 
@@ -1547,6 +1607,7 @@ app.patch('/api/admin/users/:id/ban', requireAuth, requireAdmin, async (req, res
       .select('username isBanned');
     if (!u) return res.status(404).json({ error: 'User not found' });
     res.json({ ok: true, username: u.username, isBanned: u.isBanned });
+    await logAdminAction(req, banned ? 'user.ban' : 'user.unban', { targetType: 'User', targetId: u._id, details: `@${u.username}` });
   } catch (err) { next(err); }
 });
 
@@ -1563,12 +1624,15 @@ app.post('/api/admin/avatar-remove', requireAuth, requireAdmin, async (req, res,
     if (unblock) {
       u.avatarBlocked = false;
       await u.save();
-      return res.json({ ok: true, username: u.username, avatarBlocked: false });
+      res.json({ ok: true, username: u.username, avatarBlocked: false });
+      await logAdminAction(req, 'avatar.unblock', { targetType: 'User', targetId: u._id, details: `@${u.username}` });
+      return;
     }
     u.avatar = '';
     u.avatarBlocked = true;
     await u.save();
     res.json({ ok: true, username: u.username, avatarBlocked: true, message: 'Avatar removed and uploads blocked.' });
+    await logAdminAction(req, 'avatar.remove', { targetType: 'User', targetId: u._id, details: `@${u.username}` });
   } catch (err) { next(err); }
 });
 
@@ -1730,6 +1794,9 @@ app.post('/api/admin/cancel-stale-funding', requireAuth, requireAdmin, async (re
     }
 
     res.json({ ok: true, scanned: staleTasks.length, cancelled, recovered, skipped, details });
+    if (cancelled > 0 || recovered > 0) {
+      await logAdminAction(req, 'tasks.cancel_stale_funding', { details: `Scanned ${staleTasks.length}, cancelled ${cancelled}, recovered ${recovered}, skipped ${skipped}` });
+    }
   } catch (err) { next(err); }
 });
 
@@ -1759,6 +1826,9 @@ app.post('/api/admin/reconcile', requireAuth, requireAdmin, async (req, res, nex
     }
 
     res.json({ ok: true, ...results });
+    if (results.completed > 0) {
+      await logAdminAction(req, 'payouts.reconcile', { details: `Scanned ${results.scanned}, completed ${results.completed}, still pending ${results.stillPending}, failed ${results.failed}` });
+    }
   } catch (err) { next(err); }
 });
 
@@ -1968,6 +2038,9 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
       workers: distinctWorkers,
       results,
     });
+    if (paid.length > 0) {
+      await logAdminAction(req, 'payouts.a2u_batch', { details: `${hasSubmissionId ? 'Single' : 'Batch'} — paid ${paid.length}/${unpaid.length}, ${distinctWorkers.length} worker(s)` });
+    }
   } catch (err) { next(err); }
 });
 
@@ -1981,6 +2054,7 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
     const cronSecret = process.env.CRON_SECRET;
     const provided = req.headers['x-cron-secret'] || req.query.secret;
     const cronOk = cronSecret && provided && provided === cronSecret;
+    let triggeredBy = { userId: null, username: 'cron' };
 
     if (!cronOk) {
       // Fall back to admin-session auth.
@@ -1990,6 +2064,7 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
         if (!token) return res.status(401).json({ error: 'auth required (admin token or cron secret)' });
         const payload = jwt.verify(token, process.env.JWT_SECRET);
         if (!isAdmin(payload.username)) return res.status(403).json({ error: 'admin only' });
+        triggeredBy = { userId: payload.userId, username: payload.username };
       } catch (e) {
         return res.status(401).json({ error: 'invalid auth' });
       }
@@ -2000,6 +2075,9 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
     let archive = null;
     try { archive = await archiveOldTasks({ days: Number(process.env.ARCHIVE_AFTER_DAYS) || 30 }); } catch (_) {}
     res.json({ ok: true, ...summary, archive });
+    if (summary?.succeeded > 0) {
+      await logAdminAction({ session: triggeredBy }, 'payouts.auto_reconcile', { details: `Triggered by ${triggeredBy.username} — paid ${summary.succeeded}/${summary.attempted}` });
+    }
   } catch (err) { next(err); }
 });
 
@@ -2016,6 +2094,9 @@ app.post('/api/admin/reconcile-consolidated', requireAuth, requireAdmin, async (
     const maxWorkers = Number.isInteger(req.body?.maxWorkers) ? req.body.maxWorkers : 5;
     const summary = await runConsolidatedBatch({ maxWorkers, includeSkipped: !!req.body?.includeSkipped });
     res.json({ ok: true, includeSkipped: !!req.body?.includeSkipped, ...summary });
+    if (summary?.workersPaid > 0) {
+      await logAdminAction(req, 'payouts.consolidated_batch', { details: `Paid ${summary.workersPaid}/${summary.workersAttempted} worker(s), ${summary.submissionsPaid} submission(s), ${summary.piPaid}π` });
+    }
   } catch (err) { next(err); }
 });
 
