@@ -445,6 +445,16 @@ export const exportAdminTransactionsCsv = (params = {}) => {
 
 /* ── Support tickets (user-facing) ── */
 /* ── In-app notification feed ── */
+/* ── Referrals ── */
+export const fetchMyReferral = () => api('/api/me/referral');
+export const submitReferralCode = (code) => api('/api/me/referral', { code });
+export const fetchAdminReferrals = (params = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+  return api(`/api/admin/referrals?${q.toString()}`);
+};
+export const retryReferralPayout = (id) => api(`/api/admin/referrals/${id}/retry`, {});
+
 export const fetchNotifications = () => api('/api/notifications');
 export const markNotificationRead = (id) => api(`/api/notifications/${id}/read`, {});
 export const markAllNotificationsRead = () => api('/api/notifications/read-all', {});

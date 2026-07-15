@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { submitDisputeStatement, setMyCountry, uploadAvatar, deleteAvatar, resizeImageToDataUrl, isPushSupported, getPushSubscription, enablePushNotifications, disablePushNotifications } from './piClient';
+import { submitDisputeStatement, setMyCountry, uploadAvatar, deleteAvatar, resizeImageToDataUrl, isPushSupported, getPushSubscription, enablePushNotifications, disablePushNotifications, fetchMyReferral, submitReferralCode } from './piClient';
 
 // Common countries (ISO alpha-2). Keep in sync with CreateTask.
 const PROFILE_COUNTRIES = [
@@ -92,6 +92,113 @@ style={{ marginTop: '7px', backgroundColor: sending ? '#a0aec0' : '#744210', col
 )}
 </div>
 );
+}
+
+/**
+ * Referral code is just the referrer's username — nothing to generate,
+ * store, or dedupe. Since the whole app requires Pi Browser to load at
+ * all, a "magic link" can't reliably carry a referral through the gap of
+ * someone installing Pi Browser first — so this is manual code entry,
+ * the version that actually works for everyone rather than just people
+ * who already have Pi Browser open when they tap a link.
+ */
+function ReferralCard({ user }) {
+  const [data, setData] = useState(null);
+  const [code, setCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const load = () => {
+    fetchMyReferral().then(setData).catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(user.username);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable — nothing to fall back to */ }
+  };
+
+  const submit = async () => {
+    if (!code.trim()) return;
+    setErr(''); setSubmitting(true);
+    try {
+      await submitReferralCode(code.trim());
+      setCode('');
+      load();
+    } catch (e) {
+      setErr(e.message || 'Could not link that referral code.');
+    } finally { setSubmitting(false); }
+  };
+
+  if (!data) return null;
+
+  return (
+    <div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
+      <h4 style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🎁 Referrals</h4>
+      <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: 'var(--text-faintest)' }}>
+        Share your code. When someone you referred completes their first approved task, you earn a bonus.
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <div style={{ flex: 1, padding: '9px 12px', borderRadius: '10px', backgroundColor: 'var(--surface-alt)', fontFamily: 'monospace', fontWeight: '700', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+          {user.username}
+        </div>
+        <button onClick={copyCode} style={{ padding: '9px 14px', borderRadius: '10px', border: 'none', backgroundColor: '#059669', color: 'white', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>
+          {copied ? '✓ Copied' : '📋 Copy'}
+        </button>
+      </div>
+
+      {data.stats.totalReferred > 0 && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+          <div style={{ flex: 1, backgroundColor: 'var(--surface-alt)', borderRadius: '10px', padding: '8px 10px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-secondary)' }}>{data.stats.totalReferred}</div>
+            <div style={{ fontSize: '0.62rem', color: 'var(--text-faintest)', fontWeight: '600' }}>REFERRED</div>
+          </div>
+          <div style={{ flex: 1, backgroundColor: 'var(--surface-alt)', borderRadius: '10px', padding: '8px 10px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#059669' }}>{data.stats.totalPaidPi}π</div>
+            <div style={{ fontSize: '0.62rem', color: 'var(--text-faintest)', fontWeight: '600' }}>EARNED</div>
+          </div>
+        </div>
+      )}
+
+      {data.referrals.length > 0 && (
+        <div style={{ marginBottom: '10px' }}>
+          {data.referrals.slice(0, 5).map((r, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: '0.76rem', borderBottom: i < Math.min(data.referrals.length, 5) - 1 ? '1px solid var(--border)' : 'none' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>@{r.username}</span>
+              <span style={{ color: r.status === 'paid' ? '#059669' : r.status === 'failed' ? '#c53030' : 'var(--text-faintest)', fontWeight: '600' }}>
+                {r.status === 'paid' ? `+${r.rewardPi}π` : r.status === 'failed' ? 'payment issue' : 'awaiting first task'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.referredBy ? (
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-faintest)' }}>
+          You were referred by @{data.referredBy.username}
+          {data.referredBy.status === 'pending' && ' — complete your first task to activate their bonus.'}
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input value={code} onChange={(e) => setCode(e.target.value)}
+              placeholder="Have a referral code?" maxLength={40}
+              style={{ flex: 1, padding: '9px 12px', borderRadius: '10px', border: '1.5px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', outline: 'none' }} />
+            <button onClick={submit} disabled={submitting || !code.trim()}
+              style={{ padding: '9px 16px', borderRadius: '10px', border: 'none', backgroundColor: (submitting || !code.trim()) ? '#a0aec0' : '#047857', color: 'white', fontWeight: '700', fontSize: '0.78rem', cursor: (submitting || !code.trim()) ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+              {submitting ? '…' : 'Link'}
+            </button>
+          </div>
+          {err && <p style={{ margin: '6px 0 0', fontSize: '0.7rem', color: '#c53030' }}>{err}</p>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function UserProfile({ user, onBack, onRefresh }) {
@@ -281,6 +388,8 @@ style={{ flex: 1, padding: '9px 10px', borderRadius: '10px', border: '1.5px soli
 {pushErr && <p style={{ margin: '8px 0 0', fontSize: '0.7rem', color: '#c53030' }}>{pushErr}</p>}
 </div>
 )}
+
+<ReferralCard user={user} />
 
 <div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
 <h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🎖️ Achievements</h4>

@@ -161,7 +161,7 @@ const paymentSchema = new Schema(
 {
 piPaymentId: { type: String, required: true, unique: true },
 direction: { type: String, enum: ['U2A', 'A2U'], required: true },
-purpose: { type: String, enum: ['task_funding', 'worker_payout', 'withdrawal'], required: true },
+purpose: { type: String, enum: ['task_funding', 'worker_payout', 'withdrawal', 'referral_bonus'], required: true },
 user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 task: { type: Schema.Types.ObjectId, ref: 'Task' },
 // For consolidated payouts: the submissions this single payment covers.
@@ -314,6 +314,7 @@ const platformSettingsSchema = new Schema(
     maxSlots: { type: Number, default: null },               // null = no cap
     autoApproveRejectionRateThreshold: { type: Number, default: null }, // fraction, e.g. 0.35
     autoApproveMinDecisions: { type: Number, default: null },
+    referralRewardMicroPi: { type: Number, default: null }, // paid to the referrer when their referral's first submission is approved
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
@@ -414,7 +415,7 @@ export const AdminAuditLog = mongoose.model('AdminAuditLog', adminAuditLogSchema
 const notificationSchema = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    type: { type: String, enum: ['submission_approved', 'submission_rejected', 'support_reply'], required: true },
+    type: { type: String, enum: ['submission_approved', 'submission_rejected', 'support_reply', 'referral_bonus'], required: true },
     title: { type: String, required: true },
     body: { type: String, default: '' },
     read: { type: Boolean, default: false, index: true },
@@ -424,4 +425,26 @@ const notificationSchema = new Schema(
 notificationSchema.index({ user: 1, createdAt: -1 });
 
 export const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
+/* ── Referrals ────────────────────────────────────────────────────
+   Referral code IS the referrer's username — no separate code field to
+   generate, store, or collide-check. A new user manually enters someone's
+   username after they've signed up (there's no way to auto-carry a
+   referral through a link reliably, since the whole app requires Pi
+   Browser to even load — see the design discussion this came from).
+   Reward pays only once the referred user's FIRST-EVER submission gets
+   approved, not on signup — harder to farm with throwaway accounts. */
+const referralSchema = new Schema(
+  {
+    referrer: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    referredUser: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    status: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending', index: true },
+    rewardMicroPi: { type: Number, required: true }, // snapshotted from settings at signup time
+    activatedAt: { type: Date, default: null },       // when the referred user's first submission was approved
+    paidAt: { type: Date, default: null },
+    failureReason: { type: String, default: '' },
+  },
+  { timestamps: true }
+);
+
 export const Notification = mongoose.model('Notification', notificationSchema);
+export const Referral = mongoose.model('Referral', referralSchema);

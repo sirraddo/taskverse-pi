@@ -9,7 +9,7 @@ import * as StellarSdk from 'stellar-sdk';
 import webpush from 'web-push';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, Referral, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -130,6 +130,7 @@ const SETTINGS_DEFAULTS = {
   maxSlots: null,             // no cap
   autoApproveRejectionRateThreshold: 0.35,
   autoApproveMinDecisions: 5,
+  referralRewardMicroPi: 1_000_000, // 1π — brand new setting, needs an actual default (not "preserved" behavior)
 };
 
 async function getPlatformSettings() {
@@ -766,6 +767,80 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
   }
 });
 
+// The actual A2U send attempt — shared by the first-approval trigger below
+// and the admin "retry" route. Assumes the referrer's balance has ALREADY
+// been credited once (at activation, in payReferralBonusIfEligible) — this
+// function only (re-)attempts the payment itself and decrements the balance
+// on success, exactly mirroring how the main task-payout retry/reconcile
+// tools work: credit once, retry the send as many times as needed, never
+// re-credit.
+async function attemptReferralPayout(referral, referrer, referredUsername) {
+  if (!referrer) {
+    referral.status = 'failed';
+    referral.failureReason = 'Referrer account no longer exists';
+    await referral.save();
+    return;
+  }
+  try {
+    const a2u = await pi.createA2UPayment({
+      uid: referrer.piUid,
+      amountPi: toPi(referral.rewardMicroPi),
+      memo: `TaskVerse referral bonus: @${referredUsername}`.slice(0, 100),
+      metadata: { referralId: referral._id.toString() },
+    });
+    const payment = await Payment.create({
+      piPaymentId: a2u.identifier, txid: a2u.txid, direction: 'A2U', purpose: 'referral_bonus',
+      user: referrer._id, amountMicroPi: referral.rewardMicroPi, status: 'completed',
+    });
+    const record = await pi.getPayment(a2u.identifier);
+    if (record?.transaction?.txid) {
+      payment.status = 'completed'; payment.txid = record.transaction.txid; await payment.save();
+      referrer.balanceMicroPi -= referral.rewardMicroPi; await referrer.save();
+    }
+    referral.status = 'paid';
+    referral.paidAt = new Date();
+  } catch (e) {
+    referral.status = 'failed';
+    referral.failureReason = (e.message || 'A2U payment failed').slice(0, 300);
+    console.error('[referral] payout failed, balance retained for retry:', e.message);
+  }
+  await referral.save();
+  sendPushToUser(referrer._id, {
+    title: '🎁 Referral bonus earned!',
+    body: `@${referredUsername} completed their first task — you earned ${toPi(referral.rewardMicroPi)}π.`,
+    url: '/',
+  });
+  notifyUser(referrer._id, 'referral_bonus', {
+    title: '🎁 Referral bonus earned!',
+    body: `@${referredUsername} completed their first task — you earned ${toPi(referral.rewardMicroPi)}π.`,
+  });
+}
+
+// Called from settleApproval, right after a worker's approvedCount is
+// persisted. Only fires on the referred user's FIRST-EVER approved
+// submission — paying out on signup alone would be trivial to farm with
+// throwaway accounts; requiring a real approved task raises the bar a lot.
+async function payReferralBonusIfEligible(worker) {
+  if (worker.approvedCount !== 1) return; // not their first-ever approval
+  try {
+    const referral = await Referral.findOne({ referredUser: worker._id, status: 'pending' });
+    if (!referral) return;
+    const referrer = await User.findById(referral.referrer);
+    if (!referrer) {
+      referral.status = 'failed';
+      referral.failureReason = 'Referrer account no longer exists';
+      await referral.save();
+      return;
+    }
+    referral.activatedAt = new Date();
+    referrer.balanceMicroPi += referral.rewardMicroPi; // credited exactly once, here
+    await referrer.save();
+    await attemptReferralPayout(referral, referrer, worker.username);
+  } catch (e) {
+    console.error('[referral] payReferralBonusIfEligible failed:', e.message);
+  }
+}
+
 async function settleApproval(submissionId) {
   const sub = await Submission.findById(submissionId).populate('worker task');
   const { task, worker } = sub;
@@ -784,6 +859,7 @@ async function settleApproval(submissionId) {
   worker.approvedCount += 1;
   worker.balanceMicroPi += sub.rewardMicroPi;
   await worker.save();
+  await payReferralBonusIfEligible(worker); // real money — awaited, unlike the push/notify calls below
   sendPushToUser(worker._id, {
     title: '✅ Submission approved!',
     body: `"${task.title}" — ${toPi(sub.rewardMicroPi)}π is on its way to your Pi wallet.`,
@@ -1488,7 +1564,8 @@ app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, nex
       setNum('minSlots', { min: 1, integer: true }) ||
       setNum('maxSlots', { min: 1, integer: true }) ||
       setNum('autoApproveRejectionRateThreshold', { min: 0, max: 1 }) ||
-      setNum('autoApproveMinDecisions', { min: 1, integer: true });
+      setNum('autoApproveMinDecisions', { min: 1, integer: true }) ||
+      setNum('referralRewardMicroPi', { min: 0 });
     if (error) return res.status(400).json({ error });
 
     // Cross-field sanity: if both min and max are ending up set, min <= max.
@@ -1536,7 +1613,7 @@ async function backfillRefIds(paymentDocs) {
 async function buildTransactionFilter(req) {
   const filter = {};
   if (req.query.direction && ['U2A', 'A2U'].includes(req.query.direction)) filter.direction = req.query.direction;
-  if (req.query.purpose && ['task_funding', 'worker_payout', 'withdrawal'].includes(req.query.purpose)) filter.purpose = req.query.purpose;
+  if (req.query.purpose && ['task_funding', 'worker_payout', 'withdrawal', 'referral_bonus'].includes(req.query.purpose)) filter.purpose = req.query.purpose;
   if (req.query.status && ['created', 'approved', 'completed', 'cancelled', 'failed'].includes(req.query.status)) filter.status = req.query.status;
 
   const userQuery = String(req.query.user || '').trim();
@@ -1726,6 +1803,42 @@ app.patch('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (re
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     res.json({ ok: true, status: ticket.status });
     await logAdminAction(req, 'support.status_change', { targetType: 'SupportTicket', targetId: ticket._id, details: `Set status to ${ticket.status}` });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: referrals ─────────────────────────────────────────────
+   Visibility into the referral program, plus a manual retry for any
+   payout that failed (real A2U failures happen — same reasoning as the
+   existing "unpayable submissions" reconcile tools). */
+app.get('/api/admin/referrals', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const filter = {};
+    if (req.query.status && ['pending', 'paid', 'failed'].includes(req.query.status)) filter.status = req.query.status;
+    const rows = await Referral.find(filter)
+      .populate('referrer', 'username').populate('referredUser', 'username')
+      .sort({ createdAt: -1 }).limit(200).lean();
+    res.json({
+      referrals: rows.map((r) => ({
+        id: r._id,
+        referrer: r.referrer?.username || 'unknown',
+        referredUser: r.referredUser?.username || 'unknown',
+        status: r.status, rewardPi: toPi(r.rewardMicroPi),
+        failureReason: r.failureReason || '', createdAt: r.createdAt, paidAt: r.paidAt,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/admin/referrals/:id/retry', requireAuth, requireAdmin, requireFeature('payouts', 'Payouts'), async (req, res, next) => {
+  try {
+    const referral = await Referral.findById(req.params.id).populate('referredUser', 'username');
+    if (!referral) return res.status(404).json({ error: 'Referral not found' });
+    if (referral.status !== 'failed') return res.status(400).json({ error: 'Only failed referrals can be retried.' });
+    const referrer = await User.findById(referral.referrer);
+    await attemptReferralPayout(referral, referrer, referral.referredUser?.username || 'a referred user');
+    const updated = await Referral.findById(referral._id);
+    res.json({ ok: true, status: updated.status });
+    await logAdminAction(req, 'referral.retry', { targetType: 'Referral', targetId: referral._id, details: `Retried payout for @${referral.referredUser?.username}` });
   } catch (err) { next(err); }
 });
 
@@ -2528,6 +2641,59 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
         .reduce((sum, s) => sum + (s.rewardMicroPi || 0), 0) / 1e6;
       res.json({ submissions, totalEarned });
     } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  /* ── Referrals ──────────────────────────────────────────────────
+     Referral code IS the referrer's username. See the Referral model
+     comment for why this can't be a magic auto-detected link. */
+
+  app.get('/api/me/referral', requireAuth, async (req, res) => {
+    try {
+      const me = await currentUser(req);
+      const [wasReferredBy, myReferrals] = await Promise.all([
+        Referral.findOne({ referredUser: me._id }).populate('referrer', 'username').lean(),
+        Referral.find({ referrer: me._id }).populate('referredUser', 'username').sort({ createdAt: -1 }).lean(),
+      ]);
+      res.json({
+        myCode: me.username,
+        referredBy: wasReferredBy ? { username: wasReferredBy.referrer?.username || 'unknown', status: wasReferredBy.status } : null,
+        referrals: myReferrals.map((r) => ({
+          username: r.referredUser?.username || 'unknown', status: r.status,
+          rewardPi: toPi(r.rewardMicroPi), createdAt: r.createdAt, paidAt: r.paidAt,
+        })),
+        stats: {
+          totalReferred: myReferrals.length,
+          totalPaidPi: toPi(myReferrals.filter((r) => r.status === 'paid').reduce((s, r) => s + r.rewardMicroPi, 0)),
+        },
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post('/api/me/referral', requireAuth, async (req, res) => {
+    try {
+      const me = await currentUser(req);
+      const code = String(req.body?.code || '').trim().replace(/^@/, '');
+      if (!code) return res.status(400).json({ error: 'Enter a referral code (a username).' });
+      if (code.toLowerCase() === me.username.toLowerCase()) {
+        return res.status(400).json({ error: "You can't refer yourself." });
+      }
+      const already = await Referral.findOne({ referredUser: me._id });
+      if (already) return res.status(409).json({ error: 'You already have a referral linked to your account.' });
+
+      const referrer = await User.findOne({ username: new RegExp(`^${escapeRegex(code)}$`, 'i') });
+      if (!referrer) return res.status(404).json({ error: `No user found with the code "${code}".` });
+      if (referrer.isBanned) return res.status(400).json({ error: 'That referral code is no longer valid.' });
+
+      const settings = await getPlatformSettings();
+      await Referral.create({
+        referrer: referrer._id, referredUser: me._id,
+        rewardMicroPi: settings.referralRewardMicroPi,
+      });
+      res.status(201).json({ ok: true, referrer: referrer.username });
+    } catch (err) {
+      if (err.code === 11000) return res.status(409).json({ error: 'You already have a referral linked to your account.' });
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.listen(PORT, () => console.log('TaskVerse Earn server listening on :' + PORT));

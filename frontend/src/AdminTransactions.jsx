@@ -9,7 +9,7 @@ const STATUS_COLOR = {
 };
 
 const PURPOSE_LABEL = {
-  task_funding: '📌 Task funding', worker_payout: '💸 Worker payout', withdrawal: '🏦 Withdrawal',
+  task_funding: '📌 Task funding', worker_payout: '💸 Worker payout', withdrawal: '🏦 Withdrawal', referral_bonus: '🎁 Referral bonus',
 };
 
 function TxRow({ t }) {
@@ -161,6 +161,7 @@ export default function AdminTransactions({ notify }) {
           <option value="task_funding">Task funding</option>
           <option value="worker_payout">Worker payout</option>
           <option value="withdrawal">Withdrawal</option>
+          <option value="referral_bonus">Referral bonus</option>
         </select>
         <select value={status} onChange={(e) => { setStatus(e.target.value); applyFilters({ status: e.target.value }); }} style={selectStyle}>
           <option value="">All statuses</option>

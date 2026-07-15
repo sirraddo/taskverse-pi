@@ -24,10 +24,16 @@ const FIELD_GROUPS = [
       { key: 'autoApproveMinDecisions', label: 'Min decisions before that applies', suffix: '', help: 'A worker needs at least this many approved+rejected submissions before the rejection-rate check kicks in. Default 5.' },
     ],
   },
+  {
+    title: 'Referrals',
+    fields: [
+      { key: 'referralRewardMicroPi', label: 'Referral bonus', suffix: 'π', help: 'Paid to the referrer once their referral\'s first submission is approved. Default 1π.' },
+    ],
+  },
 ];
 
 // Reward fields are stored in microPi (1,000,000 = 1 π) but edited in π.
-const MICRO_PI_FIELDS = new Set(['minRewardMicroPi', 'maxRewardMicroPi']);
+const MICRO_PI_FIELDS = new Set(['minRewardMicroPi', 'maxRewardMicroPi', 'referralRewardMicroPi']);
 
 export default function AdminSettings({ notify }) {
   const [settings, setSettings] = useState(null);
