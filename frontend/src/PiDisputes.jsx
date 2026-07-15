@@ -35,31 +35,31 @@ export default function PiDisputes({ onBack, notify, onResolved }) {
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', minHeight: '100vh', backgroundColor: '#f7fafc' }}>
-      <button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' }}>← Back to Moderation</button>
-      <h2>⚖️ Dispute Appeals Board</h2>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', minHeight: '100vh', backgroundColor: 'var(--bg)' }}>
+      <button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)', marginBottom: '16px' }}>← Back to Moderation</button>
+      <h2 style={{ color: 'var(--text)' }}>⚖️ Dispute Appeals Board</h2>
 
-      {disputes === null && <p style={{ color: '#718096' }}>Loading disputes…</p>}
-      {disputes?.length === 0 && <p style={{ color: '#718096' }}>No open disputes.</p>}
+      {disputes === null && <p style={{ color: 'var(--text-faint)' }}>Loading disputes…</p>}
+      {disputes?.length === 0 && <p style={{ color: 'var(--text-faint)' }}>No open disputes.</p>}
 
       {disputes?.map((disp) => (
-        <div key={disp._id} style={{ backgroundColor: 'white', padding: '20px', marginBottom: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h4 style={{ margin: '0 0 5px 0' }}>{disp.submission?.task?.title}</h4>
-          <p style={{ fontSize: '0.85rem', color: '#4a5568' }}>
+        <div key={disp._id} style={{ backgroundColor: 'var(--surface)', padding: '20px', marginBottom: '15px', borderRadius: '8px', boxShadow: '0 2px 4px var(--shadow-color)' }}>
+          <h4 style={{ margin: '0 0 5px 0', color: 'var(--text)' }}>{disp.submission?.task?.title}</h4>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             👤 {disp.submission?.worker?.username} · claimed {(disp.submission?.rewardMicroPi / 1e6).toFixed(2)} π
           </p>
-          <p style={{ backgroundColor: '#f7fafc', padding: '10px', borderRadius: '6px', fontSize: '0.9rem' }}>
+          <p style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-secondary)', padding: '10px', borderRadius: '6px', fontSize: '0.9rem' }}>
             Proof: {disp.submission?.proofText || <em>(file-only)</em>}
           </p>
           {disp.workerStatement && (
-            <p style={{ fontSize: '0.85rem' }}><strong>Worker statement:</strong> {disp.workerStatement}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}><strong>Worker statement:</strong> {disp.workerStatement}</p>
           )}
           <input
             type="text"
             placeholder="Resolution note (optional)"
             value={notes[disp._id] || ''}
             onChange={(e) => setNotes({ ...notes, [disp._id]: e.target.value })}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box', marginBottom: '10px' }}
+            style={{ width: '100%', padding: '8px', boxSizing: 'border-box', marginBottom: '10px', borderRadius: '6px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-secondary)' }}
           />
           <div style={{ display: 'flex', gap: '10px' }}>
             <button disabled={busyId === disp._id} onClick={() => resolve(disp._id, 'overturn')}
