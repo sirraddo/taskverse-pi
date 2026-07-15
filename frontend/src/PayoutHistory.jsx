@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { fetchPayoutHistory } from './piClient';
+import Receipt from './Receipt';
 
 export default function PayoutHistory({ onBack }) {
   const [history, setHistory] = useState(null);
   const [total, setTotal] = useState(0);
+  const [receiptSub, setReceiptSub] = useState(null);
 
   useEffect(() => {
     fetchPayoutHistory()
@@ -30,13 +32,15 @@ export default function PayoutHistory({ onBack }) {
         const isPaid = ['auto_approved','approved'].includes(sub.status);
         const date = new Date(sub.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         return (
-          <div key={sub._id} style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px var(--shadow-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div key={sub._id}
+            onClick={() => sub.payout?.refId && setReceiptSub(sub)}
+            style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px var(--shadow-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: sub.payout?.refId ? 'pointer' : 'default' }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 'bold', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{sub.task?.title || 'Task removed'}</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>{date}</div>
               {sub.payout?.refId && (
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '2px' }}>
-                  Ref: <span style={{ fontFamily: 'monospace', color: 'var(--text-faint)' }}>{sub.payout.refId}</span>
+                  Ref: <span style={{ fontFamily: 'monospace', color: 'var(--text-faint)', textDecoration: 'underline' }}>{sub.payout.refId}</span>
                 </div>
               )}
             </div>
@@ -47,6 +51,18 @@ export default function PayoutHistory({ onBack }) {
           </div>
         );
       })}
+
+      {receiptSub && (
+        <Receipt
+          kind="payout"
+          title={receiptSub.task?.title || 'Task removed'}
+          amountPi={(receiptSub.rewardMicroPi / 1e6).toFixed(2)}
+          refId={receiptSub.payout?.refId}
+          status={['auto_approved', 'approved'].includes(receiptSub.status) ? 'Paid' : receiptSub.status}
+          date={new Date(receiptSub.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          onClose={() => setReceiptSub(null)}
+        />
+      )}
     </div>
   );
 }

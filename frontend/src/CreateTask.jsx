@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createTask, payForTaskFunding, fetchSettings } from './piClient';
+import Receipt from './Receipt';
 
 // Display-only defaults — used until the real settings load (or if that
 // fetch fails), so the form behaves exactly as it always did in the
@@ -44,6 +45,7 @@ const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
 const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 const [receiptRefId, setReceiptRefId] = useState(null);
+const [showReceipt, setShowReceipt] = useState(false);
 
 useEffect(() => {
   fetchSettings().then((s) => s && setSettings(s)).catch(() => {});
@@ -103,7 +105,22 @@ return (
 <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', fontWeight: '700', letterSpacing: '0.03em' }}>PAYMENT REFERENCE</div>
 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '800', fontFamily: 'monospace', marginTop: '3px' }}>{receiptRefId}</div>
 <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '3px' }}>Save this — quote it if you ever need support with this payment.</div>
+<button onClick={() => setShowReceipt(true)}
+  style={{ marginTop: '10px', width: '100%', padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: 'white', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+  🧾 View / save receipt
+</button>
 </div>
+)}
+{showReceipt && receiptRefId && (
+<Receipt
+  kind="funding"
+  title={title || 'Task funding'}
+  amountPi={breakdown.total.toFixed(4)}
+  refId={receiptRefId}
+  status="Paid"
+  date={new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+  onClose={() => setShowReceipt(false)}
+/>
 )}
 </div>
 ) : (

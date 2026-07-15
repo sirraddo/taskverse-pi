@@ -1,4 +1,8 @@
+import { useState } from 'react';
+import Receipt from './Receipt';
+
 export default function MyPostedTasks({ tasks, onBack }) {
+const [receiptTask, setReceiptTask] = useState(null);
 if (!tasks) return null;
 
 const statusBadge = {
@@ -7,6 +11,11 @@ awaiting_funding: { label: '⏳ Pending Funding',   color: '#744210', bg: '#fefc
 exhausted:        { label: '✅ All Slots Filled',  color: '#2c5282', bg: '#bee3f8' },
 cancelled:        { label: '🚫 Cancelled',       color: '#742a2a', bg: '#fff5f5' },
 paused:           { label: '⏸️ Paused',        color: '#553c1a', bg: '#fef3c7' },
+};
+
+const STATUS_LABEL_PLAIN = {
+  live: 'Live', awaiting_funding: 'Pending funding', exhausted: 'All slots filled',
+  cancelled: 'Cancelled', paused: 'Paused',
 };
 
 return (
@@ -39,7 +48,8 @@ return (
 {task.title}
 </h3>
 {task.fundingRefId && (
-<div style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', marginTop: '2px', fontFamily: 'monospace' }}>
+<div onClick={() => setReceiptTask(task)}
+  style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', marginTop: '2px', fontFamily: 'monospace', cursor: 'pointer', textDecoration: 'underline', display: 'inline-block' }}>
 Ref: {task.fundingRefId}
 </div>
 )}
@@ -65,6 +75,18 @@ Ref: {task.fundingRefId}
 </div>
 );
 })}
+
+{receiptTask && (
+<Receipt
+  kind="funding"
+  title={receiptTask.title}
+  amountPi={(Number(receiptTask.reward) * receiptTask.slots).toFixed(2)}
+  refId={receiptTask.fundingRefId}
+  status={STATUS_LABEL_PLAIN[receiptTask.status] || receiptTask.status}
+  date={new Date(receiptTask.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+  onClose={() => setReceiptTask(null)}
+/>
+)}
 </div>
 );
 }
