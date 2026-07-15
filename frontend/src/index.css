@@ -1,9 +1,14 @@
 /* TaskVerse Earn — global base styles
  * All component styling is inline (React). This file only sets:
  * 1. Box-sizing reset
- * 2. Light-only color scheme (Pi Browser is always light)
+ * 2. Light/dark theme variables (see ThemeContext + Admin note below)
  * 3. Body font + background to match the app shell
  * 4. Scrollbar suppression for horizontal pill rows
+ *
+ * Theme rollout: core app (feed, nav, task pages, login) is fully themed.
+ * Admin panel and some secondary screens are not converted yet and will
+ * still render in light colors even with dark mode on — that's expected,
+ * not a bug, until those get their own pass.
  */
 
 *, *::before, *::after {
@@ -11,19 +16,47 @@
 }
 
 :root {
-  color-scheme: light;          /* force light — no dark-mode flicker */
+  color-scheme: light dark;
   font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+
+  /* Light theme (default) */
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-alt: #edf2f7;
+  --text: #1a202c;
+  --text-secondary: #2d3748;
+  --text-muted: #4a5568;
+  --text-faint: #718096;
+  --text-faintest: #a0aec0;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e0;
+  --shadow-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme='dark'] {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-alt: #334155;
+  --text: #f1f5f9;
+  --text-secondary: #e2e8f0;
+  --text-muted: #cbd5e1;
+  --text-faint: #94a3b8;
+  --text-faintest: #64748b;
+  --border: #334155;
+  --border-strong: #475569;
+  --shadow-color: rgba(0, 0, 0, 0.35);
 }
 
 html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #f4f6fb;  /* matches App shell background */
+  background-color: var(--bg);
+  transition: background-color 0.15s ease;
 }
 
 /* Hide scrollbars on horizontal scroll strips (category pills, etc.) */

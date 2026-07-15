@@ -15,6 +15,7 @@ import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
 import SupportInbox from './SupportInbox';
+import { useDarkMode } from './theme';
 import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
 
 // Short country list for the one-time prompt (mirrors profile options).
@@ -52,16 +53,16 @@ Other: { emoji: '📋', color: '#718096' },
 
 function SkeletonCard() {
 return (
-<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '16px', marginBottom: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '16px', marginBottom: '10px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
 <div style={{ flex: 1 }}>
-<div style={{ height: '14px', background: 'linear-gradient(90deg,#edf2f7 25%,#e2e8f0 50%,#edf2f7 75%)', backgroundSize: '200% 100%', borderRadius: '7px', width: '70%', marginBottom: '8px', animation: 'shimmer 1.4s infinite' }} />
-<div style={{ height: '11px', background: 'linear-gradient(90deg,#edf2f7 25%,#e2e8f0 50%,#edf2f7 75%)', backgroundSize: '200% 100%', borderRadius: '6px', width: '50%', animation: 'shimmer 1.4s infinite' }} />
+<div style={{ height: '14px', background: 'linear-gradient(90deg,var(--surface-alt) 25%,var(--border) 50%,var(--surface-alt) 75%)', backgroundSize: '200% 100%', borderRadius: '7px', width: '70%', marginBottom: '8px', animation: 'shimmer 1.4s infinite' }} />
+<div style={{ height: '11px', background: 'linear-gradient(90deg,var(--surface-alt) 25%,var(--border) 50%,var(--surface-alt) 75%)', backgroundSize: '200% 100%', borderRadius: '6px', width: '50%', animation: 'shimmer 1.4s infinite' }} />
 </div>
-<div style={{ width: '52px', height: '44px', background: 'linear-gradient(90deg,#edf2f7 25%,#e2e8f0 50%,#edf2f7 75%)', backgroundSize: '200% 100%', borderRadius: '10px', animation: 'shimmer 1.4s infinite', flexShrink: 0 }} />
+<div style={{ width: '52px', height: '44px', background: 'linear-gradient(90deg,var(--surface-alt) 25%,var(--border) 50%,var(--surface-alt) 75%)', backgroundSize: '200% 100%', borderRadius: '10px', animation: 'shimmer 1.4s infinite', flexShrink: 0 }} />
 </div>
-<div style={{ marginTop: '12px', height: '5px', background: '#edf2f7', borderRadius: '3px' }} />
-<div style={{ marginTop: '10px', height: '36px', background: '#edf2f7', borderRadius: '10px' }} />
+<div style={{ marginTop: '12px', height: '5px', background: 'var(--surface-alt)', borderRadius: '3px' }} />
+<div style={{ marginTop: '10px', height: '36px', background: 'var(--surface-alt)', borderRadius: '10px' }} />
 </div>
 );
 }
@@ -73,6 +74,7 @@ vi: { title: "TaskVerse Earn", wallet: "So du", availableGigs: "Viec Co San", pr
 };
 
 export default function App() {
+const { isDark, toggle: toggleDarkMode } = useDarkMode();
 const [lang, setLang] = useState('en');
 const t = translations[lang];
 const [user, setUser] = useState(null);
@@ -199,7 +201,7 @@ const handleSubmitRejected = (reasons) => { triggerNotification(t.alertRejected 
 
 if (!user) {
 return (
-<div style={{ maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: '#f4f6fb', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+<div style={{ maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
 <PiLogin onLoginSuccess={(profile) => setUser(profile)} />
 </div>
 );
@@ -223,7 +225,7 @@ return matchCat && matchSearch;
 const disputeCount = (user.openDisputes || []).length;
 
 return (
-<div style={{ maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: '#f4f6fb', position: 'relative', paddingBottom: '40px' }}>
+<div style={{ maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: 'var(--bg)', position: 'relative', paddingBottom: '40px' }}>
 <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
 {notification && (
@@ -233,7 +235,7 @@ return (
 )}
 
 {screen && (
-<div style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', bottom: 0, backgroundColor: '#f4f6fb', zIndex: 500, overflowY: 'auto' }}>
+<div style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', bottom: 0, backgroundColor: 'var(--bg)', zIndex: 500, overflowY: 'auto' }}>
 {screen === 'history' && <PayoutHistory onBack={() => setScreen(null)} />}
 {screen === 'leaderboard' && <Leaderboard onBack={() => setScreen(null)} />}
 {screen === 'privacy' && <PrivacyPolicy onBack={() => setScreen(null)} />}
@@ -262,7 +264,7 @@ return (
 <div style={{ padding: '16px' }}>
 {/* Nav */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-<button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.92rem', color: '#4a5568', fontWeight: '700', position: 'relative' }}>
+<button onClick={() => setView('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.92rem', color: 'var(--text-muted)', fontWeight: '700', position: 'relative' }}>
 👤 {t.profile}
 {disputeCount > 0 && (
 <span style={{ position: 'absolute', top: '-4px', right: '-10px', backgroundColor: '#c53030', color: 'white', borderRadius: '50%', width: '16px', height: '16px', fontSize: '0.55rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
@@ -270,7 +272,7 @@ return (
 </span>
 )}
 </button>
-<select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid #cbd5e0', backgroundColor: 'white', fontWeight: '600', color: '#4a5568', fontSize: '0.78rem' }}>
+<select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid var(--border-strong)', backgroundColor: 'var(--surface)', fontWeight: '600', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
 <option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="vi">🇻🇳 VI</option>
 </select>
 <button onClick={() => { if (flags?.posting === false) { triggerNotification('⚠️ Task posting is temporarily disabled by the admin.'); return; } setView('create'); }}
@@ -331,7 +333,7 @@ style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadi
 <div style={{ position: 'relative', marginBottom: '10px' }}>
 <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', opacity: 0.35, fontSize: '0.85rem' }}>🔍</span>
 <input type="text" placeholder={t.search} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-style={{ width: '100%', boxSizing: 'border-box', padding: '9px 32px 9px 32px', borderRadius: '12px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', fontSize: '0.86rem', outline: 'none', color: '#2d3748', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }} />
+style={{ width: '100%', boxSizing: 'border-box', padding: '9px 32px 9px 32px', borderRadius: '12px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', fontSize: '0.86rem', outline: 'none', color: 'var(--text-secondary)', boxShadow: '0 1px 4px var(--shadow-color)' }} />
 {searchQuery && <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.4, fontSize: '0.8rem', padding: 0 }}>✕</button>}
 </div>
 
@@ -342,7 +344,7 @@ style={{ width: '100%', boxSizing: 'border-box', padding: '9px 32px 9px 32px', b
 const m = CATEGORY_META[cat] || CATEGORY_META.Other;
 const active = categoryFilter === cat;
 return (
-<button key={cat} onClick={() => setCategoryFilter(cat)} style={{ flexShrink: 0, padding: '5px 11px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.74rem', whiteSpace: 'nowrap', backgroundColor: active ? m.color : 'white', color: active ? 'white' : '#4a5568', boxShadow: active ? ('0 2px 8px ' + m.color + '55') : '0 1px 3px rgba(0,0,0,0.07)' }}>
+<button key={cat} onClick={() => setCategoryFilter(cat)} style={{ flexShrink: 0, padding: '5px 11px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.74rem', whiteSpace: 'nowrap', backgroundColor: active ? m.color : 'var(--surface)', color: active ? 'white' : 'var(--text-muted)', boxShadow: active ? ('0 2px 8px ' + m.color + '55') : '0 1px 3px var(--shadow-color)' }}>
 {m.emoji} {cat}
 </button>
 );
@@ -352,9 +354,9 @@ return (
 
 {/* Section header with manual refresh */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-<h2 style={{ margin: 0, fontSize: '0.97rem', fontWeight: '700', color: '#2d3748' }}>{t.availableGigs}</h2>
+<h2 style={{ margin: 0, fontSize: '0.97rem', fontWeight: '700', color: 'var(--text-secondary)' }}>{t.availableGigs}</h2>
 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-{tasks !== null && <span style={{ fontSize: '0.72rem', color: '#a0aec0', fontWeight: '600' }}>{filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}</span>}
+{tasks !== null && <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)', fontWeight: '600' }}>{filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}</span>}
 <button onClick={handleManualRefresh} disabled={refreshing} title="Refresh tasks"
 style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', fontSize: '0.95rem', opacity: refreshing ? 0.4 : 0.6, padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s' }}>
 <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
@@ -369,9 +371,9 @@ style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' 
 {tasks !== null && filtered.length === 0 && (
 <div style={{ textAlign: 'center', padding: '48px 20px' }}>
 <div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>{searchQuery ? '🔍' : '📭'}</div>
-<p style={{ color: '#718096', fontWeight: '600', margin: '0 0 12px 0', fontSize: '0.9rem' }}>{t.empty}</p>
+<p style={{ color: 'var(--text-faint)', fontWeight: '600', margin: '0 0 12px 0', fontSize: '0.9rem' }}>{t.empty}</p>
 {(searchQuery || categoryFilter !== 'All') && (
-<button onClick={() => { setSearchQuery(''); setCategoryFilter('All'); }} style={{ background: 'none', border: '1.5px solid #cbd5e0', padding: '6px 16px', borderRadius: '20px', cursor: 'pointer', color: '#4a5568', fontSize: '0.8rem', fontWeight: '600' }}>Clear filters</button>
+<button onClick={() => { setSearchQuery(''); setCategoryFilter('All'); }} style={{ background: 'none', border: '1.5px solid var(--border-strong)', padding: '6px 16px', borderRadius: '20px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '600' }}>Clear filters</button>
 )}
 </div>
 )}
@@ -387,7 +389,7 @@ const m = CATEGORY_META[task.category] || CATEGORY_META.Other;
 const snippet = (task.description || '').slice(0, 92) + ((task.description || '').length > 92 ? '…' : '');
 const barColor = pct > 80 ? '#e53e3e' : pct > 55 ? '#ed8936' : '#48bb78';
 return (
-<div key={task.id} style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px 14px 12px', marginBottom: '10px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', opacity: isFull ? 0.65 : 1, animation: 'fadeUp 0.3s ease' }}>
+<div key={task.id} style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px 14px 12px', marginBottom: '10px', boxShadow: '0 2px 12px var(--shadow-color)', opacity: isFull ? 0.65 : 1, animation: 'fadeUp 0.3s ease' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
 <div style={{ flex: 1 }}>
 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '5px' }}>
@@ -397,8 +399,8 @@ return (
 <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '700' }}>🌍 {task.allowedCountries.join(', ')} only</span>
 )}
 </div>
-<h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', lineHeight: 1.3 }}>{task.title}</h3>
-{snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: '#718096', lineHeight: 1.4 }}>{snippet}</p>}
+<h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: 'var(--text)', lineHeight: 1.3 }}>{task.title}</h3>
+{snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-faint)', lineHeight: 1.4 }}>{snippet}</p>}
 </div>
 <div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
 <div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{task.reward}</div>
@@ -409,10 +411,10 @@ return (
 {totalSlots > 0 && (
 <div style={{ marginBottom: '10px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-<span style={{ fontSize: '0.65rem', color: '#a0aec0', fontWeight: '600' }}>{task.slotsLeft} {t.slotsLeft}</span>
-<span style={{ fontSize: '0.65rem', color: '#a0aec0', fontWeight: '600' }}>{pct}% claimed</span>
+<span style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', fontWeight: '600' }}>{task.slotsLeft} {t.slotsLeft}</span>
+<span style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', fontWeight: '600' }}>{pct}% claimed</span>
 </div>
-<div style={{ height: '5px', backgroundColor: '#edf2f7', borderRadius: '3px', overflow: 'hidden' }}>
+<div style={{ height: '5px', backgroundColor: 'var(--surface-alt)', borderRadius: '3px', overflow: 'hidden' }}>
 <div style={{ height: '100%', width: pct + '%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.6s ease' }} />
 </div>
 </div>
@@ -421,7 +423,7 @@ return (
 {task.link && /^https?:\/\//i.test(task.link) && !task.userDone && (
 <button
 onClick={() => openExternalLink(task.link)}
-style={{ width: '100%', backgroundColor: 'white', color: '#047857', border: '2px solid #059669', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+style={{ width: '100%', backgroundColor: 'var(--surface)', color: '#047857', border: '2px solid #059669', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
 🔗 Open Task Link
 </button>
 )}
@@ -429,7 +431,7 @@ style={{ width: '100%', backgroundColor: 'white', color: '#047857', border: '2px
 <button
 onClick={() => { if (!isFull && !task.userDone) { setSelectedTask(task); setView('submit'); } }}
 disabled={isFull || task.userDone}
-style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#c6f6d5' : '#059669', color: isFull ? '#a0aec0' : task.userDone ? '#276749' : 'white', border: 'none', padding: '10px', borderRadius: '10px', cursor: (isFull || task.userDone) ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.84rem' }}>
+style={{ width: '100%', backgroundColor: isFull ? 'var(--surface-alt)' : task.userDone ? '#c6f6d5' : '#059669', color: isFull ? 'var(--text-faintest)' : task.userDone ? '#276749' : 'white', border: 'none', padding: '10px', borderRadius: '10px', cursor: (isFull || task.userDone) ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.84rem' }}>
 {isFull ? 'Task Full' : task.userDone ? 'Done ✅' : t.openTask + ' →'}
 </button>
 </div>
@@ -438,16 +440,16 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 
 {/* Admin */}
 {user.isAdmin && (
-<button onClick={() => setView('admin')} style={{ width: '100%', marginTop: '16px', backgroundColor: '#edf2f7', border: 'none', padding: '10px', borderRadius: '10px', color: '#718096', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600' }}>🔧 {t.adminBtn}</button>
+<button onClick={() => setView('admin')} style={{ width: '100%', marginTop: '16px', backgroundColor: 'var(--surface-alt)', border: 'none', padding: '10px', borderRadius: '10px', color: 'var(--text-faint)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600' }}>🔧 {t.adminBtn}</button>
 )}
 
 {/* Bottom nav */}
 <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-<button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>🏆 Board</button>
-<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📜 History</button>
-<button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>📌 My Tasks</button>
+<button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>🏆 Board</button>
+<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>📜 History</button>
+<button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>📌 My Tasks</button>
 </div>
-<div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: '#b0bac8' }}>
+<div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: 'var(--text-faintest)', flexWrap: 'wrap' }}>
 <span onClick={() => setScreen('support')} style={{ cursor: 'pointer', textDecoration: 'underline', position: 'relative' }}>
 🎧 Support
 {user.unreadSupportCount > 0 && (
@@ -459,6 +461,7 @@ style={{ width: '100%', backgroundColor: isFull ? '#edf2f7' : task.userDone ? '#
 <span onClick={() => setScreen('howitworks')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>How It Works</span>
 <span onClick={() => setScreen('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy</span>
 <span onClick={() => setScreen('terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>
+<span onClick={toggleDarkMode} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}</span>
 </div>
 </div>
 )}

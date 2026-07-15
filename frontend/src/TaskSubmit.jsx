@@ -66,17 +66,17 @@ setSending(false);
 };
 
 return (
-<div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '20px', boxShadow: '0 2px 12px var(--shadow-color)' }}>
 
 {/* Header */}
 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-<button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
-<h3 style={{ margin: 0, fontWeight: '700', fontSize: '0.97rem', color: '#1a202c', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTask.title}</h3>
+<button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>← Back</button>
+<h3 style={{ margin: 0, fontWeight: '700', fontSize: '0.97rem', color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTask.title}</h3>
 </div>
 
 {/* Task reward badge */}
-<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-<span style={{ fontSize: '0.82rem', color: '#4a5568', flex: 1 }}>{activeTask.description || 'Complete the task and submit your proof below.'}</span>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', backgroundColor: 'var(--surface-alt)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+<span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', flex: 1 }}>{activeTask.description || 'Complete the task and submit your proof below.'}</span>
 <span style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>{activeTask.reward} π</span>
 </div>
 
@@ -91,21 +91,21 @@ style={{ width: '100%', backgroundColor: '#047857', color: 'white', border: 'non
 
 {/* Proof text */}
 <div style={{ marginBottom: '12px' }}>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '5px' }}>YOUR PROOF OF WORK</label>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '5px' }}>YOUR PROOF OF WORK</label>
 <textarea
 rows={4}
 value={proofText}
 onChange={(e) => setProofText(e.target.value)}
 placeholder="Describe exactly what you did (include links, usernames, screenshots)..."
 maxLength={4000}
-style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', color: '#2d3748', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none', lineHeight: 1.5 }}
+style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px', border: '1.5px solid var(--border)', fontSize: '0.86rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none', lineHeight: 1.5 }}
 />
-<div style={{ fontSize: '0.65rem', color: '#a0aec0', textAlign: 'right', marginTop: '3px' }}>{proofText.length}/4000</div>
+<div style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', textAlign: 'right', marginTop: '3px' }}>{proofText.length}/4000</div>
 </div>
 
 {/* Screenshot upload */}
 <div style={{ marginBottom: '14px' }}>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: activeTask.requireScreenshot ? '#c53030' : '#718096', display: 'block', marginBottom: '5px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: activeTask.requireScreenshot ? '#c53030' : 'var(--text-faint)', display: 'block', marginBottom: '5px' }}>
 {activeTask.requireScreenshot ? 'SCREENSHOT (REQUIRED)' : 'SCREENSHOT (OPTIONAL)'}
 </label>
 {activeTask.requireScreenshot && (
@@ -118,7 +118,7 @@ This task requires a screenshot. Submissions without one are rejected.
 🔍 Reviewed by an admin before payout — make sure your screenshot clearly shows the completed task.
 </div>
 )}
-<label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', backgroundColor: '#f7fafc', borderRadius: '10px', border: '1.5px dashed #cbd5e0', cursor: uploading ? 'wait' : 'pointer', fontSize: '0.82rem', color: '#4a5568' }}>
+<label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', backgroundColor: 'var(--surface-alt)', borderRadius: '10px', border: '1.5px dashed var(--border-strong)', cursor: uploading ? 'wait' : 'pointer', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
 <span style={{ fontSize: '1.1rem' }}>{uploading ? '⏳' : '📷'}</span>
 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
 {uploading ? 'Uploading…' : (fileName || 'Choose screenshot to upload')}
@@ -131,7 +131,7 @@ This task requires a screenshot. Submissions without one are rejected.
 {proofFileUrl.trim() && (
 <div style={{ marginTop: '7px' }}>
 <img src={proofFileUrl} alt="Your screenshot"
-  style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1.5px solid #e2e8f0', display: 'block', objectFit: 'contain' }}
+  style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1.5px solid var(--border)', display: 'block', objectFit: 'contain' }}
   onError={(e) => { e.target.style.display = 'none'; }} />
 <div style={{ marginTop: '5px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Screenshot uploaded</div>
 </div>

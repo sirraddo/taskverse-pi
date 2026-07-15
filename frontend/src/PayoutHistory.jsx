@@ -14,8 +14,8 @@ export default function PayoutHistory({ onBack }) {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '500px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
-        <h2 style={{ margin: 0 }}>&#128220; Payout History</h2>
+        <button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>← Back</button>
+        <h2 style={{ margin: 0, color: 'var(--text)' }}>&#128220; Payout History</h2>
       </div>
       {history !== null && (
         <div style={{ background: 'linear-gradient(135deg, #059669, #047857)', color: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' }}>
@@ -24,19 +24,19 @@ export default function PayoutHistory({ onBack }) {
           <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{history.length} submissions</div>
         </div>
       )}
-      {history === null && [1,2,3].map(i => <div key={i} style={{ height: '72px', backgroundColor: '#edf2f7', borderRadius: '10px', marginBottom: '10px' }} />)}
-      {history?.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#a0aec0' }}><p>No submissions yet.</p></div>}
+      {history === null && [1,2,3].map(i => <div key={i} style={{ height: '72px', backgroundColor: 'var(--surface-alt)', borderRadius: '10px', marginBottom: '10px' }} />)}
+      {history?.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-faintest)' }}><p>No submissions yet.</p></div>}
       {history?.map((sub) => {
         const isPaid = ['auto_approved','approved'].includes(sub.status);
         const date = new Date(sub.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         return (
-          <div key={sub._id} style={{ backgroundColor: 'white', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div key={sub._id} style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px var(--shadow-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold', color: '#2d3748', fontSize: '0.9rem' }}>{sub.task?.title || 'Task removed'}</div>
-              <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>{date}</div>
+              <div style={{ fontWeight: 'bold', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{sub.task?.title || 'Task removed'}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>{date}</div>
               {sub.payout?.refId && (
-                <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '2px' }}>
-                  Ref: <span style={{ fontFamily: 'monospace', color: '#718096' }}>{sub.payout.refId}</span>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '2px' }}>
+                  Ref: <span style={{ fontFamily: 'monospace', color: 'var(--text-faint)' }}>{sub.payout.refId}</span>
                 </div>
               )}
             </div>

@@ -12,14 +12,14 @@ paused:           { label: '⏸️ Paused',        color: '#553c1a', bg: '#fef3c
 return (
 <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', fontFamily: 'sans-serif' }}>
 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-<button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
-<h2 style={{ margin: 0 }}>📌 My Posted Tasks</h2>
+<button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>← Back</button>
+<h2 style={{ margin: 0, color: 'var(--text)' }}>📌 My Posted Tasks</h2>
 </div>
 
 {tasks.length === 0 && (
-<div style={{ textAlign: 'center', padding: '48px 20px', color: '#a0aec0' }}>
+<div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-faintest)' }}>
 <div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>📭</div>
-<p style={{ fontWeight: '700', margin: '0 0 6px', color: '#718096' }}>No tasks posted yet</p>
+<p style={{ fontWeight: '700', margin: '0 0 6px', color: 'var(--text-faint)' }}>No tasks posted yet</p>
 <p style={{ fontSize: '0.82rem', margin: 0 }}>Use "+ Post Task" to create and fund your first task.</p>
 </div>
 )}
@@ -29,17 +29,17 @@ const pct = task.slots > 0 ? Math.round((task.slotsFilled / task.slots) * 100) :
 const barColor = pct >= 100 ? '#e53e3e' : pct > 55 ? '#ed8936' : '#48bb78';
 const badge = statusBadge[task.status] || { label: task.status, color: '#718096', bg: '#edf2f7' };
 return (
-<div key={task.id} style={{ backgroundColor: 'white', borderRadius: '14px', padding: '14px 16px', marginBottom: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', animation: 'fadeUp 0.3s ease' }}>
+<div key={task.id} style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px 16px', marginBottom: '10px', boxShadow: '0 2px 10px var(--shadow-color)', animation: 'fadeUp 0.3s ease' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
 <div style={{ flex: 1, minWidth: 0 }}>
 <span style={{ display: 'inline-block', backgroundColor: badge.bg, color: badge.color, padding: '2px 9px', borderRadius: '10px', fontSize: '0.67rem', fontWeight: '700', marginBottom: '5px' }}>
 {badge.label}
 </span>
-<h3 style={{ margin: 0, fontSize: '0.93rem', fontWeight: '700', color: '#1a202c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+<h3 style={{ margin: 0, fontSize: '0.93rem', fontWeight: '700', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
 {task.title}
 </h3>
 {task.fundingRefId && (
-<div style={{ fontSize: '0.65rem', color: '#a0aec0', marginTop: '2px', fontFamily: 'monospace' }}>
+<div style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', marginTop: '2px', fontFamily: 'monospace' }}>
 Ref: {task.fundingRefId}
 </div>
 )}
@@ -51,14 +51,14 @@ Ref: {task.fundingRefId}
 </div>
 <div>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-<span style={{ fontSize: '0.72rem', color: '#718096', fontWeight: '600' }}>
+<span style={{ fontSize: '0.72rem', color: 'var(--text-faint)', fontWeight: '600' }}>
 {task.slotsFilled} / {task.slots} slots filled
 </span>
 <span style={{ fontSize: '0.72rem', fontWeight: '700', color: pct >= 100 ? '#e53e3e' : pct > 55 ? '#ed8936' : '#48bb78' }}>
 {pct}%
 </span>
 </div>
-<div style={{ height: '6px', backgroundColor: '#edf2f7', borderRadius: '3px', overflow: 'hidden' }}>
+<div style={{ height: '6px', backgroundColor: 'var(--surface-alt)', borderRadius: '3px', overflow: 'hidden' }}>
 <div style={{ height: '100%', width: pct + '%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.6s ease' }} />
 </div>
 </div>

@@ -36,11 +36,11 @@ export default function PiLogin({ onLoginSuccess }) {
   };
 
   return (
-    <div style={{ padding: '40px 20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)', textAlign: 'center', margin: '40px 15px' }}>
+    <div style={{ padding: '40px 20px', fontFamily: 'sans-serif', backgroundColor: 'var(--surface)', borderRadius: '16px', boxShadow: '0 10px 25px var(--shadow-color)', textAlign: 'center', margin: '40px 15px' }}>
       <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 20px auto' }}>
         <Logo size={80} />
       </div>
-      <h2>Welcome to TaskVerse Earn</h2>
+      <h2 style={{ color: 'var(--text)' }}>Welcome to TaskVerse Earn</h2>
       {error && (
         <p style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px', borderRadius: '8px', fontSize: '0.9rem' }}>
           {error}
@@ -51,12 +51,12 @@ export default function PiLogin({ onLoginSuccess }) {
       </button>
     
       {/* How It Works overlay */}
-      {showHow      && <div style={{ position:'fixed', inset:0, backgroundColor:'#f9f9f9', zIndex:300, overflowY:'auto' }}><HowItWorks onClose={() => setShowHow(false)} /></div>}
-      {showPrivacy  && <div style={{ position:'fixed', inset:0, backgroundColor:'white', zIndex:300, overflowY:'auto' }}><PrivacyPolicy onBack={() => setShowPrivacy(false)} /></div>}
-      {showTerms    && <div style={{ position:'fixed', inset:0, backgroundColor:'white', zIndex:300, overflowY:'auto' }}><TermsOfService onBack={() => setShowTerms(false)} /></div>}
+      {showHow      && <div style={{ position:'fixed', inset:0, backgroundColor:'var(--bg)', zIndex:300, overflowY:'auto' }}><HowItWorks onClose={() => setShowHow(false)} /></div>}
+      {showPrivacy  && <div style={{ position:'fixed', inset:0, backgroundColor:'var(--surface)', zIndex:300, overflowY:'auto' }}><PrivacyPolicy onBack={() => setShowPrivacy(false)} /></div>}
+      {showTerms    && <div style={{ position:'fixed', inset:0, backgroundColor:'var(--surface)', zIndex:300, overflowY:'auto' }}><TermsOfService onBack={() => setShowTerms(false)} /></div>}
 
       {/* Legal footer — bottom of login card */}
-      <div style={{ textAlign: 'center', padding: '16px 20px', fontSize: '0.75rem', color: '#a0aec0' }}>
+      <div style={{ textAlign: 'center', padding: '16px 20px', fontSize: '0.75rem', color: 'var(--text-faintest)' }}>
         <button onClick={() => setShowHow(true)} style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '8px', display: 'block', width: '100%' }}>
           How does TaskVerse Earn work? ➜
         </button>

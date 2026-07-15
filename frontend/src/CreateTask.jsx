@@ -20,8 +20,8 @@ const COUNTRIES = [
 
 const inputStyle = {
 width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px',
-border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#2d3748',
-backgroundColor: 'white', outline: 'none', marginBottom: '10px',
+border: '1.5px solid var(--border)', fontSize: '0.88rem', color: 'var(--text-secondary)',
+backgroundColor: 'var(--surface)', outline: 'none', marginBottom: '10px',
 };
 
 /**
@@ -85,24 +85,24 @@ setPhase('form');
 };
 
 return (
-<div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: 'white', borderRadius: '12px' }}>
+<div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: 'var(--surface)', borderRadius: '12px' }}>
 
 {/* Header */}
 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
-<button onClick={onBack} style={{ background: 'white', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', fontWeight: '500', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>← Back</button>
-<h3 style={{ margin: 0, fontWeight: '700', fontSize: '1rem', color: '#1a202c' }}>Post a Micro-Gig</h3>
+<button onClick={onBack} style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '500', boxShadow: '0 1px 3px var(--shadow-color)' }}>← Back</button>
+<h3 style={{ margin: 0, fontWeight: '700', fontSize: '1rem', color: 'var(--text)' }}>Post a Micro-Gig</h3>
 </div>
 
 {phase === 'done' ? (
 <div style={{ textAlign: 'center', padding: '32px 20px' }}>
 <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🚀</div>
-<p style={{ color: '#276749', fontWeight: '700', fontSize: '1rem', margin: 0 }}>Payment confirmed — your gig is live!</p>
-<p style={{ color: '#718096', fontSize: '0.82rem', marginTop: '6px' }}>Workers can find and start it right away.</p>
+<p style={{ color: '#10b981', fontWeight: '700', fontSize: '1rem', margin: 0 }}>Payment confirmed — your gig is live!</p>
+<p style={{ color: 'var(--text-faint)', fontSize: '0.82rem', marginTop: '6px' }}>Workers can find and start it right away.</p>
 {receiptRefId && (
-<div style={{ marginTop: '16px', display: 'inline-block', backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 16px' }}>
-<div style={{ fontSize: '0.68rem', color: '#a0aec0', fontWeight: '700', letterSpacing: '0.03em' }}>PAYMENT REFERENCE</div>
-<div style={{ fontSize: '0.9rem', color: '#2d3748', fontWeight: '800', fontFamily: 'monospace', marginTop: '3px' }}>{receiptRefId}</div>
-<div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '3px' }}>Save this — quote it if you ever need support with this payment.</div>
+<div style={{ marginTop: '16px', display: 'inline-block', backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px 16px' }}>
+<div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', fontWeight: '700', letterSpacing: '0.03em' }}>PAYMENT REFERENCE</div>
+<div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '800', fontFamily: 'monospace', marginTop: '3px' }}>{receiptRefId}</div>
+<div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '3px' }}>Save this — quote it if you ever need support with this payment.</div>
 </div>
 )}
 </div>
@@ -119,12 +119,12 @@ style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight
 
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
 <div>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>REWARD PER WORKER</label>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '4px' }}>REWARD PER WORKER</label>
 <input type="number" step="0.01" min={settings.minRewardPi} max={settings.maxRewardPi || undefined} value={reward} onChange={(e) => setReward(e.target.value)}
 placeholder={`${settings.minRewardPi} π`} required style={inputStyle} />
 </div>
 <div>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>WORKER SLOTS</label>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '4px' }}>WORKER SLOTS</label>
 <input type="number" min={settings.minSlots} max={settings.maxSlots || 1000} value={slots} onChange={(e) => setSlots(e.target.value)}
 placeholder="10" required style={inputStyle} />
 </div>
@@ -132,7 +132,7 @@ placeholder="10" required style={inputStyle} />
 
 {/* Country targeting */}
 <div style={{ marginBottom: '10px' }}>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', display: 'block', marginBottom: '4px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '4px' }}>
 🌍 COUNTRY TARGETING <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span>
 </label>
 <select
@@ -153,16 +153,16 @@ placeholder="10" required style={inputStyle} />
     {allowedCountries.map(code => {
       const c = COUNTRIES.find(x => x.code === code);
       return (
-        <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#edf2f7', border: '1px solid #cbd5e0', borderRadius: '999px', padding: '3px 10px', fontSize: '0.76rem', color: '#2d3748' }}>
+        <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border-strong)', borderRadius: '999px', padding: '3px 10px', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
           {c ? c.name : code}
           <button type="button" onClick={() => setAllowedCountries(allowedCountries.filter(x => x !== code))}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#718096', fontWeight: 700, lineHeight: 1, padding: 0 }}>×</button>
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontWeight: 700, lineHeight: 1, padding: 0 }}>×</button>
         </span>
       );
     })}
   </div>
 )}
-<p style={{ fontSize: '0.7rem', color: '#a0aec0', margin: '5px 0 0' }}>
+<p style={{ fontSize: '0.7rem', color: 'var(--text-faintest)', margin: '5px 0 0' }}>
   {allowedCountries.length
     ? 'Only workers in the selected countries can see and complete this task.'
     : 'Leave empty to let any pioneer worldwide complete this task.'}
@@ -170,15 +170,15 @@ placeholder="10" required style={inputStyle} />
 </div>
 
 {/* Proof policy — protects against low-effort / irrelevant screenshots */}
-<div style={{ marginBottom: '14px', backgroundColor: '#f7fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '12px 14px' }}>
-  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#4a5568', marginBottom: '9px', letterSpacing: '0.03em' }}>PROOF POLICY</div>
+<div style={{ marginBottom: '14px', backgroundColor: 'var(--surface-alt)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '12px 14px' }}>
+  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '9px', letterSpacing: '0.03em' }}>PROOF POLICY</div>
 
   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer', marginBottom: '10px' }}>
     <input type="checkbox" checked={requireScreenshot} onChange={(e) => setRequireScreenshot(e.target.checked)}
       style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: '#059669', flexShrink: 0 }} />
     <span>
-      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#2d3748', display: 'block' }}>Screenshot required</span>
-      <span style={{ fontSize: '0.7rem', color: '#718096' }}>Submissions without an image are rejected automatically.</span>
+      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'block' }}>Screenshot required</span>
+      <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>Submissions without an image are rejected automatically.</span>
     </span>
   </label>
 
@@ -186,8 +186,8 @@ placeholder="10" required style={inputStyle} />
     <input type="checkbox" checked={requireManualReview} onChange={(e) => setRequireManualReview(e.target.checked)}
       style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: '#059669', flexShrink: 0 }} />
     <span>
-      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#2d3748', display: 'block' }}>Manual review (no auto-approve)</span>
-      <span style={{ fontSize: '0.7rem', color: '#718096' }}>
+      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'block' }}>Manual review (no auto-approve)</span>
+      <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>
         Every submission waits for an admin to check it. Use this when a worker could pass off a random or unrelated screenshot — only a human can tell.
       </span>
     </span>
@@ -195,18 +195,18 @@ placeholder="10" required style={inputStyle} />
 </div>
 
 {breakdown.total > 0 && (
-<div style={{ backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', fontSize: '0.85rem', marginBottom: '14px' }}>
+<div style={{ backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px', fontSize: '0.85rem', marginBottom: '14px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-<span style={{ color: '#4a5568' }}>Reward pool ({slots} × {reward}π)</span>
-<strong style={{ color: '#2d3748' }}>{breakdown.pool.toFixed(4)} π</strong>
+<span style={{ color: 'var(--text-muted)' }}>Reward pool ({slots} × {reward}π)</span>
+<strong style={{ color: 'var(--text-secondary)' }}>{breakdown.pool.toFixed(4)} π</strong>
 </div>
-<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#718096', fontSize: '0.8rem' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: 'var(--text-faint)', fontSize: '0.8rem' }}>
 <span>Platform hosting fee ({(settings.feeRate * 100).toFixed(1)}%)</span>
 <span>{breakdown.fee.toFixed(4)} π</span>
 </div>
-<div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '6px 0' }} />
+<div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '6px 0' }} />
 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-<span style={{ fontWeight: '700', color: '#2d3748' }}>Total deposit</span>
+<span style={{ fontWeight: '700', color: 'var(--text-secondary)' }}>Total deposit</span>
 <strong style={{ color: '#047857', fontSize: '1rem' }}>{breakdown.total.toFixed(4)} π</strong>
 </div>
 </div>
