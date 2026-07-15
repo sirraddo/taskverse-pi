@@ -16,9 +16,16 @@ import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBa
 import { evaluateSubmission } from './autoReview.js';
 
 const app = express();
-// Render (and most hosts) put the app behind a proxy, so the real client IP
-// arrives in X-Forwarded-For. Trust it so req.ip is the user's actual IP.
-app.set('trust proxy', true);
+// Render (and most hosts) put the app behind a single reverse proxy hop, so
+// the real client IP arrives as the last entry in X-Forwarded-For. Trusting
+// exactly 1 hop (not `true`, which trusts the whole chain including anything
+// a client injects into that header) is what express-rate-limit's own
+// ERR_ERL_PERMISSIVE_TRUST_PROXY check is warning about — `true` means a
+// client can spoof X-Forwarded-For to get a fresh rate-limit bucket on every
+// request. This was noticed in production logs (harmless per-request, but
+// real noise and a real gap) while chasing an unrelated push-notification
+// boot crash — fixed while it was fresh, not left for later.
+app.set('trust proxy', 1);
 
 // Look up the ISO country for an IP using a free, no-key geo-IP service.
 // Best-effort: returns null on any failure so it can NEVER break a request.
