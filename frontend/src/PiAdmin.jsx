@@ -450,7 +450,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>
           🚫 Cancel Stale Pending-Funding Tasks
         </div>
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>
+        <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           Tasks stuck in "awaiting_funding" because the Pi payment never completed (e.g. testnet key switch, user closed wallet). Cancelling tells Pi to release the hold and removes the task from the poster's queue.
         </p>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -474,7 +474,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <div style={{ fontWeight: '700', color: '#b45309', fontSize: '0.85rem', marginBottom: '4px' }}>
           🪙 Reconcile A2U Payouts
         </div>
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>
+        <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           Flushes approved submissions that were credited in-balance but never paid on-chain. Sends REAL testnet A2U (signs blockchain txns). Pi allows one A2U at a time — verify each completes before the next. Preview pays nothing.
         </p>
 
@@ -800,7 +800,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <div style={{ fontWeight: '700', color: '#c53030', fontSize: '0.85rem', marginBottom: '4px' }}>
           🖼️ Remove Profile Picture
         </div>
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>
+        <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           Clears an inappropriate avatar and blocks that user from re-uploading. Use “Unblock” to allow uploads again.
         </p>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
@@ -828,7 +828,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <div style={{ fontWeight: '700', color: '#0369a1', fontSize: '0.85rem', marginBottom: '4px' }}>
           💸 Worker Payment Lookup
         </div>
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>
+        <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           For "I didn't get paid" cases. Cross-checks our DB, the Pi Platform API, and the blockchain (Horizon) for a worker's payouts. Read-only.
         </p>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
@@ -1011,7 +1011,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                   )}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '0.72rem', color: '#c53030', fontWeight: '600' }}>{match.why}</div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '1px' }}>
+                    <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: '1px' }}>
                       {match.task?.title || 'Task removed'} · {match.createdAt ? new Date(match.createdAt).toLocaleDateString() : ''}
                     </div>
                   </div>
@@ -1021,7 +1021,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           )}
 
           {sub.autoReview?.reasons?.length > 0 && (
-            <p style={{ fontSize: '0.72rem', color: 'var(--text-faintest)', backgroundColor: '#fffbeb', padding: '6px 10px', borderRadius: '6px', marginBottom: '10px' }}>
+            <p style={{ fontSize: '0.72rem', color: '#92400e', backgroundColor: '#fffbeb', padding: '6px 10px', borderRadius: '6px', marginBottom: '10px' }}>
               🤖 {sub.autoReview.reasons.join(' • ')}
             </p>
           )}

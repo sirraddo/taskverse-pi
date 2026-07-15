@@ -80,11 +80,11 @@ export default function NotificationFeed({ onBack, onRefresh }) {
           <div style={{ fontSize: '1.2rem', flexShrink: 0 }}>{TYPE_ICON[n.type] || '🔔'}</div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontWeight: '700', color: 'var(--text-secondary)', fontSize: '0.86rem' }}>{n.title}</span>
+              <span style={{ fontWeight: '700', color: n.read ? 'var(--text-secondary)' : '#276749', fontSize: '0.86rem' }}>{n.title}</span>
               {!n.read && <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#059669', flexShrink: 0 }} />}
             </div>
-            {n.body && <div style={{ fontSize: '0.78rem', color: 'var(--text-faint)', marginTop: '3px' }}>{n.body}</div>}
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '4px' }}>{timeAgo(n.createdAt)}</div>
+            {n.body && <div style={{ fontSize: '0.78rem', color: n.read ? 'var(--text-faint)' : '#4b6357', marginTop: '3px' }}>{n.body}</div>}
+            <div style={{ fontSize: '0.68rem', color: n.read ? 'var(--text-faintest)' : '#6b8577', marginTop: '4px' }}>{timeAgo(n.createdAt)}</div>
           </div>
         </div>
       ))}

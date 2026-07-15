@@ -120,10 +120,10 @@ export default function AdminFlags({ notify }) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#374151' }}>
                   <span style={{ color: blocking ? '#c53030' : '#059669' }}>● </span>{f.label}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '2px' }}>{f.description}</div>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '2px' }}>{f.description}</div>
               </div>
               <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                 <button onClick={() => toggle(f)} disabled={busyKey === f.key}

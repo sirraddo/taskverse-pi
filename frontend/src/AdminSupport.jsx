@@ -175,16 +175,17 @@ export default function AdminSupport({ notify, onUnreadChanged }) {
               <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginBottom: '6px' }}>{total} ticket{total === 1 ? '' : 's'}</div>
               {rows.map((t) => {
                 const badge = STATUS_BADGE[t.status];
+                const onFixedBg = t.status === 'open'; // '#fffbeb' below is a fixed literal color, not theme-aware
                 return (
                   <div key={t.id} onClick={() => setOpenTicketId(t.id)}
-                    style={{ border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', cursor: 'pointer', backgroundColor: t.status === 'open' ? '#fffbeb' : 'var(--surface)' }}>
+                    style={{ border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', cursor: 'pointer', backgroundColor: onFixedBg ? '#fffbeb' : 'var(--surface)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>{t.subject}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: onFixedBg ? '#374151' : 'var(--text-secondary)' }}>{t.subject}</div>
+                        <div style={{ fontSize: '0.7rem', color: onFixedBg ? '#6b7280' : 'var(--text-faint)', marginTop: '2px' }}>
                           @{t.user?.username || 'unknown'} · {t.category}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-faintest)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '0.7rem', color: onFixedBg ? '#9ca3af' : 'var(--text-faintest)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.lastMessage}
                         </div>
                       </div>

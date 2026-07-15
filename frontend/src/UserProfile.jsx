@@ -74,7 +74,7 @@ Your proof: {dispute.proofText.slice(0, 120)}{dispute.proofText.length > 120 ? '
 </div>
 ) : (
 <div>
-<label style={{ fontSize: '0.68rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>YOUR APPEAL STATEMENT</label>
+<label style={{ fontSize: '0.68rem', fontWeight: '700', color: '#9b6b6b', display: 'block', marginBottom: '4px', letterSpacing: '0.04em' }}>YOUR APPEAL STATEMENT</label>
 <textarea
 value={text}
 onChange={e => { setText(e.target.value); setErr(null); }}

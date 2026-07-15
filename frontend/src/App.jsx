@@ -97,6 +97,7 @@ const [notification, setNotification] = useState(null);
 const [screen, setScreen] = useState(null);
 const [categoryFilter, setCategoryFilter] = useState('All');
 const [searchQuery, setSearchQuery] = useState('');
+const [showDoneTasks, setShowDoneTasks] = useState(false);
 const [refreshing, setRefreshing] = useState(false);
 const [countryPromptDismissed, setCountryPromptDismissed] = useState(false);
 const [savingPromptCountry, setSavingPromptCountry] = useState(false);
@@ -222,6 +223,13 @@ const q = searchQuery.toLowerCase();
 const matchSearch = !q || (tk.title || '').toLowerCase().includes(q) || (tk.description || '').toLowerCase().includes(q);
 return matchCat && matchSearch;
 });
+// Tasks the user has already done or that are full aren't actionable by
+// anyone anymore — keep them out of the main scroll (nothing to do there)
+// and tuck them into a collapsed section instead, rather than making
+// people scroll past a growing pile of "Done ✅" / "Task Full" cards to
+// reach the ones they can still act on.
+const availableTasks = filtered.filter(tk => !tk.userDone && tk.slotsLeft > 0);
+const doneOrFullTasks = filtered.filter(tk => tk.userDone || tk.slotsLeft <= 0);
 
 const disputeCount = (user.openDisputes || []).length;
 
@@ -366,7 +374,7 @@ return (
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
 <h2 style={{ margin: 0, fontSize: '0.97rem', fontWeight: '700', color: 'var(--text-secondary)' }}>{t.availableGigs}</h2>
 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-{tasks !== null && <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)', fontWeight: '600' }}>{filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}</span>}
+{tasks !== null && <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)', fontWeight: '600' }}>{availableTasks.length} {availableTasks.length === 1 ? 'task' : 'tasks'}</span>}
 <button onClick={handleManualRefresh} disabled={refreshing} title="Refresh tasks"
 style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', fontSize: '0.95rem', opacity: refreshing ? 0.4 : 0.6, padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s' }}>
 <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
@@ -377,19 +385,22 @@ style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' 
 {/* Skeletons */}
 {tasks === null && [1,2,3].map(i => <SkeletonCard key={i} />)}
 
-{/* Empty state */}
-{tasks !== null && filtered.length === 0 && (
+{/* Empty state — distinguishes "nothing matches your filters" from
+    "you've done everything available" so the message actually helps. */}
+{tasks !== null && availableTasks.length === 0 && (
 <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-<div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>{searchQuery ? '🔍' : '📭'}</div>
-<p style={{ color: 'var(--text-faint)', fontWeight: '600', margin: '0 0 12px 0', fontSize: '0.9rem' }}>{t.empty}</p>
+<div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>{searchQuery ? '🔍' : doneOrFullTasks.length > 0 ? '🎉' : '📭'}</div>
+<p style={{ color: 'var(--text-faint)', fontWeight: '600', margin: '0 0 12px 0', fontSize: '0.9rem' }}>
+{doneOrFullTasks.length > 0 && filtered.length === doneOrFullTasks.length ? "You're all caught up — check back later for new tasks." : t.empty}
+</p>
 {(searchQuery || categoryFilter !== 'All') && (
 <button onClick={() => { setSearchQuery(''); setCategoryFilter('All'); }} style={{ background: 'none', border: '1.5px solid var(--border-strong)', padding: '6px 16px', borderRadius: '20px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '600' }}>Clear filters</button>
 )}
 </div>
 )}
 
-{/* Task cards */}
-{filtered.map(task => {
+{/* Task cards — only ones the user can actually still act on */}
+{availableTasks.map(task => {
 const isFull = task.slotsLeft <= 0;
 const slotsFilled = task.slotsFilled || 0;
 const totalSlots = task.slots || (task.slotsLeft + slotsFilled);
@@ -447,6 +458,38 @@ style={{ width: '100%', backgroundColor: isFull ? 'var(--surface-alt)' : task.us
 </div>
 );
 })}
+
+{/* Done/full tasks — nothing left to do here, so they're tucked behind a
+    toggle instead of sitting in the middle of the scrollable list. */}
+{doneOrFullTasks.length > 0 && (
+<div style={{ marginTop: '4px', marginBottom: '4px' }}>
+<button onClick={() => setShowDoneTasks(v => !v)}
+  style={{ width: '100%', background: 'none', border: 'none', padding: '10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--text-faintest)', fontSize: '0.78rem', fontWeight: '600' }}>
+  {showDoneTasks ? '▾' : '▸'} Completed &amp; full tasks ({doneOrFullTasks.length})
+</button>
+{showDoneTasks && doneOrFullTasks.map(task => {
+const isFull = task.slotsLeft <= 0;
+const m = CATEGORY_META[task.category] || CATEGORY_META.Other;
+return (
+<div key={task.id} style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px 14px 12px', marginBottom: '10px', boxShadow: '0 2px 12px var(--shadow-color)', opacity: 0.65 }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+<div style={{ flex: 1 }}>
+<span style={{ background: m.color + '18', color: m.color, padding: '2px 8px', borderRadius: '10px', fontSize: '0.67rem', fontWeight: '700', marginBottom: '5px', display: 'inline-block' }}>{m.emoji} {task.category}</span>
+<h3 style={{ margin: '3px 0 0', fontSize: '0.93rem', fontWeight: '700', color: 'var(--text)', lineHeight: 1.3 }}>{task.title}</h3>
+</div>
+<div style={{ flexShrink: 0, background: 'linear-gradient(135deg,#059669,#047857)', color: 'white', padding: '7px 10px', borderRadius: '11px', textAlign: 'center', minWidth: '46px' }}>
+<div style={{ fontSize: '1rem', fontWeight: '800', lineHeight: 1 }}>{task.reward}</div>
+<div style={{ fontSize: '0.6rem', opacity: 0.85, fontWeight: '600' }}>π</div>
+</div>
+</div>
+<div style={{ width: '100%', backgroundColor: isFull ? 'var(--surface-alt)' : '#c6f6d5', color: isFull ? 'var(--text-faintest)' : '#276749', padding: '10px', borderRadius: '10px', textAlign: 'center', fontWeight: '700', fontSize: '0.84rem' }}>
+{isFull ? 'Task Full' : 'Done ✅'}
+</div>
+</div>
+);
+})}
+</div>
+)}
 
 {/* Admin */}
 {user.isAdmin && (
