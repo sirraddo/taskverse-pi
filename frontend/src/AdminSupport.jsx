@@ -49,20 +49,20 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
     } finally { setBusy(false); }
   };
 
-  if (!ticket) return <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Loading…</div>;
+  if (!ticket) return <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>;
   const badge = STATUS_BADGE[ticket.status];
 
   return (
     <div>
       <button onClick={onBack}
-        style={{ background: 'white', border: '1.5px solid #e2e8f0', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', color: '#4a5568', fontWeight: '700', marginBottom: '12px' }}>
+        style={{ background: 'var(--surface)', border: '1.5px solid var(--border)', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '12px' }}>
         ← All tickets
       </button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
         <div style={{ minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontSize: '0.92rem', color: '#1a202c' }}>{ticket.subject}</h3>
-          <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '2px' }}>
+          <h3 style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text)' }}>{ticket.subject}</h3>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-faint)', marginTop: '2px' }}>
             @{ticket.user?.username} · {ticket.user?.piUid} · {ticket.category}
           </div>
         </div>
@@ -81,14 +81,14 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
           <div key={i} style={{
             alignSelf: m.from === 'admin' ? 'flex-end' : 'flex-start',
             maxWidth: '82%',
-            backgroundColor: m.from === 'admin' ? '#f0fff4' : '#edf2f7',
-            border: `1px solid ${m.from === 'admin' ? '#c6f6d5' : '#e2e8f0'}`,
+            backgroundColor: m.from === 'admin' ? '#f0fff4' : 'var(--surface-alt)',
+            border: `1px solid ${m.from === 'admin' ? '#c6f6d5' : 'var(--border)'}`,
             borderRadius: '12px', padding: '9px 12px',
           }}>
-            <div style={{ fontSize: '0.64rem', fontWeight: '700', color: m.from === 'admin' ? '#276749' : '#718096', marginBottom: '3px' }}>
+            <div style={{ fontSize: '0.64rem', fontWeight: '700', color: m.from === 'admin' ? '#276749' : 'var(--text-faint)', marginBottom: '3px' }}>
               {m.from === 'admin' ? 'You' : `@${ticket.user?.username}`} · {new Date(m.createdAt).toLocaleString()}
             </div>
-            <div style={{ fontSize: '0.82rem', color: '#2d3748', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{m.body}</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{m.body}</div>
           </div>
         ))}
       </div>
@@ -97,14 +97,14 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
         <input value={reply} onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
           placeholder="Reply…" maxLength={3000}
-          style={{ flex: 1, padding: '9px 11px', borderRadius: '9px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#2d3748', backgroundColor: 'white' }} />
+          style={{ flex: 1, padding: '9px 11px', borderRadius: '9px', border: '1.5px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)' }} />
         <button onClick={send} disabled={sending || !reply.trim()}
           style={{ padding: '9px 14px', borderRadius: '9px', border: 'none', backgroundColor: (sending || !reply.trim()) ? '#a0aec0' : '#059669', color: 'white', fontWeight: '700', cursor: 'pointer', fontSize: '0.8rem', flexShrink: 0 }}>
           {sending ? '…' : 'Reply'}
         </button>
       </div>
       <button onClick={toggleClosed} disabled={busy}
-        style={{ marginTop: '8px', padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: '#718096', fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer' }}>
+        style={{ marginTop: '8px', padding: '7px 12px', borderRadius: '8px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-faint)', fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer' }}>
         {ticket.status === 'closed' ? 'Reopen' : 'Mark closed'}
       </button>
 
@@ -140,11 +140,11 @@ export default function AdminSupport({ notify, onUnreadChanged }) {
   const openCount = rows.filter((t) => t.status === 'open').length;
 
   return (
-    <div style={{ backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+    <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
       <div style={{ fontWeight: '800', color: '#065F46', fontSize: '0.9rem', marginBottom: '3px' }}>
         🎧 Support
       </div>
-      <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 12px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 12px' }}>
         In-app messages from users. Replying marks a ticket Answered; a user reply puts it back to Open.
       </p>
 
@@ -157,9 +157,9 @@ export default function AdminSupport({ notify, onUnreadChanged }) {
               <button key={s || 'all'} onClick={() => setStatusFilter(s)}
                 style={{
                   padding: '6px 11px', borderRadius: '16px', border: 'none', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer',
-                  backgroundColor: status === s ? '#059669' : 'white',
-                  color: status === s ? 'white' : '#4a5568',
-                  boxShadow: status === s ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
+                  backgroundColor: status === s ? '#059669' : 'var(--surface)',
+                  color: status === s ? 'white' : 'var(--text-muted)',
+                  boxShadow: status === s ? 'none' : '0 1px 3px var(--shadow-color)',
                 }}>
                 {s ? (STATUS_BADGE[s]?.label || s) : 'All'}{s === 'open' && openCount > 0 ? ` (${openCount})` : ''}
               </button>
@@ -167,24 +167,24 @@ export default function AdminSupport({ notify, onUnreadChanged }) {
           </div>
 
           {loading ? (
-            <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Loading…</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>
           ) : rows.length === 0 ? (
-            <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>No tickets{status ? ` with status "${status}"` : ''}.</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>No tickets{status ? ` with status "${status}"` : ''}.</div>
           ) : (
             <>
-              <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginBottom: '6px' }}>{total} ticket{total === 1 ? '' : 's'}</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginBottom: '6px' }}>{total} ticket{total === 1 ? '' : 's'}</div>
               {rows.map((t) => {
                 const badge = STATUS_BADGE[t.status];
                 return (
                   <div key={t.id} onClick={() => setOpenTicketId(t.id)}
-                    style={{ border: '1px solid #edf2f7', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', cursor: 'pointer', backgroundColor: t.status === 'open' ? '#fffbeb' : 'white' }}>
+                    style={{ border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', cursor: 'pointer', backgroundColor: t.status === 'open' ? '#fffbeb' : 'var(--surface)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#2d3748' }}>{t.subject}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#718096', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>{t.subject}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '2px' }}>
                           @{t.user?.username || 'unknown'} · {t.category}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#a0aec0', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-faintest)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.lastMessage}
                         </div>
                       </div>

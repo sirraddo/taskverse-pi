@@ -84,55 +84,55 @@ export default function AdminUsers({ notify }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div style={{ backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+    <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
       <div style={{ fontWeight: '800', color: '#065F46', fontSize: '0.9rem', marginBottom: '3px' }}>
         👤 Users
       </div>
-      <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 10px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>
         Search by username or piUid, then act directly on the row — no more pasting piUids blindly.
       </p>
 
       <input
         value={query} onChange={(e) => onQueryChange(e.target.value)}
         placeholder="Search username or piUid…"
-        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', color: '#2d3748', backgroundColor: 'white', outline: 'none', marginBottom: '10px' }}
+        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid var(--border)', fontSize: '0.85rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', outline: 'none', marginBottom: '10px' }}
       />
 
       {loading ? (
-        <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Loading…</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>
       ) : users.length === 0 ? (
-        <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>No users match.</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>No users match.</div>
       ) : (
         <>
-          <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginBottom: '6px' }}>
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginBottom: '6px' }}>
             {total} user{total === 1 ? '' : 's'}{query.trim() ? ` matching "${query.trim()}"` : ''}
           </div>
           {users.map((u) => (
             <div key={u.id} style={{
-              border: '1px solid #edf2f7', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px',
-              backgroundColor: u.isBanned ? '#fff5f5' : 'white',
+              border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px',
+              backgroundColor: u.isBanned ? '#fff5f5' : 'var(--surface)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#2d3748' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
                     @{u.username}
                     {u.isBanned && <span style={{ color: '#c53030', marginLeft: '6px', fontSize: '0.68rem', fontWeight: '800' }}>BANNED</span>}
                     {u.avatarBlocked && <span style={{ color: '#d97706', marginLeft: '6px', fontSize: '0.68rem', fontWeight: '800' }}>AVATAR BLOCKED</span>}
                   </div>
-                  <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '2px' }}>
                     {u.piUid} {u.country && `· ${u.country}`} · joined {new Date(u.createdAt).toLocaleDateString()}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#4a5568', marginTop: '3px' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
                     Balance <b>{u.balancePi}π</b> · ✅ {u.approvedCount} · ❌ {u.rejectedCount}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '5px', flexShrink: 0, flexWrap: 'wrap' }}>
                   <button onClick={() => toggleLookup(u)}
-                    style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #bae6fd', backgroundColor: 'white', color: '#0369a1', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
+                    style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #bae6fd', backgroundColor: 'var(--surface)', color: '#0369a1', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
                     {expanded === u.id ? 'Hide payments' : '💸 Payments'}
                   </button>
                   <button onClick={() => toggleAvatarBlock(u)} disabled={busyId === u.id}
-                    style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #fed7d7', backgroundColor: 'white', color: '#c53030', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
+                    style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #fed7d7', backgroundColor: 'var(--surface)', color: '#c53030', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
                     {u.avatarBlocked ? 'Unblock avatar' : 'Remove avatar'}
                   </button>
                   <button onClick={() => toggleBan(u)} disabled={busyId === u.id}
@@ -147,14 +147,14 @@ export default function AdminUsers({ notify }) {
               </div>
 
               {expanded === u.id && (
-                <div style={{ marginTop: '9px', paddingTop: '9px', borderTop: '1px solid #edf2f7' }}>
+                <div style={{ marginTop: '9px', paddingTop: '9px', borderTop: '1px solid var(--border)' }}>
                   {lookupData[u.id] === 'loading' ? (
-                    <div style={{ fontSize: '0.72rem', color: '#a0aec0' }}>Looking up…</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-faintest)' }}>Looking up…</div>
                   ) : lookupData[u.id] === 'error' ? (
                     <div style={{ fontSize: '0.72rem', color: '#c53030' }}>Lookup failed.</div>
                   ) : lookupData[u.id] ? (
                     <>
-                      <div style={{ fontSize: '0.72rem', color: '#4a5568', marginBottom: '6px' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
                         Approved: {lookupData[u.id].worker.approvedCount} · Total approved reward: {lookupData[u.id].totalApprovedRewardPi}π
                         {lookupData[u.id].approvedSubmissionsWithoutPayout > 0 && (
                           <div style={{ color: '#c53030', marginTop: '4px', fontWeight: '700' }}>
@@ -163,7 +163,7 @@ export default function AdminUsers({ notify }) {
                         )}
                       </div>
                       {lookupData[u.id].payoutCount === 0 ? (
-                        <div style={{ fontSize: '0.7rem', color: '#a0aec0', fontStyle: 'italic' }}>No A2U worker_payout records for this worker.</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-faintest)', fontStyle: 'italic' }}>No A2U worker_payout records for this worker.</div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                           {lookupData[u.id].payouts.map((p, i) => {
@@ -172,10 +172,10 @@ export default function AdminUsers({ notify }) {
                               : p.verdict.startsWith('pending') ? '#d97706'
                               : '#c53030';
                             return (
-                              <div key={i} style={{ border: `1px solid ${c}33`, borderLeft: `3px solid ${c}`, borderRadius: '6px', padding: '6px 8px', backgroundColor: '#fafafa' }}>
+                              <div key={i} style={{ border: `1px solid ${c}33`, borderLeft: `3px solid ${c}`, borderRadius: '6px', padding: '6px 8px', backgroundColor: 'var(--surface-alt)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem' }}>
                                   <span style={{ fontWeight: '700', color: c }}>{p.verdict}</span>
-                                  <span style={{ color: '#4a5568' }}>{p.amountPi}π</span>
+                                  <span style={{ color: 'var(--text-muted)' }}>{p.amountPi}π</span>
                                 </div>
                               </div>
                             );
@@ -192,12 +192,12 @@ export default function AdminUsers({ notify }) {
           {totalPages > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
               <button onClick={() => goToPage(page - 1)} disabled={page <= 1}
-                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: page <= 1 ? '#cbd5e0' : '#4a5568', fontSize: '0.72rem', fontWeight: '700', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: page <= 1 ? 'var(--border-strong)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: '700', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}>
                 ← Prev
               </button>
-              <span style={{ fontSize: '0.72rem', color: '#a0aec0' }}>{page} / {totalPages}</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)' }}>{page} / {totalPages}</span>
               <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages}
-                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: page >= totalPages ? '#cbd5e0' : '#4a5568', fontSize: '0.72rem', fontWeight: '700', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: page >= totalPages ? 'var(--border-strong)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: '700', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}>
                 Next →
               </button>
             </div>

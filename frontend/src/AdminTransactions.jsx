@@ -14,23 +14,23 @@ const PURPOSE_LABEL = {
 
 function TxRow({ t }) {
   return (
-    <div style={{ border: '1px solid #edf2f7', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', backgroundColor: 'white' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', backgroundColor: 'var(--surface)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#2d3748', fontFamily: 'monospace' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
             {t.refId || '—'}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#4a5568', marginTop: '2px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
             {PURPOSE_LABEL[t.purpose] || t.purpose} · {t.direction}
             {t.user && <> · @{t.user.username}</>}
             {t.task && <> · {t.task.title}</>}
           </div>
-          <div style={{ fontSize: '0.66rem', color: '#a0aec0', marginTop: '2px' }}>
+          <div style={{ fontSize: '0.66rem', color: 'var(--text-faintest)', marginTop: '2px' }}>
             {new Date(t.createdAt).toLocaleString()}
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#2d3748' }}>{t.amountPi}π</div>
+          <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-secondary)' }}>{t.amountPi}π</div>
           <span style={{
             display: 'inline-block', marginTop: '3px', padding: '2px 8px', borderRadius: '10px',
             fontSize: '0.66rem', fontWeight: '700', color: 'white',
@@ -105,16 +105,16 @@ export default function AdminTransactions({ notify }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const selectStyle = {
-    padding: '7px 9px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.76rem',
-    color: '#4a5568', backgroundColor: 'white', flex: 1, minWidth: '90px',
+    padding: '7px 9px', borderRadius: '8px', border: '1.5px solid var(--border)', fontSize: '0.76rem',
+    color: 'var(--text-muted)', backgroundColor: 'var(--surface)', flex: 1, minWidth: '90px',
   };
 
   return (
-    <div style={{ backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+    <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
       <div style={{ fontWeight: '800', color: '#065F46', fontSize: '0.9rem', marginBottom: '3px' }}>
         💳 Transactions
       </div>
-      <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 12px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 12px' }}>
         Every task-funding and payout transaction, any status. Ask a user for the reference on their receipt for a direct lookup.
       </p>
 
@@ -125,7 +125,7 @@ export default function AdminTransactions({ notify }) {
           <input value={refQuery} onChange={(e) => setRefQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') doRefLookup(); }}
             placeholder="TXV-4K7QXPM"
-            style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #bae6fd', fontSize: '0.82rem', fontFamily: 'monospace', color: '#2d3748', backgroundColor: 'white' }} />
+            style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #bae6fd', fontSize: '0.82rem', fontFamily: 'monospace', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)' }} />
           <button onClick={doRefLookup} disabled={!refQuery.trim() || refResult === 'loading'}
             style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', backgroundColor: '#0369a1', color: 'white', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0 }}>
             {refResult === 'loading' ? '…' : '🔍 Find'}
@@ -165,25 +165,25 @@ export default function AdminTransactions({ notify }) {
       </div>
       <input value={userQuery} onChange={(e) => onUserQueryChange(e.target.value)}
         placeholder="Filter by username or piUid…"
-        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#2d3748', backgroundColor: 'white', outline: 'none', marginBottom: '10px' }} />
+        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '9px', border: '1.5px solid var(--border)', fontSize: '0.82rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', outline: 'none', marginBottom: '10px' }} />
 
       {loading ? (
-        <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Loading…</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>
       ) : rows.length === 0 ? (
-        <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>No transactions match.</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>No transactions match.</div>
       ) : (
         <>
-          <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginBottom: '6px' }}>{total} transaction{total === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginBottom: '6px' }}>{total} transaction{total === 1 ? '' : 's'}</div>
           {rows.map((t) => <TxRow key={t.id} t={t} />)}
           {totalPages > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
               <button onClick={() => goToPage(page - 1)} disabled={page <= 1}
-                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: page <= 1 ? '#cbd5e0' : '#4a5568', fontSize: '0.72rem', fontWeight: '700', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: page <= 1 ? 'var(--border-strong)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: '700', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}>
                 ← Prev
               </button>
-              <span style={{ fontSize: '0.72rem', color: '#a0aec0' }}>{page} / {totalPages}</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-faintest)' }}>{page} / {totalPages}</span>
               <button onClick={() => goToPage(page + 1)} disabled={page >= totalPages}
-                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: page >= totalPages ? '#cbd5e0' : '#4a5568', fontSize: '0.72rem', fontWeight: '700', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '5px 10px', borderRadius: '7px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: page >= totalPages ? 'var(--border-strong)' : 'var(--text-muted)', fontSize: '0.72rem', fontWeight: '700', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}>
                 Next →
               </button>
             </div>

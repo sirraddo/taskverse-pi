@@ -52,7 +52,7 @@ export default function AdminSettings({ notify }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading || !settings) {
-    return <div style={{ fontSize: '0.75rem', color: '#a0aec0', padding: '14px' }}>Loading…</div>;
+    return <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)', padding: '14px' }}>Loading…</div>;
   }
 
   const rawValueFor = (field) => {
@@ -95,16 +95,16 @@ export default function AdminSettings({ notify }) {
 
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: '9px',
-    border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#2d3748',
-    outline: 'none', backgroundColor: 'white', fontFamily: 'inherit',
+    border: '1.5px solid var(--border)', fontSize: '0.84rem', color: 'var(--text-secondary)',
+    outline: 'none', backgroundColor: 'var(--surface)', fontFamily: 'inherit',
   };
 
   return (
-    <div style={{ backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+    <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
       <div style={{ fontWeight: '800', color: '#065F46', fontSize: '0.9rem', marginBottom: '3px' }}>
         ⚙️ Platform Settings
       </div>
-      <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 12px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 12px' }}>
         Live-editable — no deploy needed. Fields left blank use the app's built-in default.
       </p>
 
@@ -116,13 +116,13 @@ export default function AdminSettings({ notify }) {
 
       {FIELD_GROUPS.map((group) => (
         <div key={group.title} style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', marginBottom: '7px' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', marginBottom: '7px' }}>
             {group.title.toUpperCase()}
           </div>
           {group.fields.map((field) => (
             <div key={field.key} style={{ marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                <label style={{ fontSize: '0.78rem', fontWeight: '600', color: '#4a5568' }}>{field.label}</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: '600', color: 'var(--text-muted)' }}>{field.label}</label>
                 {overridden[field.key] && !(field.key in draft) && (
                   <button onClick={() => resetField(field)}
                     style={{ border: 'none', background: 'none', color: '#059669', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', padding: 0 }}>
@@ -138,9 +138,9 @@ export default function AdminSettings({ notify }) {
                   onChange={(e) => setValue(field.key, e.target.value)}
                   style={inputStyle}
                 />
-                {field.suffix && <span style={{ fontSize: '0.8rem', color: '#a0aec0', flexShrink: 0 }}>{field.suffix}</span>}
+                {field.suffix && <span style={{ fontSize: '0.8rem', color: 'var(--text-faintest)', flexShrink: 0 }}>{field.suffix}</span>}
               </div>
-              <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '3px' }}>{field.help}</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '3px' }}>{field.help}</div>
             </div>
           ))}
         </div>

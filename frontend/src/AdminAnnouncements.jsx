@@ -72,16 +72,16 @@ export default function AdminAnnouncements({ notify }) {
 
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: '9px',
-    border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#2d3748',
-    outline: 'none', backgroundColor: 'white', fontFamily: 'inherit',
+    border: '1.5px solid var(--border)', fontSize: '0.84rem', color: 'var(--text-secondary)',
+    outline: 'none', backgroundColor: 'var(--surface)', fontFamily: 'inherit',
   };
 
   return (
-    <div style={{ backgroundColor: 'white', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+    <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
       <div style={{ fontWeight: '800', color: '#065F46', fontSize: '0.9rem', marginBottom: '3px' }}>
         📢 Announcements
       </div>
-      <p style={{ fontSize: '0.72rem', color: '#718096', margin: '0 0 12px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 12px' }}>
         Post a message to all users. Only one is live at a time — publishing a new one replaces the current one.
       </p>
 
@@ -92,7 +92,7 @@ export default function AdminAnnouncements({ notify }) {
       <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={600}
         placeholder="Message to your users…"
         style={{ ...inputStyle, marginBottom: '4px', resize: 'vertical', lineHeight: 1.5 }} />
-      <div style={{ fontSize: '0.65rem', color: '#a0aec0', textAlign: 'right', marginBottom: '8px' }}>
+      <div style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', textAlign: 'right', marginBottom: '8px' }}>
         {body.length}/600
       </div>
 
@@ -102,9 +102,9 @@ export default function AdminAnnouncements({ notify }) {
             style={{
               flex: 1, minWidth: '90px', padding: '7px 8px', borderRadius: '9px', cursor: 'pointer',
               fontSize: '0.75rem', fontWeight: '700',
-              border: level === l.key ? '2px solid #059669' : '1.5px solid #e2e8f0',
-              backgroundColor: level === l.key ? '#ECFDF5' : 'white',
-              color: level === l.key ? '#065F46' : '#718096',
+              border: level === l.key ? '2px solid #059669' : '1.5px solid var(--border)',
+              backgroundColor: level === l.key ? '#ECFDF5' : 'var(--surface)',
+              color: level === l.key ? '#065F46' : 'var(--text-faint)',
             }}>
             {l.label}
           </button>
@@ -136,35 +136,35 @@ export default function AdminAnnouncements({ notify }) {
       </button>
 
       {/* History */}
-      <div style={{ marginTop: '14px', borderTop: '1px solid #edf2f7', paddingTop: '10px' }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718096', marginBottom: '7px' }}>
+      <div style={{ marginTop: '14px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', marginBottom: '7px' }}>
           RECENT
         </div>
         {loading ? (
-          <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>Loading…</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>Loading…</div>
         ) : list.length === 0 ? (
-          <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>None yet.</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>None yet.</div>
         ) : list.map((a) => (
           <div key={a.id} style={{
-            border: '1px solid #edf2f7', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px',
-            backgroundColor: a.active ? '#f0fff4' : '#f7fafc',
+            border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px',
+            backgroundColor: a.active ? '#f0fff4' : 'var(--surface-alt)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#2d3748', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
                   {a.active && <span style={{ color: '#059669' }}>● </span>}{a.title}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#718096', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginTop: '2px' }}>
                   {new Date(a.createdAt).toLocaleDateString()} · {a.dismissCount} dismissed
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                 <button onClick={() => toggle(a)} disabled={busy}
-                  style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #e2e8f0', backgroundColor: 'white', color: '#4a5568', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}>
+                  style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}>
                   {a.active ? 'Take down' : 'Show'}
                 </button>
                 <button onClick={() => remove(a)} disabled={busy}
-                  style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #fed7d7', backgroundColor: 'white', color: '#c53030', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}>
+                  style={{ padding: '5px 9px', borderRadius: '7px', border: '1.5px solid #fed7d7', backgroundColor: 'var(--surface)', color: '#c53030', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}>
                   Delete
                 </button>
               </div>
