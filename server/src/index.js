@@ -64,14 +64,21 @@ async function getPlatformSettings() {
   return out;
 }
 
-// Hosts we accept proof screenshots from. The app uploads to ImgBB and sends
-// back the resulting URL; anything else is rejected so workers can't pass off a
-// random image from elsewhere on the internet as their proof.
-// Override/extend with PROOF_IMAGE_HOSTS="imgbb.com,i.ibb.co,my-host.com".
-const PROOF_IMAGE_HOSTS = (process.env.PROOF_IMAGE_HOSTS || 'ibb.co,imgbb.com')
-  .split(',')
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+// Proof screenshots are self-hosted (stored inline as base64, same pattern
+// as User.avatar) rather than uploaded to a third party — the previous ImgBB
+// integration required VITE_IMGBB_API_KEY to live in the public frontend
+// bundle, which meant anyone could extract it and burn the upload quota (or
+// worse) under this app's account. No external image host involved anymore.
+const PROOF_IMAGE_MAX_CHARS = 280_000; // ~210KB of actual image bytes
+const PROOF_IMAGE_ALLOWED = /^data:image\/(jpeg|png|webp);base64,/;
+
+function validateProofImage(dataUrl) {
+  if (!PROOF_IMAGE_ALLOWED.test(dataUrl)) return 'Screenshot must be a JPEG, PNG, or WebP image.';
+  if (dataUrl.length > PROOF_IMAGE_MAX_CHARS) return 'Screenshot is too large. Please try a smaller/more compressed image.';
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return 'Malformed image data.';
+  return null;
+}
 const ADMINS = (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase());
 const isAdmin = (username) => ADMINS.includes((username || '').toLowerCase());
 
@@ -582,22 +589,13 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
     const worker = await currentUser(req);
     const { proofText = '', proofFileUrl: rawProofFileUrl = null } = req.body;
 
-    // ── Close the "paste any URL" loophole ──
-    // The client uploads screenshots to our image host and sends back the
-    // resulting URL. Previously ANY string was accepted here, so a worker could
-    // paste a link to any random image on the internet as their "proof".
-    // We now only accept URLs served by the trusted host(s).
+    // Screenshots are self-hosted base64 data URLs from our own resize/upload
+    // flow (see resizeProofImageToDataUrl in piClient.js) — no external image
+    // host involved, so nothing to allowlist by hostname anymore.
     const proofFileUrl = rawProofFileUrl ? String(rawProofFileUrl).trim() : null;
     if (proofFileUrl) {
-      let host = '';
-      try { host = new URL(proofFileUrl).hostname.toLowerCase(); }
-      catch { return res.status(400).json({ error: 'Screenshot must be a valid URL.' }); }
-      const ok = PROOF_IMAGE_HOSTS.some((h) => host === h || host.endsWith('.' + h));
-      if (!ok) {
-        return res.status(400).json({
-          error: 'Screenshots must be uploaded through the app — external image links are not accepted.',
-        });
-      }
+      const imgErr = validateProofImage(proofFileUrl);
+      if (imgErr) return res.status(415).json({ error: imgErr });
     }
 
     const task = await Task.findOne({ _id: req.params.id, status: 'live' });
@@ -2122,7 +2120,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  app.listen(PORT, () => console.log('TaskVerse Pi server listening on :' + PORT));
+  app.listen(PORT, () => console.log('TaskVerse Earn server listening on :' + PORT));
 
   // Auto-pay scheduler: drains a small A2U batch periodically while the process
   // is awake. Opt-in via AUTO_PAY=on so it never runs unexpectedly. On free-tier

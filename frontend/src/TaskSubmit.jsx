@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CaptchaVerify from './CaptchaVerify';
-import { submitProof, openExternalLink } from './piClient';
+import { submitProof, openExternalLink, resizeProofImageToDataUrl } from './piClient';
 
 /**
 * PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
@@ -9,9 +9,11 @@ import { submitProof, openExternalLink } from './piClient';
 *   201 status:'auto_approved'  -> onSubmitted (payout queued)
 *   422 + reasons[]             -> onRejected (regex quality check failed)
 *
-* NOTE on file input: proofFileUrl expects a URL from ImgBB.
-* The label wrapper is required for Pi Browser's Android WebView —
-* programmatic .click() is blocked there.
+* Screenshots are resized/compressed in the browser and sent to the server as
+* a base64 data URL (proofFileUrl) — self-hosted, same pattern as the avatar
+* upload, rather than a third-party image host with a client-exposed API key.
+* The label wrapper on the file input is required for Pi Browser's Android
+* WebView — programmatic .click() is blocked there.
 */
 export default function TaskSubmit({ activeTask, onBack, onSubmitted, onRejected }) {
 const [proofText, setProofText] = useState('');
@@ -22,27 +24,21 @@ const [proofFileUrl, setProofFileUrl] = useState('');
 const [uploading, setUploading] = useState(false);
 const [fileName, setFileName] = useState('');
 
-const handleFileChange = (e) => {
+const handleFileChange = async (e) => {
 const file = e.target.files[0];
+e.target.value = ''; // allow re-picking the same file
 if (!file) return;
 setFileName(file.name);
-const key = import.meta.env.VITE_IMGBB_API_KEY;
-if (!key) { setProofFileUrl(''); return; }
+setError(null);
 setUploading(true);
-const reader = new FileReader();
-reader.onloadend = async () => {
 try {
-const form = new FormData();
-form.append('image', reader.result.split(',')[1]);
-const res = await fetch('https://api.imgbb.com/1/upload?key=' + key, { method: 'POST', body: form });
-const data = await res.json();
-if (data.success) setProofFileUrl(data.data.url);
-else throw new Error('Upload failed');
+if (file.size > 12 * 1024 * 1024) throw new Error('That image is too large (max 12MB).');
+const dataUrl = await resizeProofImageToDataUrl(file);
+setProofFileUrl(dataUrl);
 } catch (err) {
-setError('Image upload failed — please try again.');
+setProofFileUrl('');
+setError(err.message || 'Image upload failed — please try again.');
 } finally { setUploading(false); }
-};
-reader.readAsDataURL(file);
 };
 
 const handleSubmit = async () => {
@@ -125,9 +121,9 @@ This task requires a screenshot. Submissions without one are rejected.
 </span>
 <input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} style={{ display: 'none' }} />
 </label>
-{/* Screenshots must be uploaded through the app. The manual "paste any image
-    URL" box was removed — it let workers pass off any random image from the
-    internet as proof. The server now only accepts URLs from our image host. */}
+{/* Resized/compressed locally and sent as a data URL — no external image
+    host involved, so there's no client-exposed API key and no way to pass
+    off a random image from elsewhere on the internet as proof. */}
 {proofFileUrl.trim() && (
 <div style={{ marginTop: '7px' }}>
 <img src={proofFileUrl} alt="Your screenshot"

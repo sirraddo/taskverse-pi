@@ -216,6 +216,42 @@ export function resizeImageToDataUrl(file, max = 256, quality = 0.82) {
   });
 }
 
+/**
+ * Like resizeImageToDataUrl, but for proof screenshots rather than avatars:
+ * fits within max dimensions preserving aspect ratio (no crop — the whole
+ * frame matters for proof, unlike an avatar), and allows a bit more size
+ * since detail needs to stay legible.
+ */
+export function resizeProofImageToDataUrl(file, maxDim = 1280, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      return reject(new Error('Please choose an image file.'));
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a valid image.'));
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          reject(new Error('Could not process that image.'));
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 /* ── Announcements ── */
 export const fetchAnnouncement = () => api('/api/announcement');
 export const dismissAnnouncement = (id) => api(`/api/announcement/${id}/dismiss`, {});
