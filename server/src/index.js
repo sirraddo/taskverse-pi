@@ -9,7 +9,7 @@ import * as StellarSdk from 'stellar-sdk';
 import webpush from 'web-push';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -102,6 +102,19 @@ async function sendPushToUser(userId, { title, body, url = '/' }) {
     }));
   } catch (e) {
     console.error('[push] sendPushToUser failed:', e.message);
+  }
+}
+
+// In-app notification feed — the part of this that actually reaches users,
+// since push turned out to have no usable audience on this platform (see
+// the Notification model comment). Same call sites as sendPushToUser, and
+// same fail-safe rule: never let a notification-write failure break the
+// real action (approval, etc.) that triggered it.
+async function notifyUser(userId, type, { title, body }) {
+  try {
+    await Notification.create({ user: userId, type, title, body });
+  } catch (e) {
+    console.error('[notify] notifyUser failed:', e.message);
   }
 }
 
@@ -776,6 +789,10 @@ async function settleApproval(submissionId) {
     body: `"${task.title}" — ${toPi(sub.rewardMicroPi)}π is on its way to your Pi wallet.`,
     url: '/',
   }); // fire-and-forget — never block approval on notification delivery
+  notifyUser(worker._id, 'submission_approved', {
+    title: '✅ Submission approved!',
+    body: `"${task.title}" — ${toPi(sub.rewardMicroPi)}π is on its way to your Pi wallet.`,
+  });
   try {
     const a2u = await pi.createA2UPayment({
       uid: worker.piUid,
@@ -878,6 +895,10 @@ app.post('/api/admin/submissions/:id/reject', requireAuth, requireAdmin, async (
       body: `"${sub.task?.title || 'Your task'}" wasn't approved — you can appeal it in the app.`,
       url: '/',
     });
+    notifyUser(sub.worker, 'submission_rejected', {
+      title: '❌ Submission rejected',
+      body: `"${sub.task?.title || 'Your task'}" wasn't approved — you can appeal it in the app.`,
+    });
     await logAdminAction(req, 'submission.reject', { targetType: 'Submission', targetId: sub._id, details: `Rejected submission, moved to appeals` });
   } catch (err) { next(err); }
 });
@@ -970,7 +991,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     const user = await currentUser(req);
     // avatar is select:false on the schema, so pull it explicitly.
     const withAvatar = await User.findById(user._id).select('+avatar').lean();
-    const [history, postedTasks, openDisputes, unreadSupportCount] = await Promise.all([
+    const [history, postedTasks, openDisputes, unreadSupportCount, unreadNotificationCount] = await Promise.all([
       Submission.find({ worker: user._id })
         .populate('task', 'title').sort({ createdAt: -1 }).limit(50).lean(),
       Task.find({ poster: user._id, archived: { $ne: true } }).sort({ createdAt: -1 }).limit(50).lean(),
@@ -978,6 +999,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
         .populate({ path: 'submission', populate: { path: 'task', select: 'title' } })
         .sort({ createdAt: -1 }).lean(),
       SupportTicket.countDocuments({ user: user._id, hasUnreadForUser: true }),
+      Notification.countDocuments({ user: user._id, read: false }),
     ]);
     // Funding receipt reference for each posted task (admin-sponsored tasks
     // have no U2A payment behind them, so they simply won't have one here —
@@ -996,6 +1018,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
       balance: toPi(user.balanceMicroPi),
       approvedCount: user.approvedCount,
       unreadSupportCount,
+      unreadNotificationCount,
       history: history.map((h) => ({
         title: h.task?.title, reward: toPi(h.rewardMicroPi), status: h.status, date: h.createdAt,
       })),
@@ -1679,6 +1702,10 @@ app.post('/api/admin/support/tickets/:id/reply', requireAuth, requireAdmin, asyn
       body: `New reply on "${ticket.subject}"`,
       url: '/',
     });
+    notifyUser(ticket.user, 'support_reply', {
+      title: '🎧 Support replied',
+      body: `New reply on "${ticket.subject}"`,
+    });
     await logAdminAction(req, 'support.reply', { targetType: 'SupportTicket', targetId: ticket._id, details: `Replied to "${ticket.subject}"` });
   } catch (err) { next(err); }
 });
@@ -1851,6 +1878,36 @@ app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) =
       { new: true }
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── In-app notification feed ────────────────────────────────────
+   The part of the notification system that actually reaches users on this
+   platform — see the Notification model comment for why. */
+
+app.get('/api/notifications', requireAuth, async (req, res, next) => {
+  try {
+    const notes = await Notification.find({ user: req.session.userId })
+      .sort({ createdAt: -1 }).limit(50).lean();
+    res.json({
+      notifications: notes.map((n) => ({
+        id: n._id, type: n.type, title: n.title, body: n.body, read: n.read, createdAt: n.createdAt,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/notifications/:id/read', requireAuth, async (req, res, next) => {
+  try {
+    await Notification.updateOne({ _id: req.params.id, user: req.session.userId }, { $set: { read: true } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/notifications/read-all', requireAuth, async (req, res, next) => {
+  try {
+    await Notification.updateMany({ user: req.session.userId, read: false }, { $set: { read: true } });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

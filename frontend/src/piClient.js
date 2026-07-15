@@ -444,6 +444,11 @@ export const exportAdminTransactionsCsv = (params = {}) => {
 };
 
 /* ── Support tickets (user-facing) ── */
+/* ── In-app notification feed ── */
+export const fetchNotifications = () => api('/api/notifications');
+export const markNotificationRead = (id) => api(`/api/notifications/${id}/read`, {});
+export const markAllNotificationsRead = () => api('/api/notifications/read-all', {});
+
 export const fetchMyTickets = () => api('/api/support/tickets');
 export const createTicket = (payload) => api('/api/support/tickets', payload);
 export const fetchMyTicket = (id) => api(`/api/support/tickets/${id}`);

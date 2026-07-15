@@ -404,4 +404,24 @@ const pushSubscriptionSchema = new Schema(
 );
 
 export const AdminAuditLog = mongoose.model('AdminAuditLog', adminAuditLogSchema);
+/* ── In-app notification feed ────────────────────────────────────
+   Same events as the push-notification system (approval, rejection,
+   support replies) but delivered as a plain polled feed instead of OS
+   push — since push turned out to have zero usable audience once we
+   confirmed Pi Browser's WebView doesn't expose the Push API at all.
+   Uses the exact same proven pattern as the support-ticket unread badge:
+   plain HTTP polling, no browser API dependency, works everywhere. */
+const notificationSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    type: { type: String, enum: ['submission_approved', 'submission_rejected', 'support_reply'], required: true },
+    title: { type: String, required: true },
+    body: { type: String, default: '' },
+    read: { type: Boolean, default: false, index: true },
+  },
+  { timestamps: true }
+);
+notificationSchema.index({ user: 1, createdAt: -1 });
+
 export const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
+export const Notification = mongoose.model('Notification', notificationSchema);

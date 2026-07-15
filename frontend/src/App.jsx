@@ -15,6 +15,7 @@ import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
 import SupportInbox from './SupportInbox';
+import NotificationFeed from './NotificationFeed';
 import { useDarkMode } from './theme';
 import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
 
@@ -243,6 +244,7 @@ return (
 {screen === 'howitworks' && <HowItWorks onBack={() => setScreen(null)} />}
 {screen === 'myTasks' && <MyPostedTasks tasks={user.postedTasks || []} onBack={() => setScreen(null)} />}
 {screen === 'support' && <SupportInbox onBack={() => { setScreen(null); refresh(); }} />}
+{screen === 'notifications' && <NotificationFeed onBack={() => { setScreen(null); refresh(); }} onRefresh={refresh} />}
 </div>
 )}
 
@@ -275,6 +277,14 @@ return (
 <select value={lang} onChange={e => setLang(e.target.value)} style={{ padding: '4px 8px', borderRadius: '16px', border: '1px solid var(--border-strong)', backgroundColor: 'var(--surface)', fontWeight: '600', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
 <option value="en">🇬🇧 EN</option><option value="es">🇪🇸 ES</option><option value="vi">🇻🇳 VI</option>
 </select>
+<button onClick={() => setScreen('notifications')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', position: 'relative', padding: '4px' }}>
+🔔
+{user.unreadNotificationCount > 0 && (
+<span style={{ position: 'absolute', top: '-2px', right: '-2px', backgroundColor: '#c53030', color: 'white', borderRadius: '50%', width: '15px', height: '15px', fontSize: '0.55rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+{user.unreadNotificationCount > 9 ? '9+' : user.unreadNotificationCount}
+</span>
+)}
+</button>
 <button onClick={() => { if (flags?.posting === false) { triggerNotification('⚠️ Task posting is temporarily disabled by the admin.'); return; } setView('create'); }}
   style={{
     backgroundColor: flags?.posting === false ? '#a0aec0' : '#047857', color: 'white', border: 'none',
