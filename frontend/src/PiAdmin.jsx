@@ -7,6 +7,7 @@ import AdminUsers from './AdminUsers';
 import AdminTransactions from './AdminTransactions';
 import AdminSupport from './AdminSupport';
 import AdminAuditLog from './AdminAuditLog';
+import AdminOverview from './AdminOverview';
 import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount } from './piClient';
 
 const inputStyle = {
@@ -17,6 +18,7 @@ const inputStyle = {
 
 // Tab definitions for the admin panel — one section visible at a time.
 const TABS = [
+  { key: 'overview', label: '📊 Overview' },
   { key: 'queue', label: '📋 Queue' },
   { key: 'support', label: '🎧 Support' },
   { key: 'tasks', label: '📌 Tasks' },
@@ -878,6 +880,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         )}
       </div>
       </>
+      )}
+
+      {tab === 'overview' && (
+      <AdminOverview notify={notify} />
       )}
 
       {tab === 'audit' && (

@@ -2103,6 +2103,10 @@ app.post('/api/admin/reconcile-consolidated', requireAuth, requireAdmin, async (
 /* ── Admin: deep stats for A2U requirement check ── */
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+
     const [
       totalUsers,
       totalSubmissions,
@@ -2111,6 +2115,10 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
       a2uPayments,
       u2aPayments,
       totalTasks,
+      signupsLast7Days,
+      signupsLast30Days,
+      dailySignupsRaw,
+      dailyRevenueRaw,
     ] = await Promise.all([
       User.countDocuments(),
       Submission.countDocuments(),
@@ -2133,13 +2141,41 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
       Task.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ]),
+      User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+      User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
+      User.aggregate([
+        { $match: { createdAt: { $gte: fourteenDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+      ]),
+      PlatformLedger.aggregate([
+        { $match: { createdAt: { $gte: fourteenDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, feeMicroPi: { $sum: '$feeMicroPi' } } },
+      ]),
     ]);
 
+    // Fill in the last 14 days with zeros for dates that had no activity,
+    // so the frontend gets a clean fixed-length array to chart directly.
+    const signupsByDay = Object.fromEntries(dailySignupsRaw.map((d) => [d._id, d.count]));
+    const revenueByDay = Object.fromEntries(dailyRevenueRaw.map((d) => [d._id, toPi(d.feeMicroPi)]));
+    const last14Days = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(Date.now() - (13 - i) * 86_400_000);
+      return d.toISOString().slice(0, 10);
+    });
+    const dailySignups = last14Days.map((date) => ({ date, count: signupsByDay[date] || 0 }));
+    const dailyRevenue = last14Days.map((date) => ({ date, feesPi: revenueByDay[date] || 0 }));
+
+    const decidedCount = (submissionsByStatus.find((s) => s._id === 'approved')?.count || 0)
+      + (submissionsByStatus.find((s) => s._id === 'auto_approved')?.count || 0)
+      + (submissionsByStatus.find((s) => s._id === 'rejected')?.count || 0);
+    const approvedCount = (submissionsByStatus.find((s) => s._id === 'approved')?.count || 0)
+      + (submissionsByStatus.find((s) => s._id === 'auto_approved')?.count || 0);
+
     res.json({
-      users: { total: totalUsers },
+      users: { total: totalUsers, last7Days: signupsLast7Days, last30Days: signupsLast30Days },
       submissions: {
         total: totalSubmissions,
         byStatus: Object.fromEntries(submissionsByStatus.map(s => [s._id, s.count])),
+        approvalRate: decidedCount > 0 ? approvedCount / decidedCount : null,
       },
       approvedWorkers: {
         count: approvedWorkers.length,
@@ -2153,6 +2189,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
       tasks: {
         byStatus: Object.fromEntries(totalTasks.map(t => [t._id, t.count])),
       },
+      trends: { dailySignups, dailyRevenue },
     });
   } catch (err) { next(err); }
 });

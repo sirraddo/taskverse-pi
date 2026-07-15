@@ -315,6 +315,9 @@ export const replyToTicketAsAdmin = (id, message) => api(`/api/admin/support/tic
 export const setTicketStatus = (id, status) => api(`/api/admin/support/tickets/${id}`, { status }, 'PATCH');
 export const fetchAdminSupportUnreadCount = () => api('/api/admin/support/unread-count');
 
+/* ── Admin: overview stats ── */
+export const fetchAdminStats = () => api('/api/admin/stats');
+
 /* ── Admin: audit log ── */
 export const fetchAdminAuditLog = (params = {}) => {
   const q = new URLSearchParams();
