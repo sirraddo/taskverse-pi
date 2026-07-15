@@ -49,6 +49,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
   const [busyId, setBusyId] = useState(null);
   const [selectedQueueIds, setSelectedQueueIds] = useState(new Set());
+  const [lightbox, setLightbox] = useState(null); // { url, label } | null — proof screenshots are self-hosted
+  // data: URLs now, and target="_blank" on a data: URL is blocked or silently
+  // no-ops in most mobile browsers/WebViews (including, apparently, this
+  // one) — so "open full image" is an in-app viewer instead of a new tab.
   const [bulkApproveConfirm, setBulkApproveConfirm] = useState(false);
   const [bulkApproveBusy, setBulkApproveBusy] = useState(false);
 
@@ -979,12 +983,40 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           {sub.proofFileUrl && (
             <div style={{ marginBottom: '8px' }}>
               <img src={sub.proofFileUrl} alt="Proof screenshot"
-                style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border)', display: 'block', maxHeight: '200px', objectFit: 'contain' }}
+                onClick={() => setLightbox({ url: sub.proofFileUrl, label: `${sub.worker?.username || 'Submission'} — ${sub.task?.title || ''}` })}
+                style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border)', display: 'block', maxHeight: '200px', objectFit: 'contain', cursor: 'zoom-in' }}
                 onError={(e) => { e.target.style.display = 'none'; }} />
-              <a href={sub.proofFileUrl} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#059669', display: 'inline-block', marginTop: '4px' }}>
-                Open full image ↗
-              </a>
+              <button onClick={() => setLightbox({ url: sub.proofFileUrl, label: `${sub.worker?.username || 'Submission'} — ${sub.task?.title || ''}` })}
+                style={{ background: 'none', border: 'none', padding: 0, fontSize: '0.75rem', color: '#059669', cursor: 'pointer', marginTop: '4px' }}>
+                🔍 Open full image
+              </button>
+            </div>
+          )}
+
+          {(sub.duplicateOfSubmission || sub.recycledFromSubmission) && (
+            <div style={{ marginBottom: '8px', backgroundColor: '#fff5f5', border: '1px solid #fed7d7', borderRadius: '8px', padding: '10px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#c53030', marginBottom: '7px' }}>
+                ⚠️ COMPARE — matches an earlier submission
+              </div>
+              {[
+                sub.duplicateOfSubmission && { ...sub.duplicateOfSubmission, why: 'Same image, same task' },
+                sub.recycledFromSubmission && { ...sub.recycledFromSubmission, why: 'Same worker, different task' },
+              ].filter(Boolean).map((match, i) => (
+                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: i > 0 ? '8px' : 0 }}>
+                  {match.proofFileUrl && (
+                    <img src={match.proofFileUrl} alt="Earlier submission"
+                      onClick={() => setLightbox({ url: match.proofFileUrl, label: `Earlier submission — ${match.task?.title || ''}` })}
+                      style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #fed7d7', cursor: 'zoom-in', flexShrink: 0 }}
+                      onError={(e) => { e.target.style.display = 'none'; }} />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.72rem', color: '#c53030', fontWeight: '600' }}>{match.why}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '1px' }}>
+                      {match.task?.title || 'Task removed'} · {match.createdAt ? new Date(match.createdAt).toLocaleDateString() : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -1050,6 +1082,24 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}
+        >
+          <img src={lightbox.url} alt={lightbox.label}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: '8px', objectFit: 'contain' }} />
+          <div style={{ color: 'white', fontSize: '0.78rem', marginTop: '12px', textAlign: 'center', opacity: 0.85 }}>
+            {lightbox.label}
+          </div>
+          <button onClick={() => setLightbox(null)}
+            style={{ marginTop: '14px', padding: '9px 20px', borderRadius: '20px', border: '1.5px solid rgba(255,255,255,0.4)', backgroundColor: 'transparent', color: 'white', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}>
+            Close
+          </button>
         </div>
       )}
 

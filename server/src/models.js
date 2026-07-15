@@ -92,7 +92,12 @@ const submissionSchema = new Schema(
 task: { type: Schema.Types.ObjectId, ref: 'Task', required: true, index: true },
 worker: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 proofText: { type: String, maxlength: 4000, default: '' },
-proofFileUrl: String, // populated by your file-upload provider (e.g. S3/Cloudinary)
+proofFileUrl: String, // self-hosted base64 data URL (resized/compressed client-side) — see TaskSubmit.jsx
+// If auto-review flagged this proof image as a duplicate/recycled match,
+// which submission it matched — lets the admin queue show both images
+// side by side instead of just a text flag with nothing to compare against.
+duplicateOfSubmission: { type: Schema.Types.ObjectId, ref: 'Submission', default: null }, // same image, same task
+recycledFromSubmission: { type: Schema.Types.ObjectId, ref: 'Submission', default: null }, // same worker, different task
 status: {
 type: String,
 // escrow_exhausted: task ran out of funds before this submission was paid

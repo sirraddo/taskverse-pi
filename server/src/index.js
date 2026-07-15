@@ -697,17 +697,18 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
       }
     }
     if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
-    const [isDuplicateImage, isRecycledImage] = proofFileUrl
+    const [duplicateMatch, recycledMatch] = proofFileUrl
       ? await Promise.all([
-          Submission.exists({ task: task._id, proofFileUrl }),
-          Submission.exists({ worker: worker._id, proofFileUrl }),
+          Submission.findOne({ task: task._id, proofFileUrl }).select('_id').lean(),
+          Submission.findOne({ worker: worker._id, proofFileUrl }).select('_id').lean(),
         ])
-      : [false, false];
+      : [null, null];
+    const isDuplicateImage = Boolean(duplicateMatch);
+    const isRecycledImage = Boolean(recycledMatch);
     const settings = await getPlatformSettings();
     const { verdict, reasons } = evaluateSubmission({
       proofText, proofFileUrl,
-      isDuplicateImage: Boolean(isDuplicateImage),
-      isRecycledImage: Boolean(isRecycledImage),
+      isDuplicateImage, isRecycledImage,
       worker, rewardMicroPi: task.rewardMicroPi,
       requireScreenshot: Boolean(task.requireScreenshot),
       requireManualReview: Boolean(task.requireManualReview),
@@ -737,6 +738,8 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
       rewardMicroPi: task.rewardMicroPi,
       status: verdict === 'auto_approve' ? 'auto_approved' : 'pending',
       autoReview: { evaluated: true, verdict, reasons },
+      ...(duplicateMatch ? { duplicateOfSubmission: duplicateMatch._id } : {}),
+      ...(recycledMatch ? { recycledFromSubmission: recycledMatch._id } : {}),
       ...(geoAudit ? { geoAudit } : {}),
     });
     if (verdict === 'auto_approve') {
@@ -802,6 +805,8 @@ app.get('/api/admin/queue', requireAuth, requireAdmin, async (req, res, next) =>
     const queue = await Submission.find({ status: 'pending' })
       .populate('worker', 'username isKycVerified approvedCount')
       .populate('task', 'title rewardMicroPi')
+      .populate({ path: 'duplicateOfSubmission', select: 'proofFileUrl task createdAt', populate: { path: 'task', select: 'title' } })
+      .populate({ path: 'recycledFromSubmission', select: 'proofFileUrl task createdAt', populate: { path: 'task', select: 'title' } })
       .sort({ createdAt: 1 }).lean();
     res.json(queue);
   } catch (err) { next(err); }
