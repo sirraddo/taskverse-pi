@@ -512,3 +512,63 @@ export function resizeBannerImageToDataUrl(file, width = 960, height = 420, qual
     reader.readAsDataURL(file);
   });
 }
+
+/* ── Push notifications ──────────────────────────────────────────
+   Standard Web Push. Whether this actually works depends on the browser/
+   WebView — every function here checks support first and fails quietly
+   (resolves false / does nothing) rather than throwing, so a device that
+   doesn't support it just never sees the toggle succeed, instead of
+   breaking the rest of the app. */
+
+export function isPushSupported() {
+  return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+// Current subscription state for this device, or null if unsupported/not subscribed.
+export async function getPushSubscription() {
+  if (!isPushSupported()) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+    if (!reg) return null;
+    return await reg.pushManager.getSubscription();
+  } catch { return null; }
+}
+
+// Registers the service worker (idempotent), asks for permission, subscribes,
+// and saves the subscription server-side. Returns true on success.
+export async function enablePushNotifications() {
+  if (!isPushSupported()) throw new Error('Push notifications are not supported in this browser.');
+  const { enabled, publicKey } = await api('/api/push/vapid-public-key');
+  if (!enabled || !publicKey) throw new Error('Push notifications are not set up on the server yet.');
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notification permission was not granted.');
+
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  }
+  const json = sub.toJSON();
+  await api('/api/push/subscribe', { endpoint: json.endpoint, keys: json.keys });
+  return true;
+}
+
+export async function disablePushNotifications() {
+  const sub = await getPushSubscription();
+  if (!sub) return;
+  const endpoint = sub.endpoint;
+  try { await sub.unsubscribe(); } catch { /* best-effort */ }
+  try { await api('/api/push/unsubscribe', { endpoint }); } catch { /* best-effort */ }
+}

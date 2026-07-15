@@ -6,9 +6,10 @@ import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import * as StellarSdk from 'stellar-sdk';
+import webpush from 'web-push';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, microPi, toPi,
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, microPi, toPi,
 } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
@@ -38,6 +39,53 @@ async function lookupIpCountry(ip) {
 }
 
 const FEE_RATE = Number(process.env.PLATFORM_FEE_RATE || 0.05);
+
+/* ── Push notifications ───────────────────────────────────────────
+   Standard Web Push (Service Worker + PushManager) — not a Pi-specific
+   mechanism, just the browser-native one. Whether it actually delivers
+   depends entirely on the browser/WebView the person is using; this is
+   coded to the spec and fails safe (silently skips sending) wherever
+   support is missing, rather than erroring. Configure with:
+     VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY  (generate via `npx web-push generate-vapid-keys`)
+     VAPID_SUBJECT (mailto: address or https:// URL — required by the spec) */
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (PUSH_CONFIGURED) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+    VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('[push] VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — push notifications are disabled.');
+}
+
+// Sends to every device a user has subscribed on. Never throws — a push
+// failure must never break the real action (payout, approval, etc.) that
+// triggered it. Expired/invalid subscriptions (410/404) are cleaned up.
+async function sendPushToUser(userId, { title, body, url = '/' }) {
+  if (!PUSH_CONFIGURED) return;
+  try {
+    const subs = await PushSubscription.find({ user: userId }).lean();
+    if (subs.length === 0) return;
+    const payload = JSON.stringify({ title, body, url });
+    await Promise.all(subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: sub.keys },
+          payload
+        );
+      } catch (e) {
+        if (e.statusCode === 404 || e.statusCode === 410) {
+          await PushSubscription.deleteOne({ _id: sub._id }); // subscription expired/revoked
+        }
+        // other errors (network blip, etc.) — leave the subscription in place, try again next time
+      }
+    }));
+  } catch (e) {
+    console.error('[push] sendPushToUser failed:', e.message);
+  }
+}
 
 // Original hardcoded defaults, preserved exactly — used for any field the
 // admin hasn't overridden via Admin → Settings. A completely empty
@@ -702,6 +750,11 @@ async function settleApproval(submissionId) {
   worker.approvedCount += 1;
   worker.balanceMicroPi += sub.rewardMicroPi;
   await worker.save();
+  sendPushToUser(worker._id, {
+    title: '✅ Submission approved!',
+    body: `"${task.title}" — ${toPi(sub.rewardMicroPi)}π is on its way to your Pi wallet.`,
+    url: '/',
+  }); // fire-and-forget — never block approval on notification delivery
   try {
     const a2u = await pi.createA2UPayment({
       uid: worker.piUid,
@@ -791,11 +844,17 @@ app.post('/api/admin/submissions/:id/approve', requireAuth, requireAdmin, requir
 app.post('/api/admin/submissions/:id/reject', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const sub = await Submission.findOneAndUpdate(
-      { _id: req.params.id, status: 'pending' }, { status: 'disputed' }, { new: true });
+      { _id: req.params.id, status: 'pending' }, { status: 'disputed' }, { new: true }
+    ).populate('task', 'title');
     if (!sub) return res.status(404).json({ error: 'Not in pending queue' });
     await User.findByIdAndUpdate(sub.worker, { $inc: { rejectedCount: 1 } });
     await Dispute.create({ submission: sub._id, openedBy: sub.worker });
     res.json({ ok: true, movedTo: 'disputes' });
+    sendPushToUser(sub.worker, {
+      title: '❌ Submission rejected',
+      body: `"${sub.task?.title || 'Your task'}" wasn't approved — you can appeal it in the app.`,
+      url: '/',
+    });
     await logAdminAction(req, 'submission.reject', { targetType: 'Submission', targetId: sub._id, details: `Rejected submission, moved to appeals` });
   } catch (err) { next(err); }
 });
@@ -1592,6 +1651,11 @@ app.post('/api/admin/support/tickets/:id/reply', requireAuth, requireAdmin, asyn
     ticket.hasUnreadForAdmin = false;
     await ticket.save();
     res.json({ ok: true });
+    sendPushToUser(ticket.user, {
+      title: '🎧 Support replied',
+      body: `New reply on "${ticket.subject}"`,
+      url: '/',
+    });
     await logAdminAction(req, 'support.reply', { targetType: 'SupportTicket', targetId: ticket._id, details: `Replied to "${ticket.subject}"` });
   } catch (err) { next(err); }
 });
@@ -1764,6 +1828,37 @@ app.post('/api/me/disputes/:id/statement', requireAuth, async (req, res, next) =
       { new: true }
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or not open' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Push notifications: subscription management ────────────────── */
+
+// Public config the frontend needs to call PushManager.subscribe() — not a
+// secret, this is the "who is allowed to push to you" identity by design.
+app.get('/api/push/vapid-public-key', requireAuth, async (req, res) => {
+  res.json({ enabled: PUSH_CONFIGURED, publicKey: VAPID_PUBLIC_KEY || null });
+});
+
+app.post('/api/push/subscribe', requireAuth, async (req, res, next) => {
+  try {
+    const { endpoint, keys } = req.body || {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ error: 'Malformed subscription.' });
+    }
+    await PushSubscription.findOneAndUpdate(
+      { endpoint },
+      { $set: { user: req.session.userId, keys: { p256dh: keys.p256dh, auth: keys.auth } } },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/push/unsubscribe', requireAuth, async (req, res, next) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (endpoint) await PushSubscription.deleteOne({ endpoint, user: req.session.userId });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

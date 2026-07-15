@@ -382,4 +382,21 @@ const adminAuditLogSchema = new Schema(
 adminAuditLogSchema.index({ createdAt: -1 });
 
 export const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);
+/* ── Push subscriptions ───────────────────────────────────────────
+   Standard Web Push (Service Worker + PushManager) subscriptions, one per
+   device a user has enabled notifications on. A user can have several
+   (phone + desktop, etc.) — endpoint is the natural unique key per device. */
+const pushSubscriptionSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    endpoint: { type: String, required: true, unique: true },
+    keys: {
+      p256dh: { type: String, required: true },
+      auth: { type: String, required: true },
+    },
+  },
+  { timestamps: true }
+);
+
 export const AdminAuditLog = mongoose.model('AdminAuditLog', adminAuditLogSchema);
+export const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);

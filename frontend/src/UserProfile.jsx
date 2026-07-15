@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { submitDisputeStatement, setMyCountry, uploadAvatar, deleteAvatar, resizeImageToDataUrl } from './piClient';
+import React, { useState, useRef, useEffect } from 'react';
+import { submitDisputeStatement, setMyCountry, uploadAvatar, deleteAvatar, resizeImageToDataUrl, isPushSupported, getPushSubscription, enablePushNotifications, disablePushNotifications } from './piClient';
 
 // Common countries (ISO alpha-2). Keep in sync with CreateTask.
 const PROFILE_COUNTRIES = [
@@ -115,6 +115,32 @@ const saveCountry = async (code) => {
   try { await setMyCountry(code); setCountrySaved(true); onRefresh?.(); }
   catch (e) { /* keep UI responsive; revert on failure */ setCountry(user.country || ''); }
   finally { setSavingCountry(false); }
+};
+
+/* ── Push notifications ──
+   Purely best-effort: if the browser/WebView doesn't support the Push API,
+   the toggle just doesn't render rather than showing something that can't
+   work. Actual delivery depends on the device — this only controls whether
+   a subscription is registered. */
+const [pushSupported, setPushSupported] = useState(false);
+const [pushEnabled, setPushEnabled] = useState(false);
+const [pushBusy, setPushBusy] = useState(false);
+const [pushErr, setPushErr] = useState('');
+
+useEffect(() => {
+  if (!isPushSupported()) return;
+  setPushSupported(true);
+  getPushSubscription().then((sub) => setPushEnabled(Boolean(sub)));
+}, []);
+
+const togglePush = async () => {
+  setPushBusy(true); setPushErr('');
+  try {
+    if (pushEnabled) { await disablePushNotifications(); setPushEnabled(false); }
+    else { await enablePushNotifications(); setPushEnabled(true); }
+  } catch (e) {
+    setPushErr(e.message || 'Could not update notification settings.');
+  } finally { setPushBusy(false); }
 };
 
 /* ── Avatar upload ──
@@ -234,6 +260,28 @@ style={{ flex: 1, padding: '9px 10px', borderRadius: '10px', border: '1.5px soli
 {countrySaved && !savingCountry && <span style={{ fontSize: '0.72rem', color: '#38a169', fontWeight: 700 }}>✓ Saved</span>}
 </div>
 </div>
+
+{pushSupported && (
+<div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+<div style={{ flex: 1, minWidth: 0, marginRight: '10px' }}>
+<h4 style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🔔 Notifications</h4>
+<p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-faintest)' }}>Get notified when a submission is approved or a support reply comes in.</p>
+</div>
+<button onClick={togglePush} disabled={pushBusy}
+  style={{
+    flexShrink: 0, padding: '8px 14px', borderRadius: '20px', border: 'none', fontWeight: '700', fontSize: '0.78rem',
+    cursor: pushBusy ? 'not-allowed' : 'pointer',
+    backgroundColor: pushBusy ? 'var(--border-strong)' : pushEnabled ? '#059669' : 'var(--surface-alt)',
+    color: pushEnabled ? 'white' : 'var(--text-muted)',
+  }}>
+  {pushBusy ? '…' : pushEnabled ? 'On' : 'Off'}
+</button>
+</div>
+{pushErr && <p style={{ margin: '8px 0 0', fontSize: '0.7rem', color: '#c53030' }}>{pushErr}</p>}
+</div>
+)}
+
 <div style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px', marginBottom: '14px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
 <h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>🎖️ Achievements</h4>
 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
