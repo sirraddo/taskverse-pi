@@ -16,6 +16,7 @@ import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
 import SupportInbox from './SupportInbox';
 import NotificationFeed from './NotificationFeed';
+import ReportTask from './ReportTask';
 import { useDarkMode } from './theme';
 import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
 
@@ -98,6 +99,7 @@ const [screen, setScreen] = useState(null);
 const [categoryFilter, setCategoryFilter] = useState('All');
 const [searchQuery, setSearchQuery] = useState('');
 const [showDoneTasks, setShowDoneTasks] = useState(false);
+const [reportingTask, setReportingTask] = useState(null);
 const [refreshing, setRefreshing] = useState(false);
 const [countryPromptDismissed, setCountryPromptDismissed] = useState(false);
 const [savingPromptCountry, setSavingPromptCountry] = useState(false);
@@ -474,6 +476,10 @@ disabled={isFull || task.userDone}
 style={{ width: '100%', backgroundColor: isFull ? 'var(--surface-alt)' : task.userDone ? '#c6f6d5' : '#059669', color: isFull ? 'var(--text-faintest)' : task.userDone ? '#276749' : 'white', border: 'none', padding: '10px', borderRadius: '10px', cursor: (isFull || task.userDone) ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.84rem' }}>
 {isFull ? 'Task Full' : task.userDone ? 'Done ✅' : t.openTask + ' →'}
 </button>
+<button onClick={() => setReportingTask(task)}
+style={{ display: 'block', margin: '8px auto 0', background: 'none', border: 'none', color: 'var(--text-faintest)', fontSize: '0.68rem', cursor: 'pointer', textDecoration: 'underline' }}>
+⚑ Report this task
+</button>
 </div>
 );
 })}
@@ -509,6 +515,8 @@ return (
 })}
 </div>
 )}
+
+{reportingTask && <ReportTask task={reportingTask} onClose={() => setReportingTask(null)} notify={triggerNotification} />}
 
 {/* Admin */}
 {user.isAdmin && (

@@ -448,3 +448,20 @@ const referralSchema = new Schema(
 
 export const Notification = mongoose.model('Notification', notificationSchema);
 export const Referral = mongoose.model('Referral', referralSchema);
+
+/* ── Task reports ────────────────────────────────────────────────
+   User-generated tasks need a moderation path: any worker can flag a task
+   (scam, inappropriate, misleading…). One report per user per task. Three
+   distinct open reports auto-pause the task until an admin reviews it. */
+const taskReportSchema = new Schema(
+  {
+    task: { type: Schema.Types.ObjectId, ref: 'Task', required: true, index: true },
+    reporter: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    reason: { type: String, enum: ['scam', 'inappropriate', 'misleading', 'other'], required: true },
+    note: { type: String, default: '', maxlength: 300 },
+    status: { type: String, enum: ['open', 'dismissed', 'actioned'], default: 'open', index: true },
+  },
+  { timestamps: true }
+);
+taskReportSchema.index({ task: 1, reporter: 1 }, { unique: true });
+export const TaskReport = mongoose.model('TaskReport', taskReportSchema);

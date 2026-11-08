@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminTasks, removeAdminTask } from './piClient';
+import { fetchAdminTasks, removeAdminTask, fetchTaskReports, dismissTaskReports } from './piClient';
 
 /** Running tasks with a Remove button — takes a task off the worker feed. */
 export default function AdminTaskManager({ notify, refreshKey = 0 }) {
   const [tasks, setTasks] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [reports, setReports] = useState([]);
 
   const load = useCallback(() => {
     fetchAdminTasks().then(setTasks).catch((e) => { setTasks([]); notify('⚠️ ' + e.message); });
+    fetchTaskReports().then(setReports).catch(() => {});
   }, [notify]);
   // Reload when the parent says a task was created, then keep it fresh.
   useEffect(() => {
@@ -24,12 +26,36 @@ export default function AdminTaskManager({ notify, refreshKey = 0 }) {
     try {
       await removeAdminTask(t.id);
       setTasks((list) => (list || []).filter((x) => x.id !== t.id));
+      setReports((r) => r.filter((x) => String(x.taskId) !== String(t.id)));
       notify('🗑️ Task removed from the feed.');
     } catch (e) { notify('⚠️ ' + e.message); }
     finally { setBusy(null); }
   };
 
+  const dismiss = async (r) => {
+    setBusy(r.taskId);
+    try { await dismissTaskReports(r.taskId); notify('Reports dismissed.'); load(); }
+    catch (e) { notify('⚠️ ' + e.message); }
+    finally { setBusy(null); }
+  };
+
   return (
+    <>
+    {reports.length > 0 && (
+      <div style={{ backgroundColor: 'var(--surface)', border: '1.5px solid #c53030', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+        <div style={{ fontWeight: '700', color: 'var(--text)', fontSize: '0.9rem', marginBottom: '8px' }}>⚑ Reported tasks ({reports.length})</div>
+        {reports.map((r) => (
+          <div key={r.taskId} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: '600', fontSize: '0.84rem', color: 'var(--text)' }}>{r.title}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-faint)', marginBottom: '6px' }}>{r.count} report(s) · {r.reasons.join(', ')} · {r.status}</div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => dismiss(r)} disabled={busy === r.taskId} style={{ padding: '6px 12px', borderRadius: '8px', border: '1.5px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-muted)', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>Dismiss</button>
+              <button onClick={() => remove({ id: r.taskId, title: r.title, escrowRemainingPi: '?' })} disabled={busy === r.taskId} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', backgroundColor: '#c53030', color: 'white', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>Remove task</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
     <div style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '14px', marginBottom: '16px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
       <div style={{ fontWeight: '700', color: 'var(--text)', fontSize: '0.9rem', marginBottom: '8px' }}>
         🗂️ Running tasks {tasks !== null && <span style={{ color: 'var(--text-faintest)' }}>({tasks.length})</span>}
@@ -51,5 +77,6 @@ export default function AdminTaskManager({ notify, refreshKey = 0 }) {
         </div>
       ))}
     </div>
+    </>
   );
 }

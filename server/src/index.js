@@ -9,8 +9,7 @@ import * as StellarSdk from 'stellar-sdk';
 import webpush from 'web-push';
 
 import {
-  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, Referral, microPi, toPi,
-} from './models.js';
+  User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, Referral, microPi, toPi, TaskReport } from './models.js';
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
@@ -187,6 +186,7 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
@@ -1022,6 +1022,58 @@ app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+/* ── Report a task (user-generated content moderation) ── */
+const REPORT_AUTOPAUSE_AT = 3;
+app.post('/api/tasks/:id/report', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const reason = String(req.body?.reason || '');
+    if (!['scam', 'inappropriate', 'misleading', 'other'].includes(reason)) return res.status(400).json({ error: 'Pick a reason.' });
+    const task = await Task.findById(req.params.id).select('poster status title');
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (String(task.poster) === String(req.session.userId)) return res.status(400).json({ error: 'You cannot report your own task.' });
+    try {
+      await TaskReport.create({ task: task._id, reporter: req.session.userId, reason, note: String(req.body?.note || '').slice(0, 300) });
+    } catch (e) {
+      if (e.code === 11000) return res.json({ ok: true, alreadyReported: true });
+      throw e;
+    }
+    const open = await TaskReport.countDocuments({ task: task._id, status: 'open' });
+    if (open >= REPORT_AUTOPAUSE_AT && task.status === 'live') {
+      await Task.updateOne({ _id: task._id, status: 'live' }, { $set: { status: 'paused' } });
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: open task reports, grouped per task ── */
+app.get('/api/admin/task-reports', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const rows = await TaskReport.aggregate([
+      { $match: { status: 'open' } },
+      { $group: { _id: '$task', count: { $sum: 1 }, reasons: { $push: '$reason' }, latest: { $max: '$createdAt' } } },
+      { $sort: { latest: -1 } }, { $limit: 50 },
+    ]);
+    const tasks = await Task.find({ _id: { $in: rows.map((r) => r._id) } }).select('title status').lean();
+    const byId = Object.fromEntries(tasks.map((t) => [String(t._id), t]));
+    res.json(rows.filter((r) => byId[String(r._id)]).map((r) => ({
+      taskId: r._id, title: byId[String(r._id)].title, status: byId[String(r._id)].status,
+      count: r.count, reasons: [...new Set(r.reasons)],
+    })));
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: dismiss reports on a task (restores it if auto-paused) ── */
+app.post('/api/admin/task-reports/:taskId/dismiss', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.taskId)) return res.status(400).json({ error: 'bad id' });
+    await TaskReport.updateMany({ task: req.params.taskId, status: 'open' }, { $set: { status: 'dismissed' } });
+    await Task.updateOne({ _id: req.params.taskId, status: 'paused' }, { $set: { status: 'live' } });
+    res.json({ ok: true });
+    await logAdminAction(req, 'task.reports_dismiss', { targetType: 'Task', targetId: req.params.taskId });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: list tasks that are currently running (live/paused/awaiting funding) ── */
 app.get('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -1049,6 +1101,7 @@ app.post('/api/admin/tasks/:id/remove', requireAuth, requireAdmin, async (req, r
       { $set: { status: 'cancelled' } }, { new: true }
     );
     if (!t) return res.status(404).json({ error: 'Task not found or already removed' });
+    await TaskReport.updateMany({ task: t._id, status: 'open' }, { $set: { status: 'actioned' } });
     res.json({ ok: true, title: t.title, escrowRemainingPi: toPi(t.escrowRemainingMicroPi || 0) });
     await logAdminAction(req, 'task.remove', { targetType: 'Task', targetId: t._id, details: `"${t.title}" (escrow left ${toPi(t.escrowRemainingMicroPi || 0)} π)` });
   } catch (err) { next(err); }

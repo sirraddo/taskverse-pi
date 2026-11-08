@@ -4,13 +4,13 @@ const STEPS = [
   { icon: '🔐', title: 'Sign In with Pi', desc: 'Open in Pi Browser and tap Authenticate. Your Pi username and KYC status are verified automatically.' },
   { icon: '📋', title: 'Browse Tasks', desc: 'See available micro-gigs posted by task creators. Each shows the reward in Pi, slots remaining, and what you need to do.' },
   { icon: '✅', title: 'Complete and Submit', desc: 'Do the task — follow, share, review, or create. Write a short proof and optionally attach a screenshot.' },
-  { icon: '🤖', title: 'Auto-Review', desc: 'Our engine checks your submission instantly. Clean submissions are approved and paid automatically.' },
-  { icon: '💰', title: 'Get Paid in Pi', desc: 'Pi lands in your TaskVerse wallet within seconds of approval. Post your own tasks to grow your Pi further.' },
+  { icon: '🤖', title: 'Auto-Review', desc: 'Our engine checks your submission. Clear submissions are approved automatically; others are reviewed by an admin.' },
+  { icon: '💰', title: 'Get Paid in Pi', desc: 'Approved rewards are credited to your TaskVerse balance and sent to your Pi wallet as a Pi payment. Timing depends on the Pi Network. Every approval has a receipt in Receipts.' },
 ];
 
 const FAQS = [
   { q: 'Is TaskVerse Earn free to use?', a: 'Free for workers. Task posters pay a 5% platform fee on top of the reward pool when funding a campaign.' },
-  { q: 'How fast are payouts?', a: 'Auto-approved submissions are paid within seconds. Manual-reviewed ones take up to 24 hours.' },
+  { q: 'How fast are payouts?', a: 'Approvals are credited right away and paid out to your Pi wallet through Pi payments. Manual reviews can take up to 24 hours, and Pi Network delays can slow payouts.' },
   { q: 'What if my submission is rejected?', a: 'You will see the rejection reason in your Profile. You can submit an appeal statement from the Open Appeals section.' },
   { q: 'How do I post my own task?', a: 'Tap “+ Post Task” on the main feed, fill in the title, description, reward per slot and number of slots, then fund via Pi Browser.' },
   { q: 'How do I track tasks I posted?', a: 'Tap “📌 My Tasks” at the bottom of the feed. You’ll see slot fill progress for each of your campaigns.' },

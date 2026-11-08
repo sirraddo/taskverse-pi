@@ -192,7 +192,7 @@ export async function openExternalLink(url) {
 export async function authenticateWithPi() {
   initPi();
   const auth = await window.Pi.authenticate(
-    ['username', 'payments', 'wallet_address'],
+    ['username', 'payments'],
     handleIncompletePayment
   );
   const { sessionToken: token, user } = await api('/api/auth/verify', {
@@ -281,6 +281,9 @@ export const resolveDispute = (id, d, note='')=> api(`/api/admin/disputes/${id}/
 export const fetchRevenue = () => api('/api/admin/revenue');
 /** Create a sponsored task (goes live instantly, no Pi payment) */
 export const createAdminTask = (payload) => api('/api/admin/tasks', payload);
+export const reportTask = (id, reason, note = '') => api(`/api/tasks/${id}/report`, { reason, note });
+export const fetchTaskReports = () => api('/api/admin/task-reports');
+export const dismissTaskReports = (taskId) => api(`/api/admin/task-reports/${taskId}/dismiss`, {});
 export const fetchAdminTasks = () => api('/api/admin/tasks');
 export const removeAdminTask = (id) => api(`/api/admin/tasks/${id}/remove`, {});
 /** Scan and complete any pending A2U payouts whose txid is now available */
