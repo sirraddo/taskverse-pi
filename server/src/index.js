@@ -2642,7 +2642,20 @@ app.use((err, req, res, _next) => {
 
 /* ── MongoDB boot ── */
 const PORT = process.env.PORT || 8000;
-mongoose.connect(process.env.MONGODB_URI).then(() => {
+// Retry the initial connection a few times: a brief Atlas/network hiccup during a
+// deploy used to exit(1) immediately and fail the whole Render deploy.
+async function connectWithRetry(attempts = 5) {
+  for (let i = 1; ; i++) {
+    try {
+      return await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10_000 });
+    } catch (e) {
+      console.error(`MongoDB connection attempt ${i}/${attempts} failed:`, e.message);
+      if (i >= attempts) throw e;
+      await new Promise((r) => setTimeout(r, 3000 * i));
+    }
+  }
+}
+connectWithRetry().then(() => {
 
   app.get('/api/leaderboard', requireAuth, async (req, res) => {
     try {
