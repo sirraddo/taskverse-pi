@@ -104,12 +104,12 @@ export async function createA2UPayment({ uid, amountPi, memo, metadata }) {
 }
 
 /* ── Horizon (read-only blockchain reads) ────────────────────────
-* Pi runs its own Horizon instance. Mainnet: https://api.mainnet.minepi.com
-* (testnet: https://api.testnet.minepi.com — set PI_HORIZON_URL to use it). /accounts/:pk returns the
+* Pi runs its own Horizon instance. Testnet (default): https://api.testnet.minepi.com
+* For MAINNET set PI_HORIZON_URL=https://api.mainnet.minepi.com on Render. /accounts/:pk returns the
 * standard Stellar account shape; /transactions/:hash for tx lookup).
 * These are READ-ONLY GETs — no seed, no signing, no fund movement.
 */
-const HORIZON = (process.env.PI_HORIZON_URL || 'https://api.mainnet.minepi.com').replace(/\/$/, '');
+const HORIZON = (process.env.PI_HORIZON_URL || 'https://api.testnet.minepi.com').replace(/\/$/, '');
 
 const horizonClient = axios.create({ baseURL: HORIZON, timeout: 15_000 });
 
