@@ -313,6 +313,14 @@ return (
 <div style={{ fontSize: '0.7rem', opacity: 0.65, marginTop: '4px' }}>✅ {user.approvedCount ?? 0} {t.tasksDone}</div>
 </div>
 
+{/* Quick access to receipts/history — placed right under the wallet card
+    so it isn't buried below a long task feed (users were missing this). */}
+<div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '10px 6px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.78rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>🧾 Receipts</button>
+<button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '10px 6px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.78rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>📌 My Tasks</button>
+<button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '10px 6px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.78rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>🏆 Board</button>
+</div>
+
 {/* Admin announcement — shown when there's something to say. */}
 <AnnouncementBanner />
 
@@ -499,7 +507,7 @@ return (
 {/* Bottom nav */}
 <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
 <button onClick={() => setScreen('leaderboard')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>🏆 Board</button>
-<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>📜 History</button>
+<button onClick={() => setScreen('history')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#059669', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>🧾 Receipts</button>
 <button onClick={() => setScreen('myTasks')} style={{ flex: 1, padding: '11px', backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', color: '#047857', fontSize: '0.82rem', boxShadow: '0 1px 4px var(--shadow-color)' }}>📌 My Tasks</button>
 </div>
 <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '10px', paddingBottom: '12px', fontSize: '0.7rem', color: 'var(--text-faintest)', flexWrap: 'wrap' }}>
