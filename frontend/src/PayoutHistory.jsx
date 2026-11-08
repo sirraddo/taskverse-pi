@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react';
 import { fetchPayoutHistory } from './piClient';
 import Receipt from './Receipt';
 
+// Every approved submission gets a receipt. The on-chain payout reference only
+// exists once a Pi payment was actually created, so until then we show an
+// approval reference (derived from the submission id) and an honest status
+// instead of claiming "Paid".
+const isApproved = (sub) => ['auto_approved', 'approved'].includes(sub.status);
+const receiptRef = (sub) => sub.payout?.refId || ('SUB-' + String(sub._id).slice(-8).toUpperCase());
+const receiptStatus = (sub) => {
+  if (!isApproved(sub)) return sub.status;
+  return sub.payout?.status === 'completed' ? 'Paid' : 'Approved · payout pending';
+};
+
 export default function PayoutHistory({ onBack }) {
   const [history, setHistory] = useState(null);
   const [total, setTotal] = useState(0);
@@ -29,24 +40,25 @@ export default function PayoutHistory({ onBack }) {
       {history === null && [1,2,3].map(i => <div key={i} style={{ height: '72px', backgroundColor: 'var(--surface-alt)', borderRadius: '10px', marginBottom: '10px' }} />)}
       {history?.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-faintest)' }}><p>No submissions yet.</p></div>}
       {history?.map((sub) => {
-        const isPaid = ['auto_approved','approved'].includes(sub.status);
+        const isPaid = isApproved(sub);
+        const label = receiptStatus(sub);
         const date = new Date(sub.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         return (
           <div key={sub._id}
-            onClick={() => sub.payout?.refId && setReceiptSub(sub)}
-            style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px var(--shadow-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: sub.payout?.refId ? 'pointer' : 'default' }}>
+            onClick={() => isPaid && setReceiptSub(sub)}
+            style={{ backgroundColor: 'var(--surface)', padding: '14px', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 4px var(--shadow-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: isPaid ? 'pointer' : 'default' }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 'bold', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{sub.task?.title || 'Task removed'}</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-faintest)' }}>{date}</div>
-              {sub.payout?.refId && (
+              {isPaid && (
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', marginTop: '2px' }}>
-                  Ref: <span style={{ fontFamily: 'monospace', color: 'var(--text-faint)', textDecoration: 'underline' }}>{sub.payout.refId}</span>
+                  🧾 Ref: <span style={{ fontFamily: 'monospace', color: 'var(--text-faint)', textDecoration: 'underline' }}>{receiptRef(sub)}</span> · tap for receipt
                 </div>
               )}
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 'bold', color: isPaid ? '#48bb78' : '#e53e3e' }}>{isPaid ? '+' : ''}{(sub.rewardMicroPi / 1e6).toFixed(2)} &#960;</div>
-              <span style={{ backgroundColor: isPaid ? '#f0fff4' : '#fff5f5', color: isPaid ? '#48bb78' : '#e53e3e', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>{isPaid ? 'Paid' : sub.status}</span>
+              <span style={{ backgroundColor: isPaid ? '#f0fff4' : '#fff5f5', color: isPaid ? '#48bb78' : '#e53e3e', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>{label}</span>
             </div>
           </div>
         );
@@ -57,8 +69,8 @@ export default function PayoutHistory({ onBack }) {
           kind="payout"
           title={receiptSub.task?.title || 'Task removed'}
           amountPi={(receiptSub.rewardMicroPi / 1e6).toFixed(2)}
-          refId={receiptSub.payout?.refId}
-          status={['auto_approved', 'approved'].includes(receiptSub.status) ? 'Paid' : receiptSub.status}
+          refId={receiptRef(receiptSub)}
+          status={receiptStatus(receiptSub)}
           date={new Date(receiptSub.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
           onClose={() => setReceiptSub(null)}
         />
