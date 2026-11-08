@@ -453,7 +453,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           🚫 Cancel Stale Pending-Funding Tasks
         </div>
         <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
-          Tasks stuck in "awaiting_funding" because the Pi payment never completed (e.g. testnet key switch, user closed wallet). Cancelling tells Pi to release the hold and removes the task from the poster's queue.
+          Tasks stuck in "awaiting_funding" because the Pi payment never completed (e.g. network/key switch, user closed wallet). Cancelling tells Pi to release the hold and removes the task from the poster's queue.
         </p>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select value={staleCutoff} onChange={e => setStaleCutoff(e.target.value)}
@@ -477,7 +477,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
           🪙 Reconcile A2U Payouts
         </div>
         <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
-          Flushes approved submissions that were credited in-balance but never paid on-chain. Sends REAL testnet A2U (signs blockchain txns). Pi allows one A2U at a time — verify each completes before the next. Preview pays nothing.
+          Flushes approved submissions that were credited in-balance but never paid on-chain. Sends REAL A2U (signs blockchain txns). Pi allows one A2U at a time — verify each completes before the next. Preview pays nothing.
         </p>
 
         <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
@@ -617,7 +617,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               <div style={{ background: 'linear-gradient(135deg, #b45309, #d97706)', padding: '18px 20px', color: 'white' }}>
                 <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>💸</div>
                 <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Confirm {a2uConfirm.label}</div>
-                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real testnet A2U — moves funds on-chain</div>
+                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real A2U — moves funds on-chain</div>
               </div>
               <div style={{ padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.82rem', color: '#334155', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 12px', fontFamily: 'monospace' }}>
@@ -709,7 +709,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
               <div style={{ background: 'linear-gradient(135deg, #047857, #059669)', padding: '18px 20px', color: 'white' }}>
                 <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>🧮</div>
                 <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: '8px' }}>Confirm consolidated payout</div>
-                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real testnet A2U — moves funds on-chain</div>
+                <div style={{ fontSize: '0.76rem', opacity: 0.92, marginTop: '2px' }}>Real A2U — moves funds on-chain</div>
               </div>
               <div style={{ padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.82rem', color: '#334155', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '10px 12px', fontFamily: 'monospace' }}>
