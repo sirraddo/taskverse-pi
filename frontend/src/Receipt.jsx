@@ -10,7 +10,7 @@ export default function Receipt({ kind, title, amountPi, refId, status, date, on
   const [copied, setCopied] = useState(false);
 
   const summaryText = [
-    'TaskVerse Earn — ' + (kind === 'payout' ? 'Payout Receipt' : 'Task Funding Receipt'),
+    'TaskVerse Earn — ' + (kind === 'payout' ? 'Payout Receipt' : kind === 'approval' ? 'Approval Receipt' : 'Task Funding Receipt'),
     `Amount: ${amountPi} π`,
     `Description: ${title}`,
     `Reference: ${refId || '—'}`,
@@ -39,7 +39,7 @@ export default function Receipt({ kind, title, amountPi, refId, status, date, on
       }}>
         <div style={{ background: 'linear-gradient(135deg, #059669, #047857)', padding: '20px', color: 'white' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: '700', opacity: 0.85, letterSpacing: '0.04em' }}>
-            {kind === 'payout' ? 'PAYOUT RECEIPT' : 'TASK FUNDING RECEIPT'}
+            {kind === 'payout' ? 'PAYOUT RECEIPT' : kind === 'approval' ? 'APPROVAL RECEIPT' : 'TASK FUNDING RECEIPT'}
           </div>
           <div style={{ fontSize: '2rem', fontWeight: '800', marginTop: '6px' }}>{amountPi} π</div>
         </div>

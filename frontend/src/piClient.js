@@ -102,7 +102,7 @@ export function downloadReceiptImage({ kind, title, amountPi, refId, status, dat
   ctx.fillText('TaskVerse Earn', pad + 98, pad + 55);
   ctx.font = '600 14px system-ui, sans-serif';
   ctx.globalAlpha = 0.9;
-  ctx.fillText(kind === 'payout' ? 'Payout Receipt' : 'Task Funding Receipt', pad + 98, pad + 78);
+  ctx.fillText(kind === 'payout' ? 'Payout Receipt' : kind === 'approval' ? 'Approval Receipt' : 'Task Funding Receipt', pad + 98, pad + 78);
   ctx.globalAlpha = 1;
 
   // Body

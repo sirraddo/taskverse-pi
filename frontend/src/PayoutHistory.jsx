@@ -10,7 +10,7 @@ const isApproved = (sub) => ['auto_approved', 'approved'].includes(sub.status);
 const receiptRef = (sub) => sub.payout?.refId || ('SUB-' + String(sub._id).slice(-8).toUpperCase());
 const receiptStatus = (sub) => {
   if (!isApproved(sub)) return sub.status;
-  return sub.payout?.status === 'completed' ? 'Paid' : 'Approved · payout pending';
+  return sub.payout?.status === 'completed' ? 'Paid' : 'Payout pending';
 };
 
 export default function PayoutHistory({ onBack }) {
@@ -66,7 +66,7 @@ export default function PayoutHistory({ onBack }) {
 
       {receiptSub && (
         <Receipt
-          kind="payout"
+          kind={receiptStatus(receiptSub) === 'Paid' ? 'payout' : 'approval'}
           title={receiptSub.task?.title || 'Task removed'}
           amountPi={(receiptSub.rewardMicroPi / 1e6).toFixed(2)}
           refId={receiptRef(receiptSub)}
