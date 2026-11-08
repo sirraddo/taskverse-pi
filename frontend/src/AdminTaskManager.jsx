@@ -2,14 +2,21 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchAdminTasks, removeAdminTask } from './piClient';
 
 /** Running tasks with a Remove button — takes a task off the worker feed. */
-export default function AdminTaskManager({ notify }) {
+export default function AdminTaskManager({ notify, refreshKey = 0 }) {
   const [tasks, setTasks] = useState(null);
   const [busy, setBusy] = useState(null);
 
   const load = useCallback(() => {
     fetchAdminTasks().then(setTasks).catch((e) => { setTasks([]); notify('⚠️ ' + e.message); });
   }, [notify]);
-  useEffect(() => { load(); }, [load]);
+  // Reload when the parent says a task was created, then keep it fresh.
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, [load, refreshKey]);
 
   const remove = async (t) => {
     if (!window.confirm(`Remove "${t.title}" from the feed?\n\nWorkers will no longer see it. Pending submissions stay in the queue. Escrow left (${t.escrowRemainingPi} π) is not refunded automatically.`)) return;

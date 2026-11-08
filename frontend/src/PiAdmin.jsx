@@ -67,6 +67,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [taskSlots, setTaskSlots] = useState('10');
   const [creating, setCreating] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [taskListKey, setTaskListKey] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [staleCutoff, setStaleCutoff] = useState('24');
   // Support: worker payment lookup + wallet overview
@@ -342,6 +343,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       notify('✅ Sponsored task live: "' + result.title + '" (' + result.slots + ' slots × ' + result.rewardPi + 'π)');
       setTaskTitle(''); setTaskDesc(''); setTaskReward(''); setTaskSlots('10');
       setShowForm(false);
+      setTaskListKey((k) => k + 1);
       await load();
     } catch (err) {
       notify('⚠️ ' + err.message);
@@ -392,7 +394,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
       {tab === 'tasks' && (
       <>
-      <AdminTaskManager notify={notify} />
+      <AdminTaskManager notify={notify} refreshKey={taskListKey} />
       {/* Sponsored task creation */}
       <div style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '14px', marginBottom: '16px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
         <button

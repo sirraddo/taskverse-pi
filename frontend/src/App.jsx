@@ -189,8 +189,19 @@ useEffect(() => {
 if (!user) return;
 const interval = setInterval(async () => {
 try { const feed = await fetchTasks(); setTasks(feed); } catch (_) {}
-}, 60_000);
-return () => clearInterval(interval);
+}, 30_000);
+// Browsers (Pi Browser included) pause timers while the app is in the
+// background, so refresh straight away when the user comes back to it.
+const onVisible = () => {
+  if (document.visibilityState === 'visible') fetchTasks().then(setTasks).catch(() => {});
+};
+document.addEventListener('visibilitychange', onVisible);
+window.addEventListener('focus', onVisible);
+return () => {
+  clearInterval(interval);
+  document.removeEventListener('visibilitychange', onVisible);
+  window.removeEventListener('focus', onVisible);
+};
 }, [Boolean(user)]);
 
 const handleSubmitted = (result) => {
