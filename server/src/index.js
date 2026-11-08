@@ -2650,7 +2650,8 @@ async function connectWithRetry(attempts = 5) {
       return await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10_000 });
     } catch (e) {
       console.error(`MongoDB connection attempt ${i}/${attempts} failed:`, e.message);
-      if (i >= attempts) throw e;
+      // Wrong credentials never fix themselves — fail fast instead of retrying.
+      if (i >= attempts || /bad auth|authentication failed/i.test(e.message)) throw e;
       await new Promise((r) => setTimeout(r, 3000 * i));
     }
   }
