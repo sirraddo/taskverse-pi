@@ -281,6 +281,8 @@ export const resolveDispute = (id, d, note='')=> api(`/api/admin/disputes/${id}/
 export const fetchRevenue = () => api('/api/admin/revenue');
 /** Create a sponsored task (goes live instantly, no Pi payment) */
 export const createAdminTask = (payload) => api('/api/admin/tasks', payload);
+export const fetchAdminTasks = () => api('/api/admin/tasks');
+export const removeAdminTask = (id) => api(`/api/admin/tasks/${id}/remove`, {});
 /** Scan and complete any pending A2U payouts whose txid is now available */
 export const reconcilePayouts = () => api('/api/admin/reconcile', {});
 /** Cancel tasks that have been stuck in awaiting_funding longer than hoursOld (default 24) */

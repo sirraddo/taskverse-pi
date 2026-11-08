@@ -6,6 +6,7 @@ import AdminSettings from './AdminSettings';
 import AdminUsers from './AdminUsers';
 import AdminTransactions from './AdminTransactions';
 import AdminSupport from './AdminSupport';
+import AdminTaskManager from './AdminTaskManager';
 import AdminAuditLog from './AdminAuditLog';
 import AdminOverview from './AdminOverview';
 import AdminReferrals from './AdminReferrals';
@@ -391,6 +392,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
       {tab === 'tasks' && (
       <>
+      <AdminTaskManager notify={notify} />
       {/* Sponsored task creation */}
       <div style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '14px', marginBottom: '16px', boxShadow: '0 2px 8px var(--shadow-color)' }}>
         <button

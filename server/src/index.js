@@ -1022,6 +1022,38 @@ app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+/* ── Admin: list tasks that are currently running (live/paused/awaiting funding) ── */
+app.get('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const tasks = await Task.find({ status: { $in: ['live', 'paused', 'awaiting_funding'] } })
+      .sort({ createdAt: -1 }).limit(100)
+      .populate('poster', 'username').lean();
+    res.json(tasks.map((t) => ({
+      id: t._id, title: t.title, status: t.status,
+      poster: t.poster?.username || 'unknown',
+      rewardPi: toPi(t.rewardMicroPi), slots: t.slots, slotsFilled: t.slotsFilled,
+      escrowRemainingPi: toPi(t.escrowRemainingMicroPi || 0), createdAt: t.createdAt,
+    })));
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: remove a running task from the feed ──
+   Marks it cancelled (hidden from workers, nothing is hard-deleted). Existing
+   submissions stay in the review queue. Escrow is NOT refunded automatically —
+   the response reports what was left so it can be settled by hand if real. */
+app.post('/api/admin/tasks/:id/remove', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const t = await Task.findOneAndUpdate(
+      { _id: req.params.id, status: { $in: ['live', 'paused', 'awaiting_funding'] } },
+      { $set: { status: 'cancelled' } }, { new: true }
+    );
+    if (!t) return res.status(404).json({ error: 'Task not found or already removed' });
+    res.json({ ok: true, title: t.title, escrowRemainingPi: toPi(t.escrowRemainingMicroPi || 0) });
+    await logAdminAction(req, 'task.remove', { targetType: 'Task', targetId: t._id, details: `"${t.title}" (escrow left ${toPi(t.escrowRemainingMicroPi || 0)} π)` });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: create a sponsored task (goes live instantly, no Pi payment) ── */
 app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) => {
   try {
