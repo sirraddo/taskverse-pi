@@ -105,6 +105,7 @@ enum: ['pending', 'auto_approved', 'approved', 'rejected', 'disputed', 'escrow_e
 default: 'pending',
 index: true,
 },
+aiReview: { recommendation: String, confidence: Number, reason: String, flags: [String], sawImage: Boolean, at: Date },
 autoReview: {
 evaluated: { type: Boolean, default: false },
 verdict: String, // 'auto_approve' | 'auto_reject' | 'manual'
@@ -352,6 +353,10 @@ const supportTicketSchema = new Schema(
     // user reply, cleared when the admin opens or replies to the ticket —
     // powers the unread badge in the admin Support tab.
     hasUnreadForAdmin: { type: Boolean, default: true },
+    // Filled in the background by the AI ticket triage (ai.js); purely advisory.
+    priority: { type: String, enum: ['normal', 'high'], default: 'normal' },
+    mood: { type: String, enum: ['calm', 'upset', 'angry'], default: 'calm' },
+    aiSummary: { type: String, default: '', maxlength: 200 },
   },
   { timestamps: true }
 );

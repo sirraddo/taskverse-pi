@@ -10,7 +10,8 @@ import AdminTaskManager from './AdminTaskManager';
 import AdminAuditLog from './AdminAuditLog';
 import AdminOverview from './AdminOverview';
 import AdminReferrals from './AdminReferrals';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount, bulkApproveSubmissions } from './piClient';
+import AdminAi from './AdminAi';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount, bulkApproveSubmissions, aiReviewSubmission, aiReviewBatch } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -33,6 +34,7 @@ const TABS = [
   { key: 'users', label: '👤 Users' },
   { key: 'referrals', label: '🎁 Referrals' },
   { key: 'audit', label: '📜 Audit Log' },
+  { key: 'ai', label: '🤖 AI' },
 ];
 
 /**
@@ -47,6 +49,17 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   // admin panel — one section visible at a time instead of one long scroll.
   const [tab, setTab] = useState('queue');
   const [queue, setQueue] = useState(null);
+  const [aiBusy, setAiBusy] = useState('');
+  const runAiReview = async (id) => {
+    setAiBusy(id);
+    try { const r = await aiReviewSubmission(id); setQueue((q) => q && q.map((s) => (s._id === id ? { ...s, aiReview: r.aiReview } : s))); }
+    catch (e) { notify?.('⚠️ ' + e.message); } finally { setAiBusy(''); }
+  };
+  const runAiBatch = async () => {
+    setAiBusy('batch');
+    try { const r = await aiReviewBatch(); setQueue((q) => q && q.map((s) => (r.reviews[s._id] ? { ...s, aiReview: r.reviews[s._id] } : s))); notify?.(`🤖 Checked ${r.done} submission${r.done === 1 ? '' : 's'}`); }
+    catch (e) { notify?.('⚠️ ' + e.message); } finally { setAiBusy(''); }
+  };
   const [revenue, setRevenue] = useState(null);
   const [disputeCount, setDisputeCount] = useState(0);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
@@ -930,6 +943,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
       <AdminReferrals notify={notify} />
       )}
 
+      {tab === 'ai' && (
+      <AdminAi notify={notify} onNavigate={(id) => setTab(id)} />
+      )}
+
       {tab === 'audit' && (
       <AdminAuditLog notify={notify} />
       )}
@@ -970,6 +987,10 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             <span style={{ fontSize: '0.72rem', color: '#c53030' }}>Max 20 at a time — deselect a few.</span>
           )}
         </div>
+      )}
+
+      {queue && queue.some((s) => !s.aiReview) && (
+        <button disabled={!!aiBusy} onClick={runAiBatch} style={{ marginBottom: '10px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid var(--border)', background: 'var(--surface)', color: '#059669', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{aiBusy === 'batch' ? 'Checking up to 8…' : '🤖 AI check the next 8 in the queue'}</button>
       )}
 
       {queue?.map((sub) => (
@@ -1033,6 +1054,17 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
                 </div>
               ))}
             </div>
+          )}
+
+          {sub.aiReview && (
+            <p style={{ fontSize: '0.74rem', padding: '7px 10px', borderRadius: '6px', marginBottom: '10px', border: '1px solid', backgroundColor: sub.aiReview.recommendation === 'approve' ? '#f0fff4' : sub.aiReview.recommendation === 'reject' ? '#fff5f5' : '#f7fafc', borderColor: sub.aiReview.recommendation === 'approve' ? '#9ae6b4' : sub.aiReview.recommendation === 'reject' ? '#feb2b2' : '#cbd5e0', color: sub.aiReview.recommendation === 'approve' ? '#276749' : sub.aiReview.recommendation === 'reject' ? '#9b2c2c' : '#4a5568' }}>
+              🤖 AI suggests <b>{sub.aiReview.recommendation === 'approve' ? 'APPROVE' : sub.aiReview.recommendation === 'reject' ? 'REJECT' : 'not sure'}</b> ({sub.aiReview.confidence}%){sub.aiReview.sawImage ? ' · looked at the screenshot' : ''}: {sub.aiReview.reason}
+              {sub.aiReview.flags?.length > 0 && <span> · {sub.aiReview.flags.join(', ')}</span>}
+              <span style={{ display: 'block', opacity: 0.7, fontSize: '0.66rem', marginTop: 2 }}>Suggestion only. You decide.</span>
+            </p>
+          )}
+          {!sub.aiReview && (
+            <button disabled={!!aiBusy} onClick={() => runAiReview(sub._id)} style={{ marginBottom: '10px', padding: '6px 10px', borderRadius: '8px', border: '1.5px solid var(--border)', background: 'var(--surface)', color: '#059669', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>{aiBusy === sub._id ? 'Checking…' : '🤖 AI check this proof'}</button>
           )}
 
           {sub.autoReview?.reasons?.length > 0 && (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminTickets, fetchAdminTicket, replyToTicketAsAdmin, setTicketStatus } from './piClient';
+import { fetchAdminTickets, fetchAdminTicket, replyToTicketAsAdmin, setTicketStatus, aiSupportTask } from './piClient';
 
 const STATUS_BADGE = {
   open: { label: 'Open', bg: '#fefcbf', color: '#744210' },
@@ -13,6 +13,18 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [aiWork, setAiWork] = useState('');
+  const [aiNote, setAiNote] = useState('');
+  const [lang, setLang] = useState('auto');
+  const [undo, setUndo] = useState('');
+  const runAi = async (task) => {
+    if (task === 'polish' && !reply.trim()) { setError('Write your reply first, then tap Fix & translate'); return; }
+    setAiWork(task); setError(null);
+    try {
+      const r = await aiSupportTask({ task, ticketId, text: reply, lang: lang === 'auto' ? undefined : lang });
+      if (task === 'summarize') setAiNote(r.reply); else { setUndo(reply); setReply(r.reply); }
+    } catch (e) { setError(e.message || 'AI failed'); } finally { setAiWork(''); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +105,14 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
         ))}
       </div>
 
+      {ticket.aiSummary && <div style={{ fontSize: '0.72rem', padding: 8, borderRadius: 8, background: 'var(--surface-alt)', color: 'var(--text-secondary)', marginBottom: 8 }}>✨ {ticket.aiSummary}{ticket.mood && ticket.mood !== 'calm' ? <b style={{ color: ticket.mood === 'angry' ? '#c53030' : '#b7791f' }}> · {ticket.mood}</b> : null}{ticket.priority === 'high' ? <b style={{ color: '#c53030' }}> · HIGH priority</b> : null}</div>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {[['summarize', '✨ Summarise'], ['reply', '✨ Draft reply']].map(([k, l]) => <button key={k} disabled={!!aiWork} onClick={() => runAi(k)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: '#059669', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>{aiWork === k ? '…' : l}</button>)}
+        <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ padding: '6px 6px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)', fontSize: '0.72rem' }}><option value="auto">Worker's language</option><option value="en">English</option><option value="pcm">Pidgin</option><option value="yo">Yorùbá</option></select>
+        <button disabled={!!aiWork} onClick={() => runAi('polish')} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: '#059669', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>{aiWork === 'polish' ? '…' : '✨ Fix & translate my reply'}</button>
+        {undo && <button onClick={() => { setReply(undo); setUndo(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>↩ Undo</button>}
+      </div>
+      {aiNote && <div style={{ fontSize: '0.76rem', whiteSpace: 'pre-wrap', padding: 10, borderRadius: 8, background: 'var(--surface-alt)', color: 'var(--text-secondary)', marginBottom: 8 }}>{aiNote}</div>}
       <div style={{ display: 'flex', gap: '6px' }}>
         <input value={reply} onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
@@ -181,7 +201,7 @@ export default function AdminSupport({ notify, onUnreadChanged }) {
                     style={{ border: '1px solid var(--border)', borderRadius: '9px', padding: '9px 10px', marginBottom: '6px', cursor: 'pointer', backgroundColor: onFixedBg ? '#fffbeb' : 'var(--surface)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: onFixedBg ? '#374151' : 'var(--text-secondary)' }}>{t.subject}</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: onFixedBg ? '#374151' : 'var(--text-secondary)' }}>{t.priority === 'high' && <span style={{ color: '#c53030' }}>🔴 </span>}{t.subject}</div>
                         <div style={{ fontSize: '0.7rem', color: onFixedBg ? '#6b7280' : 'var(--text-faint)', marginTop: '2px' }}>
                           @{t.user?.username || 'unknown'} · {t.category}
                         </div>

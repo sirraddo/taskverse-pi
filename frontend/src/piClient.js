@@ -592,3 +592,15 @@ export async function disablePushNotifications() {
   try { await sub.unsubscribe(); } catch { /* best-effort */ }
   try { await api('/api/push/unsubscribe', { endpoint }); } catch { /* best-effort */ }
 }
+
+/* ── AI assistants (server-side Anthropic; AI only reads and suggests) ── */
+export const fetchAiStatus = () => api('/api/ai/status');
+export const askTaskVerseAi = (message, history) => api('/api/ai/ask', { message, history });
+export const fetchAiConfig = () => api('/api/admin/ai/config');
+export const saveAiConfig = (patch) => api('/api/admin/ai/config', patch);
+export const removeAiKey = () => api('/api/admin/ai/config/key', undefined, 'DELETE');
+export const aiReviewSubmission = (id) => api(`/api/admin/ai/review/${id}`, {});
+export const aiReviewBatch = () => api('/api/admin/ai/review-batch', {});
+export const aiSupportTask = (body) => api('/api/admin/ai/support', body);
+export const aiAdminAsk = (question, history) => api('/api/admin/ai/ask', { question, history });
+export const aiApplyProposal = (proposal) => api('/api/admin/ai/apply', { proposal });

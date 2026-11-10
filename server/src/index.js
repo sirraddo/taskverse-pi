@@ -13,6 +13,7 @@ import {
 import * as pi from './piPlatform.js';
 import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
+import { mountAi, triageTicket } from './ai.js';
 
 const app = express();
 // Render (and most hosts) put the app behind a single reverse proxy hop, so
@@ -1814,7 +1815,7 @@ app.get('/api/admin/support/tickets', requireAuth, requireAdmin, async (req, res
         .populate('user', 'username piUid')
         .sort({ updatedAt: -1 })
         .skip((page - 1) * limit).limit(limit)
-        .select('subject category status refId user updatedAt createdAt messages')
+        .select('subject category status refId user updatedAt createdAt messages priority mood aiSummary')
         .lean(),
       SupportTicket.countDocuments(filter),
     ]);
@@ -1826,6 +1827,7 @@ app.get('/api/admin/support/tickets', requireAuth, requireAdmin, async (req, res
       tickets: rows.map((t) => ({
         id: t._id, subject: t.subject, category: t.category, status: t.status, refId: t.refId,
         user: t.user ? { id: t.user._id, username: t.user.username, piUid: t.user.piUid } : null,
+        priority: t.priority, mood: t.mood, aiSummary: t.aiSummary,
         messageCount: t.messages.length, lastMessage: t.messages[t.messages.length - 1]?.body || '',
         updatedAt: t.updatedAt, createdAt: t.createdAt,
       })),
@@ -1843,7 +1845,7 @@ app.get('/api/admin/support/tickets/:id', requireAuth, requireAdmin, async (req,
     }
     res.json({
       id: ticket._id, subject: ticket.subject, category: ticket.category, status: ticket.status,
-      refId: ticket.refId, createdAt: ticket.createdAt,
+      refId: ticket.refId, createdAt: ticket.createdAt, priority: ticket.priority, mood: ticket.mood, aiSummary: ticket.aiSummary,
       user: ticket.user ? { id: ticket.user._id, username: ticket.user.username, piUid: ticket.user.piUid } : null,
       messages: ticket.messages.map((m) => ({ from: m.from, body: m.body, createdAt: m.createdAt })),
     });
@@ -2177,6 +2179,7 @@ app.post('/api/support/tickets', requireAuth, async (req, res, next) => {
       messages: [{ from: 'user', body }],
     });
     res.status(201).json({ ok: true, id: ticket._id });
+    triageTicket(ticket._id); // background AI sorting; never blocks or fails the ticket
   } catch (err) { next(err); }
 });
 
@@ -2688,6 +2691,8 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res, next) =>
 });
 
 /* ── Error handler ── */
+mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPlatformSettings });
+
 app.use((err, req, res, _next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });

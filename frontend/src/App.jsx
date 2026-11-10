@@ -15,6 +15,7 @@ import CreateTask from './CreateTask';
 import TaskSubmit from './TaskSubmit';
 import MyPostedTasks from './MyPostedTasks';
 import SupportInbox from './SupportInbox';
+import AskTaskVerse from './AskTaskVerse';
 import NotificationFeed from './NotificationFeed';
 import ReportTask from './ReportTask';
 import { useDarkMode } from './theme';
@@ -269,6 +270,7 @@ return (
 </div>
 )}
 
+{user && view === 'feed' && !screen && <AskTaskVerse />}
 {view === 'admin' && user.isAdmin && <PiAdmin onBack={() => setView('feed')} onOpenDisputes={() => setView('disputes')} notify={triggerNotification} />}
 {view === 'disputes' && user.isAdmin && <PiDisputes onBack={() => setView('admin')} notify={triggerNotification} onResolved={refresh} />}
 {view === 'profile' && (
