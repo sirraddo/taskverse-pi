@@ -1060,6 +1060,16 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             <p style={{ fontSize: '0.74rem', padding: '7px 10px', borderRadius: '6px', marginBottom: '10px', border: '1px solid', backgroundColor: sub.aiReview.recommendation === 'approve' ? '#f0fff4' : sub.aiReview.recommendation === 'reject' ? '#fff5f5' : '#f7fafc', borderColor: sub.aiReview.recommendation === 'approve' ? '#9ae6b4' : sub.aiReview.recommendation === 'reject' ? '#feb2b2' : '#cbd5e0', color: sub.aiReview.recommendation === 'approve' ? '#276749' : sub.aiReview.recommendation === 'reject' ? '#9b2c2c' : '#4a5568' }}>
               🤖 AI suggests <b>{sub.aiReview.recommendation === 'approve' ? 'APPROVE' : sub.aiReview.recommendation === 'reject' ? 'REJECT' : 'not sure'}</b> ({sub.aiReview.confidence}%){sub.aiReview.sawImage ? ' · looked at the screenshot' : ''}: {sub.aiReview.reason}
               {sub.aiReview.flags?.length > 0 && <span> · {sub.aiReview.flags.join(', ')}</span>}
+              {sub.aiReview.duplicate && (sub.aiReview.duplicate.found || sub.aiReview.duplicate.note) && (
+                <span style={{ display: 'block', marginTop: 4, fontWeight: 700, color: sub.aiReview.duplicate.found ? '#c53030' : 'inherit' }}>
+                  {sub.aiReview.duplicate.found ? '⚠️ Possible duplicate' : '🔎 Duplicate check'}: {sub.aiReview.duplicate.note || sub.aiReview.duplicate.matches} <span style={{ fontWeight: 400, opacity: 0.7 }}>(compared with {sub.aiReview.duplicate.compared || 0} earlier screenshot{sub.aiReview.duplicate.compared === 1 ? '' : 's'})</span>
+                </span>
+              )}
+              {sub.aiReview.checks?.length > 0 && (
+                <span style={{ display: 'block', marginTop: 4 }}>
+                  {sub.aiReview.checks.map((c, i) => <span key={i} style={{ display: 'block' }}>{c.ok ? '✅' : '❌'} {c.rule}{c.note ? ` — ${c.note}` : ''}</span>)}
+                </span>
+              )}
               <span style={{ display: 'block', opacity: 0.7, fontSize: '0.66rem', marginTop: 2 }}>Suggestion only. You decide.</span>
             </p>
           )}

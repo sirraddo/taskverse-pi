@@ -105,7 +105,7 @@ enum: ['pending', 'auto_approved', 'approved', 'rejected', 'disputed', 'escrow_e
 default: 'pending',
 index: true,
 },
-aiReview: { recommendation: String, confidence: Number, reason: String, flags: [String], sawImage: Boolean, at: Date },
+aiReview: { recommendation: String, confidence: Number, reason: String, flags: [String], sawImage: Boolean, at: Date, duplicate: { found: Boolean, matches: String, note: String, compared: Number }, checks: [{ rule: String, ok: Boolean, note: String }] },
 autoReview: {
 evaluated: { type: Boolean, default: false },
 verdict: String, // 'auto_approve' | 'auto_reject' | 'manual'

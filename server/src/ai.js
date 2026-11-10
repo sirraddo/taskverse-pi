@@ -128,32 +128,52 @@ async function usageOk(userId, limit) {
 }
 
 /* ── proof review ── */
-const REVIEW_SYSTEM = `You help a human admin review a worker's proof for a micro-task on TaskVerse Earn. Decide whether the proof plausibly shows the task was done as described. ${BASE_RULES} Reply with ONLY compact JSON: {"recommendation":"approve|reject|unsure","confidence":0-100,"reason":"max 160 chars, plain English, say what you saw or what is missing","flags":["short flags"]}. Use "unsure" if the proof cannot be judged. A screenshot is only convincing if it visibly relates to the task. Reject only for clear problems (irrelevant or empty proof, obvious copy of unrelated text, contradicts the task). The human makes the final decision.`;
+const REVIEW_SYSTEM = `You help a human admin review a worker's proof for a micro-task on TaskVerse Earn. ${BASE_RULES}
+You get the task rules, the worker's proof (text and maybe a screenshot, labelled "SUBMITTED SCREENSHOT") and, when available, COMPARISON screenshots from earlier submissions (labelled C1, C2 …). Check:
+1. TASK RULES: does the proof show the required action from the task description/link? Is a screenshot required and present? Does the text match the screenshot? Does the visible account name (if any) look like the worker's Pi username or at least a real account, and is the content recent/plausible?
+2. DUPLICATES: is the submitted screenshot the same as, or a re-crop, rotation, brightness change, re-compression or slight edit of, any comparison screenshot? Also say if it looks like a screenshot of a screenshot, edited or fake, blank, too small to read, or unrelated stock/meme image.
+3. TEXT quality: copied/generic text, text that contradicts the task.
+Reply with ONLY compact JSON:
+{"recommendation":"approve|reject|unsure","confidence":0-100,"reason":"max 160 chars plain English","duplicate":{"found":true|false,"matches":"C1|C2|... or none","note":"max 100 chars"},"checks":[{"rule":"short rule name","ok":true|false,"note":"max 80 chars"}],"flags":["short flags"]}
+Give 3 to 6 checks. Mark duplicate.found true only if you are fairly sure; otherwise note the doubt and use "unsure". Reject only for clear problems; the human makes the final decision.`;
+const IMG_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+const imgBlock = (url) => { const m = IMG_RE.exec(url || ''); return m && m[2].length < 400000 ? { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } } : null; };
 async function reviewSubmission(subId) {
-  const sub = await Submission.findById(subId).populate('task').populate('worker', 'username approvedCount rejectedCount isBanned createdAt');
+  const sub = await Submission.findById(subId).populate('task').populate('worker', 'username approvedCount rejectedCount isBanned createdAt country');
   if (!sub) throw Object.assign(new Error('Submission not found'), { status: 404 });
   const t = sub.task || {};
   const w = sub.worker || {};
   const facts = [
     `TASK: ${t.title}`, `Description: ${String(t.description || '').slice(0, 800)}`, t.link ? `Task link: ${t.link}` : '',
-    `Screenshot required: ${t.requireScreenshot ? 'yes' : 'no'}`,
-    `WORKER: @${w.username} | approved ${w.approvedCount || 0}, rejected ${w.rejectedCount || 0}${w.isBanned ? ' | BANNED' : ''}`,
+    `Screenshot required: ${t.requireScreenshot ? 'yes' : 'no'} | Manual review forced: ${t.requireManualReview ? 'yes' : 'no'}${t.allowedCountries?.length ? ` | Allowed countries: ${t.allowedCountries.join(', ')} (worker: ${w.country || 'not set'})` : ''}`,
+    `WORKER: @${w.username} | approved ${w.approvedCount || 0}, rejected ${w.rejectedCount || 0}${w.isBanned ? ' | BANNED' : ''} | account age ${ago(w.createdAt)}`,
     `PROOF TEXT: ${String(sub.proofText || '').slice(0, 1500) || '(none)'}`,
     `Screenshot attached: ${sub.proofFileUrl ? 'yes' : 'no'}`,
     `Automatic checks said: ${(sub.autoReview?.reasons || []).join('; ') || 'n/a'}`,
   ].filter(Boolean).join('\n');
-  const content = [];
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(sub.proofFileUrl || '');
-  if (m && m[2].length < 400000) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
-  content.push({ type: 'text', text: facts });
-  const raw = await askClaude({ system: REVIEW_SYSTEM, messages: [{ role: 'user', content }], maxTokens: 300 });
+  const content = [{ type: 'text', text: facts }];
+  const main = imgBlock(sub.proofFileUrl);
+  if (main) { content.push({ type: 'text', text: 'SUBMITTED SCREENSHOT:' }, main); }
+  // Comparison set: exact-match hits the automatic check found, plus recent proofs from other workers on this task and from this worker on other tasks.
+  const cmp = []; const seen = new Set([String(sub._id)]);
+  const add = (s, label) => { if (!s || seen.has(String(s._id)) || cmp.length >= 6) return; const b = imgBlock(s.proofFileUrl); if (!b) return; seen.add(String(s._id)); cmp.push({ b, label }); };
+  const ids = [sub.duplicateOfSubmission, sub.recycledFromSubmission].filter(Boolean);
+  if (ids.length) (await Submission.find({ _id: { $in: ids } }).select('proofFileUrl').lean()).forEach((s) => add(s, 'flagged by the automatic duplicate check'));
+  (await Submission.find({ task: t._id, _id: { $ne: sub._id }, proofFileUrl: { $exists: true, $ne: '' } }).sort({ createdAt: -1 }).limit(4).select('proofFileUrl worker').lean()).forEach((s) => add(s, 'another worker, same task'));
+  (await Submission.find({ worker: w._id, _id: { $ne: sub._id }, proofFileUrl: { $exists: true, $ne: '' } }).sort({ createdAt: -1 }).limit(4).select('proofFileUrl task').lean()).forEach((s) => add(s, 'same worker, different task'));
+  cmp.forEach((c, i) => content.push({ type: 'text', text: `C${i + 1} (${c.label}):` }, c.b));
+  if (main && !cmp.length) content.push({ type: 'text', text: 'No earlier screenshots to compare with.' });
+  const raw = await askClaude({ system: REVIEW_SYSTEM, messages: [{ role: 'user', content }], maxTokens: 500 });
   let j;
   try { j = JSON.parse(raw.replace(/^```json|```$/g, '').trim()); } catch { j = null; }
-  if (!j || !['approve', 'reject', 'unsure'].includes(j.recommendation)) j = { recommendation: 'unsure', confidence: 0, reason: 'The assistant could not judge this proof.', flags: [] };
+  if (!j || !['approve', 'reject', 'unsure'].includes(j.recommendation)) j = { recommendation: 'unsure', confidence: 0, reason: 'The assistant could not judge this proof.' };
+  const dup = j.duplicate && typeof j.duplicate === 'object' ? j.duplicate : {};
   const aiReview = {
     recommendation: j.recommendation, confidence: Math.max(0, Math.min(100, Number(j.confidence) || 0)),
-    reason: String(j.reason || '').slice(0, 200), flags: (Array.isArray(j.flags) ? j.flags : []).slice(0, 4).map((x) => String(x).slice(0, 50)),
-    sawImage: !!m, at: new Date(),
+    reason: String(j.reason || '').slice(0, 200), flags: (Array.isArray(j.flags) ? j.flags : []).slice(0, 5).map((x) => String(x).slice(0, 50)),
+    duplicate: { found: dup.found === true, matches: String(dup.matches || 'none').slice(0, 30), note: String(dup.note || '').slice(0, 120), compared: cmp.length },
+    checks: (Array.isArray(j.checks) ? j.checks : []).slice(0, 6).map((c) => ({ rule: String(c.rule || '').slice(0, 40), ok: c.ok === true, note: String(c.note || '').slice(0, 100) })),
+    sawImage: !!main, at: new Date(),
   };
   await Submission.updateOne({ _id: sub._id }, { $set: { aiReview } });
   return aiReview;
