@@ -8,8 +8,24 @@ let sessionToken = null;
 
 export const getSessionToken = () => sessionToken;
 
+/* Render's free plan sleeps the server when idle; the first request can take up to ~a minute. If a request is slow
+   (or the connection fails), tell the UI so it can show a "waking up" banner, and retry network failures a few times. */
+let pending = 0; let wakeTimer = null;
+const wakeEvt = (on) => { try { window.dispatchEvent(new CustomEvent('tv-waking', { detail: on })); } catch { /* ignore */ } };
+function wakeStart() { pending++; if (!wakeTimer) wakeTimer = setTimeout(() => wakeEvt(true), 3500); }
+function wakeEnd() { pending = Math.max(0, pending - 1); if (!pending) { clearTimeout(wakeTimer); wakeTimer = null; wakeEvt(false); } }
+async function fetchWithWake(url, opts) {
+  wakeStart();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try { return await fetch(url, opts); }
+      catch (e) { if (attempt >= 3 || (opts.method && opts.method !== 'GET')) throw e; wakeEvt(true); await new Promise((r) => setTimeout(r, 4000)); }
+    }
+  } finally { wakeEnd(); }
+}
+
 async function api(path, body, method) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithWake(`${API}${path}`, {
     method: method || (body ? 'POST' : 'GET'),
     headers: {
       'Content-Type': 'application/json',
