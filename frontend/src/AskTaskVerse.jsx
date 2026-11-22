@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import MdLite from './mdLite.jsx';
 import { fetchAiStatus, askTaskVerseAi } from './piClient';
 
 const TIPS = ['Why was my submission rejected?', 'Where is my payout?', 'How do I earn more?', 'Ṣé mo lè ní iranlọ̀wọ́?'];
@@ -56,7 +57,7 @@ export default function AskTaskVerse() {
               )}
               {msgs.map((m, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
-                  <div style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: 14, fontSize: '0.82rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', background: m.role === 'user' ? '#059669' : 'var(--surface)', color: m.role === 'user' ? 'white' : m.err ? '#c53030' : 'var(--text-secondary)', border: m.role === 'user' ? 'none' : '1px solid var(--border)' }}>{m.text}</div>
+                  <div style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: 14, fontSize: '0.82rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', background: m.role === 'user' ? '#059669' : 'var(--surface)', color: m.role === 'user' ? 'white' : m.err ? '#c53030' : 'var(--text-secondary)', border: m.role === 'user' ? 'none' : '1px solid var(--border)' }}>{m.role === 'user' ? m.text : <MdLite text={m.text} />}</div>
                 </div>
               ))}
               {busy && <div style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Thinking…</div>}

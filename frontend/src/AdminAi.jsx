@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import MdLite from './mdLite.jsx';
 import { fetchAiConfig, saveAiConfig, removeAiKey, removeOrKey, aiAdminAsk, aiApplyProposal } from './piClient';
 
 const PROMPTS = [
@@ -58,7 +59,7 @@ export default function AdminAi({ notify, onNavigate }) {
   return (
     <div>
       <div style={card}>
-        <div style={{ fontWeight: 800, color: '#065F46', fontSize: '0.9rem', marginBottom: 4 }}>🤖 AI Assistant setup</div>
+        <div style={{ fontWeight: 800, color: 'var(--accent-text, #10b981)', fontSize: '0.9rem', marginBottom: 4 }}>🤖 AI Assistant setup</div>
         <p style={{ fontSize: '0.72rem', color: 'var(--text-faint)', margin: '0 0 10px' }}>The AI only reads and suggests. It never approves, rejects, pays or bans by itself. Paste your Anthropic key below (it is stored encrypted and never shown again).</p>
         {cfg && (<>
           <div style={{ fontSize: '0.8rem', marginBottom: 8 }}>AI key: <b style={{ color: cfg.keyPresent ? '#16a34a' : '#dc2626' }}>{cfg.keyPresent ? `set ${cfg.keyHint} (${cfg.keySource === 'admin' ? 'saved here' : 'from Render'}, ${cfg.model})` : 'not set yet'}</b></div>
@@ -104,14 +105,14 @@ export default function AdminAi({ notify, onNavigate }) {
       </div>
 
       <div style={card}>
-        <div style={{ fontWeight: 800, color: '#065F46', fontSize: '0.9rem', marginBottom: 8 }}>💬 Ask about your business</div>
+        <div style={{ fontWeight: 800, color: 'var(--accent-text, #10b981)', fontSize: '0.9rem', marginBottom: 8 }}>💬 Ask about your business</div>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
           {PROMPTS.map((p) => <button key={p} onClick={() => ask(p)} style={{ ...btn, whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontWeight: 600 }}>{p}</button>)}
         </div>
         <div style={{ maxHeight: 420, overflowY: 'auto', marginBottom: 8 }}>
           {msgs.map((m, i) => (
             <div key={i} style={{ marginBottom: 8, textAlign: m.role === 'user' ? 'right' : 'left' }}>
-              <div style={{ display: 'inline-block', maxWidth: '90%', textAlign: 'left', padding: '8px 12px', borderRadius: 12, fontSize: '0.8rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', background: m.role === 'user' ? '#059669' : 'var(--surface-alt)', color: m.role === 'user' ? 'white' : m.err ? '#c53030' : 'var(--text-secondary)' }}>{m.text}</div>
+              <div style={{ display: 'inline-block', maxWidth: '90%', textAlign: 'left', padding: '8px 12px', borderRadius: 12, fontSize: '0.8rem', lineHeight: 1.45, whiteSpace: 'pre-wrap', background: m.role === 'user' ? '#059669' : 'var(--surface-alt)', color: m.role === 'user' ? 'white' : m.err ? '#c53030' : 'var(--text-secondary)' }}>{m.role === 'user' ? m.text : <MdLite text={m.text} />}</div>
               {(m.links || []).length > 0 && <div style={{ marginTop: 5, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{m.links.map((l) => <button key={l.id} style={btn} onClick={() => onNavigate?.(l.id)}>📍 Open: {l.label}</button>)}</div>}
               {(m.proposals || []).map((p, j) => (
                 <div key={j} style={{ marginTop: 6, border: '1.5px solid #f6ad55', background: '#fffaf0', borderRadius: 10, padding: 10, fontSize: '0.78rem', color: '#744210', textAlign: 'left' }}>

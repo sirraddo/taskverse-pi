@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import MdLite from './mdLite.jsx';
 import { fetchAdminTickets, fetchAdminTicket, replyToTicketAsAdmin, setTicketStatus, aiSupportTask } from './piClient';
 
 const STATUS_BADGE = {
@@ -112,7 +113,7 @@ function AdminTicketThread({ ticketId, onBack, onChanged, onUnreadChanged }) {
         <button disabled={!!aiWork} onClick={() => runAi('polish')} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: '#059669', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>{aiWork === 'polish' ? '…' : '✨ Fix & translate my reply'}</button>
         {undo && <button onClick={() => { setReply(undo); setUndo(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>↩ Undo</button>}
       </div>
-      {aiNote && <div style={{ fontSize: '0.76rem', whiteSpace: 'pre-wrap', padding: 10, borderRadius: 8, background: 'var(--surface-alt)', color: 'var(--text-secondary)', marginBottom: 8 }}>{aiNote}</div>}
+      {aiNote && <div style={{ fontSize: '0.76rem', whiteSpace: 'pre-wrap', padding: 10, borderRadius: 8, background: 'var(--surface-alt)', color: 'var(--text-secondary)', marginBottom: 8 }}><MdLite text={aiNote} /></div>}
       <div style={{ display: 'flex', gap: '6px' }}>
         <input value={reply} onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
