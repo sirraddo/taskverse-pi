@@ -54,6 +54,13 @@ description: { type: String, maxlength: 2000, default: '' },
 // 'outside' = any other website. Outside links only show to workers once an admin approves them.
 linkKind: { type: String, enum: ['none', 'pi', 'outside'], default: 'none' },
 linkApproved: { type: Boolean, default: true },
+// In-app task types (done inside TaskVerse, no outside link needed):
+//   standard = do something and send proof (text / screenshot) — the original kind
+//   quiz     = multiple-choice questions with right answers; all right = auto-approved
+//   survey   = multiple-choice questions, any answer counts; poster sees the totals
+//   written  = a written answer (translation, review, labelling, feedback)
+kind: { type: String, enum: ['standard', 'quiz', 'survey', 'written'], default: 'standard' },
+questions: { type: [{ _id: false, q: String, options: [String], answer: Number }], default: [] },
 rewardMicroPi: { type: Number, required: true, min: 10_000 }, // ≥ 0.01 π
 slots: { type: Number, required: true, min: 1, max: 1000 },
 slotsFilled: { type: Number, default: 0 },
@@ -97,6 +104,8 @@ task: { type: Schema.Types.ObjectId, ref: 'Task', required: true, index: true },
 worker: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 proofText: { type: String, maxlength: 4000, default: '' },
 proofFileUrl: String, // self-hosted base64 data URL (resized/compressed client-side) — see TaskSubmit.jsx
+answers: { type: [Number], default: undefined }, // quiz / survey: chosen option per question
+score: Number, // quiz: how many answers were right
 // If auto-review flagged this proof image as a duplicate/recycled match,
 // which submission it matched — lets the admin queue show both images
 // side by side instead of just a text flag with nothing to compare against.

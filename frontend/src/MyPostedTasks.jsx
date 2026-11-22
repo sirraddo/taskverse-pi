@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import Receipt from './Receipt';
+import TaskResults from './TaskResults';
 
 export default function MyPostedTasks({ tasks, onBack }) {
 const [receiptTask, setReceiptTask] = useState(null);
+const [resultsTask, setResultsTask] = useState(null);
 if (!tasks) return null;
 
 const statusBadge = {
@@ -72,9 +74,17 @@ Ref: {task.fundingRefId}
 <div style={{ height: '100%', width: pct + '%', backgroundColor: barColor, borderRadius: '3px', transition: 'width 0.6s ease' }} />
 </div>
 </div>
+{task.kind && task.kind !== 'standard' && task.status !== 'awaiting_funding' && (
+<button onClick={() => setResultsTask(task)}
+  style={{ marginTop: '10px', width: '100%', padding: '8px', borderRadius: '8px', border: '1.5px solid #059669', backgroundColor: 'var(--surface)', color: '#047857', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}>
+  {task.kind === 'written' ? '✍️ Read the answers' : '📊 See the results'}
+</button>
+)}
 </div>
 );
 })}
+
+{resultsTask && <TaskResults task={resultsTask} onClose={() => setResultsTask(null)} />}
 
 {receiptTask && (
 <Receipt

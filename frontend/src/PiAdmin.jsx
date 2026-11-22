@@ -1,3 +1,5 @@
+import QuestionBuilder from './QuestionBuilder';
+import { questionsProblem, cleanQuestions } from './questionHelpers';
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminAnnouncements from './AdminAnnouncements';
 import AdminBanners from './AdminBanners';
@@ -76,6 +78,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [showForm, setShowForm] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
+  const [taskKind, setTaskKind] = useState('standard');
+  const [taskQuestions, setTaskQuestions] = useState([]);
   const [taskReward, setTaskReward] = useState('');
   const [taskSlots, setTaskSlots] = useState('10');
   const [creating, setCreating] = useState(false);
@@ -345,6 +349,8 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
 
   const handleCreateTask = async () => {
     if (!taskTitle.trim() || !taskReward || !taskSlots) return notify('Fill all required fields.');
+    const qProblem = questionsProblem(taskKind, taskQuestions);
+    if (qProblem) return notify('⚠️ ' + qProblem);
     setCreating(true);
     try {
       const result = await createAdminTask({
@@ -352,9 +358,11 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         description: taskDesc.trim(),
         rewardPi: parseFloat(taskReward),
         slots: parseInt(taskSlots, 10),
+        kind: taskKind,
+        questions: cleanQuestions(taskKind, taskQuestions),
       });
       notify('✅ Sponsored task live: "' + result.title + '" (' + result.slots + ' slots × ' + result.rewardPi + 'π)');
-      setTaskTitle(''); setTaskDesc(''); setTaskReward(''); setTaskSlots('10');
+      setTaskTitle(''); setTaskDesc(''); setTaskReward(''); setTaskSlots('10'); setTaskKind('standard'); setTaskQuestions([]);
       setShowForm(false);
       setTaskListKey((k) => k + 1);
       await load();
@@ -428,6 +436,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
             <textarea value={taskDesc} onChange={e => setTaskDesc(e.target.value)}
               placeholder="Task description (what to do, how to prove it)" rows={3}
               style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight: 1.45 }} />
+            <QuestionBuilder kind={taskKind} setKind={setTaskKind} questions={taskQuestions} setQuestions={setTaskQuestions} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <label style={{ fontSize: '0.68rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '3px' }}>REWARD PER SLOT (π) *</label>

@@ -143,6 +143,32 @@ function linkKindOf(link) {
   try { return PI_HOSTS.test(new URL(s).hostname) ? 'pi' : 'outside'; } catch { return 'outside'; }
 }
 
+// In-app task types. Returns { kind, questions } or { error }.
+const TASK_KINDS = ['standard', 'quiz', 'survey', 'written'];
+function cleanTaskKind(body) {
+  const kind = TASK_KINDS.includes(body?.kind) ? body.kind : 'standard';
+  if (kind !== 'quiz' && kind !== 'survey') return { kind, questions: [] };
+  const raw = Array.isArray(body.questions) ? body.questions : [];
+  if (raw.length < 1 || raw.length > 10) return { error: 'Add between 1 and 10 questions.' };
+  const questions = [];
+  for (const [i, x] of raw.entries()) {
+    const q = String(x?.q || '').trim().slice(0, 300);
+    const options = (Array.isArray(x?.options) ? x.options : []).map((o) => String(o || '').trim().slice(0, 120)).filter(Boolean);
+    if (q.length < 3) return { error: `Question ${i + 1} needs some words.` };
+    if (options.length < 2 || options.length > 6) return { error: `Question ${i + 1} needs 2 to 6 answer choices.` };
+    const item = { q, options };
+    if (kind === 'quiz') {
+      const a = Number(x.answer);
+      if (!Number.isInteger(a) || a < 0 || a >= options.length) return { error: `Pick the right answer for question ${i + 1}.` };
+      item.answer = a;
+    }
+    questions.push(item);
+  }
+  return { kind, questions };
+}
+// What workers may see of the questions (never the right answers).
+const publicQuestions = (t) => (t.questions || []).map((q) => ({ q: q.q, options: q.options }));
+
 async function getPlatformSettings() {
   const row = await PlatformSettings.findById('global').lean();
   const out = { ...SETTINGS_DEFAULTS };
@@ -332,15 +358,19 @@ app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), a
     const rewardPool = rewardMicro * slotCount;
     const fee = Math.round(rewardPool * settings.feeRate);
     const gross = rewardPool + fee;
-    const link = /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '';
+    const kindInfo = cleanTaskKind(req.body);
+    if (kindInfo.error) return res.status(400).json({ error: kindInfo.error });
+    const inApp = kindInfo.kind !== 'standard';
+    const link = !inApp && /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '';
     const linkKind = linkKindOf(link);
     const task = await Task.create({
       title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
       link, linkKind, linkApproved: linkKind !== 'outside',
+      kind: kindInfo.kind, questions: kindInfo.questions,
       poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
       escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
       allowedCountries: normCountryList(req.body.allowedCountries),
-      requireScreenshot: Boolean(req.body.requireScreenshot),
+      requireScreenshot: !inApp && Boolean(req.body.requireScreenshot),
       requireManualReview: Boolean(req.body.requireManualReview),
     });
     res.status(201).json({
@@ -377,6 +407,7 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
     res.json(tasks.map((t) => ({
       id: t._id, title: t.title, description: t.description,
       link: t.link, linkKind: t.linkKind || linkKindOf(t.link),
+      kind: t.kind || 'standard', questions: publicQuestions(t),
       reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
       slotsFilled: t.slotsFilled, slots: t.slots,
       allowedCountries: t.allowedCountries || [],
@@ -731,6 +762,39 @@ app.post('/api/tasks/:id/submissions', requireAuth, requireFeature('submissions'
       }
     }
     if (task.slotsFilled >= task.slots) return res.status(400).json({ error: 'Task is full' });
+
+    // Quiz / survey: answers are checked here; the text version goes in proofText so
+    // the admin queue and poster results read naturally. One attempt per worker.
+    if (task.kind === 'quiz' || task.kind === 'survey') {
+      const qs = task.questions || [];
+      const answers = Array.isArray(req.body.answers) ? req.body.answers.map(Number) : [];
+      if (answers.length !== qs.length || answers.some((a, i) => !Number.isInteger(a) || a < 0 || a >= qs[i].options.length)) {
+        return res.status(400).json({ error: 'Please answer every question.' });
+      }
+      const text = qs.map((q, i) => `${i + 1}. ${q.q} → ${q.options[answers[i]]}`).join('\n').slice(0, 4000);
+      const base = { task: task._id, worker: worker._id, proofText: text, answers, rewardMicroPi: task.rewardMicroPi };
+      if (task.kind === 'quiz') {
+        const score = qs.reduce((n, q, i) => n + (q.answer === answers[i] ? 1 : 0), 0);
+        base.score = score;
+        if (score < qs.length) {
+          const why = `Quiz: ${score} of ${qs.length} right`;
+          await Submission.create({ ...base, status: 'rejected', autoReview: { evaluated: true, verdict: 'auto_reject', reasons: [why] } });
+          return res.status(422).json({ error: `You got ${score} of ${qs.length} right. Every answer must be right to earn the reward.`, reasons: [why], score });
+        }
+      }
+      const manual = Boolean(task.requireManualReview) || worker.isBanned;
+      const reasons = [task.kind === 'quiz' ? `Quiz: all ${qs.length} right` : 'Survey answered', ...(manual ? ['Sent for review'] : [])];
+      const submission = await Submission.create({ ...base, status: manual ? 'pending' : 'auto_approved', autoReview: { evaluated: true, verdict: manual ? 'manual' : 'auto_approve', reasons } });
+      if (!manual) {
+        await settleApproval(submission._id);
+        return res.status(201).json({ status: 'auto_approved', message: 'Payout queued' });
+      }
+      return res.status(201).json({ status: 'pending', message: 'Sent to review queue' });
+    }
+    if (task.kind === 'written' && String(proofText || '').trim().length < 20) {
+      return res.status(422).json({ error: 'Please write a fuller answer (at least 20 characters).', reasons: ['Answer too short'] });
+    }
+
     const [duplicateMatch, recycledMatch] = proofFileUrl
       ? await Promise.all([
           Submission.findOne({ task: task._id, proofFileUrl }).select('_id').lean(),
@@ -1107,6 +1171,27 @@ app.get('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+/* ── Poster: results of an in-app task ──
+   Quiz / survey: how many picked each choice. Written: the answers themselves. */
+app.get('/api/tasks/:id/results', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const me = await currentUser(req);
+    const task = await Task.findById(req.params.id).lean();
+    if (!task || (!task.poster.equals(me._id) && !isAdmin(me.username))) return res.status(404).json({ error: 'Task not found' });
+    const subs = await Submission.find({ task: task._id, status: { $in: ['pending', 'auto_approved', 'approved'] } })
+      .select('answers proofText createdAt').sort({ createdAt: -1 }).limit(1000).lean();
+    const kind = task.kind || 'standard';
+    if (kind === 'quiz' || kind === 'survey') {
+      const counts = (task.questions || []).map((q) => q.options.map(() => 0));
+      for (const s of subs) (s.answers || []).forEach((a, i) => { if (counts[i] && counts[i][a] !== undefined) counts[i][a]++; });
+      const attempts = kind === 'quiz' ? await Submission.countDocuments({ task: task._id }) : subs.length;
+      return res.json({ kind, responses: subs.length, attempts, questions: (task.questions || []).map((q, i) => ({ q: q.q, options: q.options.map((o, j) => ({ text: o, count: counts[i][j], right: kind === 'quiz' && q.answer === j })) })) });
+    }
+    res.json({ kind, responses: subs.length, answers: subs.slice(0, 200).map((s) => ({ text: s.proofText, at: s.createdAt })) });
+  } catch (err) { next(err); }
+});
+
 /* ── Admin: approve or strip an outside-Pi task link ──
    approve: the task shows to workers with an "Opens outside Pi" label, as long as
    approved outside-link tasks stay within the cap (Settings → outsideLinkCapPercent).
@@ -1167,6 +1252,8 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
         error: `Valid title, reward (≥${toPi(settings.minRewardMicroPi)}π) and slots (≥${settings.minSlots}) required`,
       });
     }
+    const kindInfo = cleanTaskKind(req.body);
+    if (kindInfo.error) return res.status(400).json({ error: kindInfo.error });
     // Note: the max reward/slot caps intentionally don't apply here — those
     // exist to bound public posters' fee exposure, and admin-sponsored
     // campaigns are fee-free by design (see platformFeeMicroPi: 0 below).
@@ -1182,6 +1269,7 @@ app.post('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =
       escrowRemainingMicroPi: rewardPool,
       status: 'live',                       // live immediately
       fundingPaymentId: 'admin_sponsored_' + Date.now(),
+      kind: kindInfo.kind, questions: kindInfo.questions,
       allowedCountries: normCountryList(req.body.allowedCountries),
       requireScreenshot: Boolean(req.body.requireScreenshot),
       requireManualReview: Boolean(req.body.requireManualReview),
@@ -1239,6 +1327,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
         status: t.status, reward: toPi(t.rewardMicroPi), createdAt: t.createdAt,
         fundingRefId: fundingRefByTask[t._id.toString()] || null,
         linkPending: t.linkKind === 'outside' && t.linkApproved === false,
+        kind: t.kind || 'standard',
       })),
       openDisputes: openDisputes.map((d) => ({
         id: d._id,

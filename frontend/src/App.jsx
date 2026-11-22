@@ -443,6 +443,11 @@ return (
 <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '700' }}>🌍 {task.allowedCountries.join(', ')} only</span>
 )}
 </div>
+{task.kind && task.kind !== 'standard' && (
+<span style={{ display: 'inline-block', fontSize: '0.66rem', fontWeight: '800', color: '#047857', backgroundColor: 'rgba(5,150,105,0.1)', padding: '2px 8px', borderRadius: '10px', marginBottom: '4px' }}>
+{task.kind === 'quiz' ? '🧠 Quiz · in-app' : task.kind === 'survey' ? '📊 Survey · in-app' : '✍️ Written answer · in-app'}
+</span>
+)}
 <h3 style={{ margin: '0 0 3px', fontSize: '0.93rem', fontWeight: '700', color: 'var(--text)', lineHeight: 1.3 }}>{task.title}</h3>
 {snippet && <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-faint)', lineHeight: 1.4 }}>{snippet}</p>}
 </div>
