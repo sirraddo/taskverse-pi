@@ -50,6 +50,10 @@ const taskSchema = new Schema(
 title: { type: String, required: true, maxlength: 120 },
 description: { type: String, maxlength: 2000, default: '' },
   link: { type: String, maxlength: 500, default: '' },
+// Pi listing rule: keep users inside Pi. 'pi' = a link to a Pi app (pinet.com / minepi.com),
+// 'outside' = any other website. Outside links only show to workers once an admin approves them.
+linkKind: { type: String, enum: ['none', 'pi', 'outside'], default: 'none' },
+linkApproved: { type: Boolean, default: true },
 rewardMicroPi: { type: Number, required: true, min: 10_000 }, // ≥ 0.01 π
 slots: { type: Number, required: true, min: 1, max: 1000 },
 slotsFilled: { type: Number, default: 0 },
@@ -316,6 +320,7 @@ const platformSettingsSchema = new Schema(
     autoApproveRejectionRateThreshold: { type: Number, default: null }, // fraction, e.g. 0.35
     autoApproveMinDecisions: { type: Number, default: null },
     referralRewardMicroPi: { type: Number, default: null }, // paid to the referrer when their referral's first submission is approved
+    outsideLinkCapPercent: { type: Number, default: null }, // most of the live tasks that may link outside Pi (%)
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CaptchaVerify from './CaptchaVerify';
-import { submitProof, openExternalLink, resizeProofImageToDataUrl } from './piClient';
+import { submitProof, openExternalLink, resizeProofImageToDataUrl, linkKindOf } from './piClient';
 
 /**
 * PRODUCTION VERSION — proof goes to POST /api/tasks/:id/submissions.
@@ -81,7 +81,7 @@ return (
 <button
 onClick={() => openExternalLink(activeTask.link)}
 style={{ width: '100%', backgroundColor: '#047857', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.9rem', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', boxShadow: '0 3px 10px rgba(4,120,87,0.3)' }}>
-🔗 Open Task Link
+{linkKindOf(activeTask.link) === 'outside' ? '↗ Open link (opens outside Pi)' : '🔗 Open Task Link'}
 </button>
 )}
 

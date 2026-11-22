@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { createTask, payForTaskFunding, fetchSettings } from './piClient';
+import { createTask, payForTaskFunding, fetchSettings, linkKindOf } from './piClient';
 import Receipt from './Receipt';
 
 // Display-only defaults — used until the real settings load (or if that
@@ -36,6 +36,7 @@ export default function CreateTask({ onPublished, onBack }) {
 const [title, setTitle] = useState('');
 const [description, setDescription] = useState('');
   const [link, setLink] = useState('');
+const [linkPending, setLinkPending] = useState(false);
 const [reward, setReward] = useState('');
 const [slots, setSlots] = useState('1');
 const [allowedCountries, setAllowedCountries] = useState([]); // [] = global
@@ -65,7 +66,7 @@ setError(null);
 setPhase('paying');
 try {
 // 1. Server creates the campaign and returns the exact amount due
-const { taskId, amountToPay } = await createTask({
+const { taskId, amountToPay, needsLinkApproval } = await createTask({
 title,
 description,
   link,
@@ -78,6 +79,7 @@ requireManualReview,
 // 2. Real Pi wallet payment (rewards + platform fee → app wallet)
 const completed = await payForTaskFunding({ taskId, amountToPay, title });
 setReceiptRefId(completed?.refId || null);
+setLinkPending(Boolean(needsLinkApproval));
 setPhase('done');
 onPublished?.(); // parent refetches the feed
 } catch (err) {
@@ -98,8 +100,8 @@ return (
 {phase === 'done' ? (
 <div style={{ textAlign: 'center', padding: '32px 20px' }}>
 <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🚀</div>
-<p style={{ color: '#10b981', fontWeight: '700', fontSize: '1rem', margin: 0 }}>Payment confirmed — your gig is live!</p>
-<p style={{ color: 'var(--text-faint)', fontSize: '0.82rem', marginTop: '6px' }}>Workers can find and start it right away.</p>
+<p style={{ color: '#10b981', fontWeight: '700', fontSize: '1rem', margin: 0 }}>{linkPending ? 'Payment confirmed — waiting for link approval' : 'Payment confirmed — your gig is live!'}</p>
+<p style={{ color: 'var(--text-faint)', fontSize: '0.82rem', marginTop: '6px' }}>{linkPending ? 'Your link opens outside Pi, so an admin checks it first. You\'ll get a notification once workers can see it.' : 'Workers can find and start it right away.'}</p>
 {receiptRefId && (
 <div style={{ marginTop: '16px', display: 'inline-block', backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px 16px' }}>
 <div style={{ fontSize: '0.68rem', color: 'var(--text-faintest)', fontWeight: '700', letterSpacing: '0.03em' }}>PAYMENT REFERENCE</div>
@@ -132,7 +134,14 @@ style={inputStyle} />
 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
 placeholder="Task description — tell workers exactly what to do and how to prove it…" maxLength={2000} rows={3}
 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight: 1.45 }} />
-  <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link for workers to visit (optional)" maxLength={500} style={inputStyle} />
+  <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link for workers to visit (optional)" maxLength={500} style={{ ...inputStyle, marginBottom: '4px' }} />
+  <p style={{ fontSize: '0.72rem', margin: '0 0 12px', lineHeight: 1.45, color: linkKindOf(link) === 'outside' ? '#b45309' : 'var(--text-faint)' }}>
+    {linkKindOf(link) === 'outside'
+      ? '⚠️ This link opens outside Pi. Your task will show once an admin approves it, with an "Opens outside Pi" label. Paid follows, likes or reposts on social media are not accepted.'
+      : linkKindOf(link) === 'pi'
+        ? '✓ Link to a Pi app: your task goes live as soon as it is funded.'
+        : 'Tip: links to Pi apps (pinet.com) go live straight away. Tasks done inside TaskVerse need no link at all.'}
+  </p>
 
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
 <div>

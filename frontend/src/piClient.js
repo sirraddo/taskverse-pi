@@ -302,6 +302,14 @@ export const fetchTaskReports = () => api('/api/admin/task-reports');
 export const dismissTaskReports = (taskId) => api(`/api/admin/task-reports/${taskId}/dismiss`, {});
 export const fetchAdminTasks = () => api('/api/admin/tasks');
 export const removeAdminTask = (id) => api(`/api/admin/tasks/${id}/remove`, {});
+/** Approve an outside-Pi task link, or take it off ('approve' | 'remove'). */
+export const setAdminTaskLink = (id, action) => api(`/api/admin/tasks/${id}/link`, { action });
+/** Same rule as the server: links to Pi apps (pinet.com / minepi.com) keep workers in Pi. */
+export function linkKindOf(link) {
+  const s = String(link || '').trim();
+  if (!s) return 'none';
+  try { return /(^|\.)(pinet\.com|minepi\.com)$/i.test(new URL(s).hostname) ? 'pi' : 'outside'; } catch { return 'outside'; }
+}
 /** Scan and complete any pending A2U payouts whose txid is now available */
 export const reconcilePayouts = () => api('/api/admin/reconcile', {});
 /** Cancel tasks that have been stuck in awaiting_funding longer than hoursOld (default 24) */

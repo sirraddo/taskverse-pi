@@ -30,6 +30,12 @@ const FIELD_GROUPS = [
       { key: 'referralRewardMicroPi', label: 'Referral bonus', suffix: 'π', help: 'Paid to the referrer once their referral\'s first submission is approved. Default 1π.' },
     ],
   },
+  {
+    title: 'Outside links (Pi listing rule)',
+    fields: [
+      { key: 'outsideLinkCapPercent', label: 'Most live tasks that may link outside Pi', suffix: '%', help: 'Pi lists apps that keep users inside Pi. Outside links need your approval (Tasks tab), and approvals stop at this share of live tasks (at least 2). Links to Pi apps are always fine. Default 20%.' },
+    ],
+  },
 ];
 
 // Reward fields are stored in microPi (1,000,000 = 1 π) but edited in π.

@@ -131,7 +131,17 @@ const SETTINGS_DEFAULTS = {
   autoApproveRejectionRateThreshold: 0.35,
   autoApproveMinDecisions: 5,
   referralRewardMicroPi: 1_000_000, // 1π — brand new setting, needs an actual default (not "preserved" behavior)
+  outsideLinkCapPercent: 20,        // at most this share of live tasks may link outside Pi
 };
+
+// Pi listing rule: keep users inside Pi. Links to Pi apps are fine; anything
+// else is an "outside" link that needs admin approval and is labelled for workers.
+const PI_HOSTS = /(^|\.)(pinet\.com|minepi\.com)$/i;
+function linkKindOf(link) {
+  const s = String(link || '').trim();
+  if (!s) return 'none';
+  try { return PI_HOSTS.test(new URL(s).hostname) ? 'pi' : 'outside'; } catch { return 'outside'; }
+}
 
 async function getPlatformSettings() {
   const row = await PlatformSettings.findById('global').lean();
@@ -322,9 +332,11 @@ app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), a
     const rewardPool = rewardMicro * slotCount;
     const fee = Math.round(rewardPool * settings.feeRate);
     const gross = rewardPool + fee;
+    const link = /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '';
+    const linkKind = linkKindOf(link);
     const task = await Task.create({
       title: title.trim(), description, rewardMicroPi: rewardMicro, slots: slotCount,
-      link: /^https?:\/\//i.test(String(req.body.link || '').trim()) ? String(req.body.link || '').trim().slice(0, 500) : '',
+      link, linkKind, linkApproved: linkKind !== 'outside',
       poster: user._id, grossDepositMicroPi: gross, platformFeeMicroPi: fee,
       escrowRemainingMicroPi: rewardPool, status: 'awaiting_funding',
       allowedCountries: normCountryList(req.body.allowedCountries),
@@ -332,7 +344,7 @@ app.post('/api/tasks', requireAuth, requireFeature('posting', 'Task posting'), a
       requireManualReview: Boolean(req.body.requireManualReview),
     });
     res.status(201).json({
-      taskId: task._id, amountToPay: toPi(gross),
+      taskId: task._id, amountToPay: toPi(gross), linkKind, needsLinkApproval: linkKind === 'outside',
       breakdown: { rewardPool: toPi(rewardPool), platformFee: toPi(fee), feeRate: settings.feeRate },
     });
   } catch (err) { next(err); }
@@ -347,9 +359,13 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
     const tasks = await Task.find({
       status: 'live',
       poster: { $ne: req.session.userId },
-      $or: [
-        { allowedCountries: { $size: 0 } },
-        ...(myCountry ? [{ allowedCountries: myCountry }] : []),
+      $and: [
+        { $or: [
+          { allowedCountries: { $size: 0 } },
+          ...(myCountry ? [{ allowedCountries: myCountry }] : []),
+        ] },
+        // Outside-Pi links show only once an admin has approved them.
+        { $or: [{ linkKind: { $ne: 'outside' } }, { linkApproved: true }] },
       ],
     })
       .sort({ createdAt: -1 }).limit(100).lean();
@@ -360,7 +376,7 @@ app.get('/api/tasks', requireAuth, async (req, res, next) => {
     );
     res.json(tasks.map((t) => ({
       id: t._id, title: t.title, description: t.description,
-      link: t.link,
+      link: t.link, linkKind: t.linkKind || linkKindOf(t.link),
       reward: toPi(t.rewardMicroPi), slotsLeft: t.slots - t.slotsFilled,
       slotsFilled: t.slotsFilled, slots: t.slots,
       allowedCountries: t.allowedCountries || [],
@@ -1083,10 +1099,41 @@ app.get('/api/admin/tasks', requireAuth, requireAdmin, async (req, res, next) =>
       .populate('poster', 'username').lean();
     res.json(tasks.map((t) => ({
       id: t._id, title: t.title, status: t.status,
+      link: t.link || '', linkKind: t.linkKind || linkKindOf(t.link), linkApproved: t.linkApproved !== false,
       poster: t.poster?.username || 'unknown',
       rewardPi: toPi(t.rewardMicroPi), slots: t.slots, slotsFilled: t.slotsFilled,
       escrowRemainingPi: toPi(t.escrowRemainingMicroPi || 0), createdAt: t.createdAt,
     })));
+  } catch (err) { next(err); }
+});
+
+/* ── Admin: approve or strip an outside-Pi task link ──
+   approve: the task shows to workers with an "Opens outside Pi" label, as long as
+   approved outside-link tasks stay within the cap (Settings → outsideLinkCapPercent).
+   remove: the link is taken off and the task shows without it. */
+app.post('/api/admin/tasks/:id/link', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'bad id' });
+    const action = req.body?.action;
+    if (!['approve', 'remove'].includes(action)) return res.status(400).json({ error: 'action must be approve or remove' });
+    const t = await Task.findById(req.params.id);
+    if (!t || t.linkKind !== 'outside') return res.status(404).json({ error: 'No outside link on this task' });
+    if (action === 'approve') {
+      const { outsideLinkCapPercent } = await getPlatformSettings();
+      const live = await Task.countDocuments({ status: 'live' });
+      const outside = await Task.countDocuments({ status: 'live', linkKind: 'outside', linkApproved: true, _id: { $ne: t._id } });
+      const cap = Math.max(2, Math.floor((live * outsideLinkCapPercent) / 100));
+      if (outside >= cap) return res.status(409).json({ error: `Already ${outside} live tasks link outside Pi (limit ${cap}, ${outsideLinkCapPercent}% of live tasks). Remove this link, or end another outside-link task first.` });
+      t.linkApproved = true;
+    } else {
+      t.link = ''; t.linkKind = 'none'; t.linkApproved = true;
+    }
+    await t.save();
+    res.json({ ok: true });
+    await notifyUser(t.poster, 'task', action === 'approve'
+      ? { title: 'Task link approved', body: `"${t.title}" is now visible to workers.` }
+      : { title: 'Task link removed', body: `"${t.title}" now shows without its link: tasks should keep workers inside Pi. You can edit the instructions or cancel the task.` });
+    await logAdminAction(req, `task.link_${action}`, { targetType: 'Task', targetId: t._id, details: `"${t.title}" ${t.link || ''}` });
   } catch (err) { next(err); }
 });
 
@@ -1191,6 +1238,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
         id: t._id, title: t.title, slots: t.slots, slotsFilled: t.slotsFilled,
         status: t.status, reward: toPi(t.rewardMicroPi), createdAt: t.createdAt,
         fundingRefId: fundingRefByTask[t._id.toString()] || null,
+        linkPending: t.linkKind === 'outside' && t.linkApproved === false,
       })),
       openDisputes: openDisputes.map((d) => ({
         id: d._id,
@@ -1654,7 +1702,8 @@ app.patch('/api/admin/settings', requireAuth, requireAdmin, async (req, res, nex
       setNum('maxSlots', { min: 1, integer: true }) ||
       setNum('autoApproveRejectionRateThreshold', { min: 0, max: 1 }) ||
       setNum('autoApproveMinDecisions', { min: 1, integer: true }) ||
-      setNum('referralRewardMicroPi', { min: 0 });
+      setNum('referralRewardMicroPi', { min: 0 }) ||
+      setNum('outsideLinkCapPercent', { min: 0, max: 100, integer: true });
     if (error) return res.status(400).json({ error });
 
     // Cross-field sanity: if both min and max are ending up set, min <= max.
@@ -2802,6 +2851,12 @@ connectWithRetry().then(() => {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // One-off: label existing task links. Tasks already running keep their outside
+  // links (approved) so paid campaigns aren't cut off; admin can review them.
+  Task.find({ link: { $nin: ['', null] }, linkKind: { $in: [null, 'none'] } }).select('link').lean()
+    .then((rows) => Promise.all(rows.map((r) => Task.updateOne({ _id: r._id }, { $set: { linkKind: linkKindOf(r.link), linkApproved: true } }))))
+    .catch((e) => console.error('link labelling failed', e.message));
 
   app.listen(PORT, () => console.log('TaskVerse Earn server listening on :' + PORT));
 
