@@ -56,7 +56,7 @@ add() {
 
   say "Getting the code"
   $SUDO mkdir -p "$APPS" && $SUDO chown "$(id -u):$(id -g)" "$APPS"
-  if ! git clone --depth 1 "$repo" "$APPS/$name" 2>/dev/null; then
+  if ! GIT_TERMINAL_PROMPT=0 git clone --depth 1 "$repo" "$APPS/$name" 2>/dev/null; then
     local key="$HOME/.ssh/deploy_$name"
     mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
     [ -f "$key" ] || ssh-keygen -t ed25519 -N "" -f "$key" -C "vps-$name" >/dev/null
