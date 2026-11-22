@@ -19,7 +19,7 @@ import AskTaskVerse from './AskTaskVerse';
 import NotificationFeed from './NotificationFeed';
 import ReportTask from './ReportTask';
 import { useDarkMode } from './theme';
-import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags } from './piClient';
+import { fetchTasks, fetchMe, initPi, openExternalLink, setMyCountry, fetchFlags, linkKindOf } from './piClient';
 
 // Short country list for the one-time prompt (mirrors profile options).
 const PROMPT_COUNTRIES = [
@@ -468,7 +468,7 @@ return (
 <button
 onClick={() => openExternalLink(task.link)}
 style={{ width: '100%', backgroundColor: 'var(--surface)', color: '#047857', border: '2px solid #059669', padding: '10px', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.84rem', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-🔗 Open Task Link
+{linkKindOf(task.link) === 'outside' ? '↗ Open link (opens outside Pi)' : '🔗 Open Task Link'}
 </button>
 )}
 

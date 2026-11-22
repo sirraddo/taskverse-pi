@@ -36,7 +36,7 @@ return (
 {tasks.map(task => {
 const pct = task.slots > 0 ? Math.round((task.slotsFilled / task.slots) * 100) : 0;
 const barColor = pct >= 100 ? '#e53e3e' : pct > 55 ? '#ed8936' : '#48bb78';
-const badge = statusBadge[task.status] || { label: task.status, color: '#718096', bg: '#edf2f7' };
+const badge = task.linkPending && task.status === 'live' ? { label: 'Waiting for link approval', color: '#b45309', bg: '#fef3c7' } : (statusBadge[task.status] || { label: task.status, color: '#718096', bg: '#edf2f7' });
 return (
 <div key={task.id} style={{ backgroundColor: 'var(--surface)', borderRadius: '14px', padding: '14px 16px', marginBottom: '10px', boxShadow: '0 2px 10px var(--shadow-color)', animation: 'fadeUp 0.3s ease' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
