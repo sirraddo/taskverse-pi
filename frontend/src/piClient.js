@@ -614,6 +614,7 @@ export const fetchAiStatus = () => api('/api/ai/status');
 export const askTaskVerseAi = (message, history) => api('/api/ai/ask', { message, history });
 export const fetchAiConfig = () => api('/api/admin/ai/config');
 export const saveAiConfig = (patch) => api('/api/admin/ai/config', patch);
+export const removeOrKey = () => api('/api/admin/ai/config/or-key', undefined, 'DELETE');
 export const removeAiKey = () => api('/api/admin/ai/config/key', undefined, 'DELETE');
 export const aiReviewSubmission = (id) => api(`/api/admin/ai/review/${id}`, {});
 export const aiReviewBatch = () => api('/api/admin/ai/review-batch', {});

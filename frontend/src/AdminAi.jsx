@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchAiConfig, saveAiConfig, removeAiKey, aiAdminAsk, aiApplyProposal } from './piClient';
+import { fetchAiConfig, saveAiConfig, removeAiKey, removeOrKey, aiAdminAsk, aiApplyProposal } from './piClient';
 
 const PROMPTS = [
   'Give me a quick briefing: what needs my attention today?',
@@ -17,16 +17,18 @@ export default function AdminAi({ notify, onNavigate }) {
   const [cfg, setCfg] = useState(null);
   const [keyIn, setKeyIn] = useState('');
   const [limit, setLimit] = useState('');
+  const [orIn, setOrIn] = useState('');
+  const [orModelIn, setOrModelIn] = useState('');
   const [msgs, setMsgs] = useState([]);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef(null);
 
-  const load = () => fetchAiConfig().then((c) => { setCfg(c); setLimit(String(c.dailyLimit)); }).catch((e) => notify?.('⚠️ ' + e.message));
+  const load = () => fetchAiConfig().then((c) => { setCfg(c); setLimit(String(c.dailyLimit)); setOrModelIn(c.orModel || ''); }).catch((e) => notify?.('⚠️ ' + e.message));
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, busy]);
 
-  const save = (patch, ok) => saveAiConfig(patch).then(() => { notify?.(ok); setKeyIn(''); load(); }).catch((e) => notify?.('⚠️ ' + e.message));
+  const save = (patch, ok) => saveAiConfig(patch).then(() => { notify?.(ok); setKeyIn(''); setOrIn(''); load(); }).catch((e) => notify?.('⚠️ ' + e.message));
 
   const ask = async (text) => {
     const question = (text ?? q).trim();
@@ -66,6 +68,25 @@ export default function AdminAi({ notify, onNavigate }) {
             <button style={{ ...btn, background: '#059669', color: 'white', border: 'none' }} onClick={() => save({ apiKey: keyIn }, 'AI key saved')} disabled={!keyIn.trim()}>Save</button>
           </div>
           {cfg.keySource === 'admin' && <button onClick={() => removeAiKey().then(() => { notify?.('Key removed'); load(); })} style={{ background: 'none', border: 'none', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', padding: 0, margin: '6px 0' }}>Remove saved key</button>}
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 4 }}>🛟 Backup AI (OpenRouter)</div>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-faint)', margin: '0 0 8px' }}>Used automatically if the main AI has no credit, is busy, or is down. Get a key at openrouter.ai and paste it here.</p>
+            <div style={{ fontSize: '0.8rem', marginBottom: 8 }}>Backup key: <b style={{ color: cfg.orKeyPresent ? '#16a34a' : '#b7791f' }}>{cfg.orKeyPresent ? `set ${cfg.orKeyHint} (${cfg.orKeySource === 'admin' ? 'saved here' : 'from Render'})` : 'not set (optional)'}</b></div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="password" autoComplete="off" value={orIn} onChange={(e) => setOrIn(e.target.value)} placeholder="Paste OpenRouter key (sk-or-…)"
+                style={{ flex: 1, minWidth: 0, padding: 10, borderRadius: 9, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)', fontSize: '0.8rem' }} />
+              <button style={{ ...btn, background: '#059669', color: 'white', border: 'none' }} onClick={() => save({ orApiKey: orIn }, 'Backup key saved')} disabled={!orIn.trim()}>Save</button>
+            </div>
+            {cfg.orKeySource === 'admin' && <button onClick={() => removeOrKey().then(() => { notify?.('Backup key removed'); load(); })} style={{ background: 'none', border: 'none', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', padding: 0, margin: '6px 0' }}>Remove saved backup key</button>}
+            <div style={{ ...row, borderTop: 'none' }}>
+              <span>Backup model</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <input value={orModelIn} onChange={(e) => setOrModelIn(e.target.value.trim())} placeholder={cfg.orModel} style={{ width: 170, padding: 8, borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)', fontSize: '0.76rem' }} />
+                <button style={btn} onClick={() => save({ orModel: orModelIn }, 'Backup model saved')}>Save</button>
+              </span>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-faint)' }}>Last answer came from: <b>{cfg.lastProvider === 'openrouter' ? 'backup (OpenRouter)' : cfg.lastProvider === 'anthropic' ? 'main AI' : 'none yet'}</b> · backup used today: {cfg.fallbackToday}{cfg.lastProvider === 'openrouter' && cfg.lastFallbackReason ? ` · why: ${cfg.lastFallbackReason}` : ''}. Use a model that supports images and tools (e.g. openai/gpt-4o-mini) so proof review and the assistant keep working.</div>
+          </div>
           <div style={{ marginTop: 8 }}>
             {sw('Worker helper ("Ask" button)', 'customerEnabled', cfg.customerEnabled)}
             {sw('Automatic ticket sorting', 'triageEnabled', cfg.triageEnabled)}

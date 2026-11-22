@@ -21,6 +21,8 @@ const { Schema } = mongoose;
 const aiConfigSchema = new Schema({
   _id: { type: String, default: 'ai' },
   apiKeyEnc: { type: String, default: null },
+  orKeyEnc: { type: String, default: null },
+  orModel: { type: String, default: '' },
   customerEnabled: { type: Boolean, default: true },
   triageEnabled: { type: Boolean, default: true },
   reviewEnabled: { type: Boolean, default: true },
@@ -60,33 +62,97 @@ async function getAiKey() {
 const post = (key, body, timeout = 45000) => axios.post('https://api.anthropic.com/v1/messages', body,
   { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, timeout });
 const textOf = (data) => (data?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-async function needKey() {
-  const { key } = await getAiKey();
+/* ── OpenRouter (backup provider) ──
+   Used automatically when Anthropic has no key, is out of credit, rate-limited, down or times out.
+   OpenRouter speaks the OpenAI chat format, so messages, images and tools are converted below. */
+const OR_DEFAULT_MODEL = 'openai/gpt-4o-mini';
+async function getOrKey() {
+  const c = await cfg();
+  if (c.orKeyEnc) { const k = decrypt(c.orKeyEnc); if (k) return { key: k, source: 'admin' }; }
+  if (process.env.OPENROUTER_API_KEY) return { key: process.env.OPENROUTER_API_KEY, source: 'render' };
+  return { key: null, source: null };
+}
+const orModel = async () => (await cfg()).orModel || process.env.OPENROUTER_MODEL || OR_DEFAULT_MODEL;
+const orPost = (key, body, timeout = 50000) => axios.post('https://openrouter.ai/api/v1/chat/completions', body,
+  { headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'TaskVerse Earn' }, timeout });
+const hasAnyKey = async () => !!((await getAiKey()).key || (await getOrKey()).key);
+const stats = { last: null, lastError: '', fallbackToday: 0, day: '' };
+const mark = (provider, err) => {
+  if (stats.day !== day()) { stats.day = day(); stats.fallbackToday = 0; }
+  stats.last = provider; if (provider === 'openrouter') stats.fallbackToday++;
+  if (err !== undefined) stats.lastError = String(err).slice(0, 160);
+};
+const errText = (e) => e.response?.data?.error?.message || e.response?.data?.error || e.message;
+// Anthropic-style content blocks -> OpenAI-style parts
+function toOpenAiContent(content) {
+  if (typeof content === 'string') return content;
+  return content.map((b) => (b.type === 'image' ? { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } } : { type: 'text', text: b.text }));
+}
+async function orAsk({ system, messages, maxTokens }) {
+  const key = (await getOrKey()).key;
   if (!key) { const e = new Error('AI not configured'); e.code = 'NO_KEY'; throw e; }
-  return key;
+  const { data } = await orPost(key, { model: await orModel(), max_tokens: maxTokens, messages: [{ role: 'system', content: system }, ...messages.map((m) => ({ role: m.role, content: toOpenAiContent(m.content) }))] });
+  return String(data?.choices?.[0]?.message?.content || '').trim();
 }
-async function askClaude({ system, messages, maxTokens = 500 }) {
-  const key = await needKey();
-  const { data } = await post(key, { model: aiModel(), max_tokens: maxTokens, system, messages });
-  return textOf(data);
-}
-async function askClaudeTools({ system, messages, tools, handlers, maxTokens = 900, maxSteps = 6 }) {
-  const key = await needKey();
-  const convo = [...messages];
+async function orAskTools({ system, messages, tools, handlers, maxTokens, maxSteps }) {
+  const key = (await getOrKey()).key;
+  if (!key) { const e = new Error('AI not configured'); e.code = 'NO_KEY'; throw e; }
+  const model = await orModel();
+  const fnTools = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
+  const convo = [{ role: 'system', content: system }, ...messages.map((m) => ({ role: m.role, content: toOpenAiContent(m.content) }))];
   for (let step = 0; step < maxSteps; step++) {
-    const { data } = await post(key, { model: aiModel(), max_tokens: maxTokens, system, messages: convo, tools });
-    const uses = (data.content || []).filter((b) => b.type === 'tool_use');
-    if (data.stop_reason !== 'tool_use' || !uses.length) return textOf(data);
-    convo.push({ role: 'assistant', content: data.content });
-    const results = [];
-    for (const u of uses) {
+    const { data } = await orPost(key, { model, max_tokens: maxTokens, messages: convo, tools: fnTools });
+    const msg = data?.choices?.[0]?.message || {};
+    if (!msg.tool_calls?.length) return String(msg.content || '').trim();
+    convo.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
+    for (const tc of msg.tool_calls) {
       let out;
-      try { out = await handlers[u.name](u.input || {}); } catch (e) { out = { error: String(e.message || e).slice(0, 200) }; }
-      results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 12000) });
+      try { out = await handlers[tc.function.name](JSON.parse(tc.function.arguments || '{}')); } catch (e) { out = { error: String(e.message || e).slice(0, 200) }; }
+      convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out).slice(0, 12000) });
     }
-    convo.push({ role: 'user', content: results });
   }
   return 'I looked at a lot of data but could not finish. Please ask a narrower question.';
+}
+
+/* ── provider routing: Anthropic first, OpenRouter as backup ── */
+async function withFallback(primary, backup) {
+  const a = (await getAiKey()).key;
+  let primaryErr = null;
+  if (a) {
+    try { const out = await primary(a); mark('anthropic'); return out; }
+    catch (e) { primaryErr = e; console.error('Anthropic failed, trying backup:', errText(e)); }
+  }
+  if ((await getOrKey()).key) {
+    try { const out = await backup(); mark('openrouter', primaryErr ? errText(primaryErr) : 'no Anthropic key'); return out; }
+    catch (e) { console.error('OpenRouter failed:', errText(e)); throw primaryErr || e; }
+  }
+  if (primaryErr) throw primaryErr;
+  const e = new Error('AI not configured'); e.code = 'NO_KEY'; throw e;
+}
+async function askClaude({ system, messages, maxTokens = 500 }) {
+  return withFallback(
+    async (key) => { const { data } = await post(key, { model: aiModel(), max_tokens: maxTokens, system, messages }); return textOf(data); },
+    () => orAsk({ system, messages, maxTokens }),
+  );
+}
+async function askClaudeTools({ system, messages, tools, handlers, maxTokens = 900, maxSteps = 6 }) {
+  return withFallback(async (key) => {
+    const convo = [...messages];
+    for (let step = 0; step < maxSteps; step++) {
+      const { data } = await post(key, { model: aiModel(), max_tokens: maxTokens, system, messages: convo, tools });
+      const uses = (data.content || []).filter((b) => b.type === 'tool_use');
+      if (data.stop_reason !== 'tool_use' || !uses.length) return textOf(data);
+      convo.push({ role: 'assistant', content: data.content });
+      const results = [];
+      for (const u of uses) {
+        let out;
+        try { out = await handlers[u.name](u.input || {}); } catch (e) { out = { error: String(e.message || e).slice(0, 200) }; }
+        results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 12000) });
+      }
+      convo.push({ role: 'user', content: results });
+    }
+    return 'I looked at a lot of data but could not finish. Please ask a narrower question.';
+  }, () => orAskTools({ system, messages, tools, handlers, maxTokens, maxSteps }));
 }
 
 /* ── helpers ── */
@@ -183,7 +249,7 @@ async function reviewSubmission(subId) {
 export async function triageTicket(ticketId) {
   try {
     const c = await cfg();
-    if (c.triageEnabled === false || !(await getAiKey()).key) return;
+    if (c.triageEnabled === false || !(await hasAnyKey())) return;
     const t = await SupportTicket.findById(ticketId).lean();
     if (!t) return;
     const raw = await askClaude({
@@ -213,7 +279,7 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
     try {
       const c = await cfg();
       if (c.customerEnabled === false) return res.status(503).json({ error: 'The helper is switched off right now.' });
-      if (!(await getAiKey()).key) return res.status(503).json({ error: 'The helper is not available yet.' });
+      if (!(await hasAnyKey())) return res.status(503).json({ error: 'The helper is not available yet.' });
       const message = String(req.body?.message || '').trim().slice(0, 600);
       if (!message) return res.status(400).json({ error: 'Ask a question first.' });
       const limit = c.dailyLimit ?? 20;
@@ -241,14 +307,15 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
   });
   app.get('/api/ai/status', requireAuth, async (_req, res) => {
     const c = await cfg();
-    res.json({ available: c.customerEnabled !== false && !!(await getAiKey()).key });
+    res.json({ available: c.customerEnabled !== false && (await hasAnyKey()) });
   });
 
   /* Admin config */
   app.get('/api/admin/ai/config', requireAuth, requireAdmin, async (_req, res) => {
-    const c = await cfg(); const k = await getAiKey();
+    const c = await cfg(); const k = await getAiKey(); const o = await getOrKey();
     const today = await AiUsage.aggregate([{ $match: { day: day() } }, { $group: { _id: null, messages: { $sum: '$count' }, workers: { $sum: 1 } } }]);
-    res.json({ keyPresent: !!k.key, keySource: k.source, keyHint: k.key ? '…' + k.key.slice(-4) : null, model: aiModel(),
+    res.json({ orKeyPresent: !!o.key, orKeySource: o.source, orKeyHint: o.key ? '…' + o.key.slice(-4) : null, orModel: await orModel(), lastProvider: stats.last, lastFallbackReason: stats.lastError, fallbackToday: stats.day === day() ? stats.fallbackToday : 0,
+      keyPresent: !!k.key, keySource: k.source, keyHint: k.key ? '…' + k.key.slice(-4) : null, model: aiModel(),
       customerEnabled: c.customerEnabled !== false, triageEnabled: c.triageEnabled !== false, reviewEnabled: c.reviewEnabled !== false,
       dailyLimit: c.dailyLimit ?? 20, usageToday: { messages: today[0]?.messages || 0, workers: today[0]?.workers || 0 } });
   });
@@ -259,6 +326,7 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
       if (typeof b.triageEnabled === 'boolean') set.triageEnabled = b.triageEnabled;
       if (typeof b.reviewEnabled === 'boolean') set.reviewEnabled = b.reviewEnabled;
       if (b.dailyLimit !== undefined) { const n = Number(b.dailyLimit); if (!Number.isInteger(n) || n < 0 || n > 500) return res.status(400).json({ error: 'Daily limit must be 0 to 500' }); set.dailyLimit = n; }
+      if (b.orModel !== undefined) { const m = String(b.orModel).trim(); if (m && !/^[\w.\-]+\/[\w.\-:]+$/.test(m)) return res.status(400).json({ error: 'Model looks like provider/name, e.g. openai/gpt-4o-mini' }); set.orModel = m; }
       if (b.apiKey !== undefined) {
         const key = String(b.apiKey).trim();
         if (!/^sk-ant-[A-Za-z0-9_\-]{20,}$/.test(key)) return res.status(400).json({ error: 'That does not look like an Anthropic key (starts with sk-ant-)' });
@@ -266,11 +334,23 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
         catch (e) { return res.status(400).json({ error: e.response?.status === 401 ? 'Anthropic rejected that key' : 'Could not verify the key. Try again.' }); }
         set.apiKeyEnc = encrypt(key);
       }
+      if (b.orApiKey !== undefined) {
+        const key = String(b.orApiKey).trim();
+        if (!/^sk-or-[A-Za-z0-9_\-]{20,}$/.test(key)) return res.status(400).json({ error: 'That does not look like an OpenRouter key (starts with sk-or-)' });
+        try { await orPost(key, { model: set.orModel || (await orModel()), max_tokens: 5, messages: [{ role: 'user', content: 'Hi' }] }, 25000); }
+        catch (e) { return res.status(400).json({ error: e.response?.status === 401 ? 'OpenRouter rejected that key' : `Could not verify: ${String(errText(e)).slice(0, 80)}` }); }
+        set.orKeyEnc = encrypt(key);
+      }
       if (!Object.keys(set).length) return res.status(400).json({ error: 'Nothing to change' });
       await AiConfig.findByIdAndUpdate('ai', { $set: set }, { upsert: true });
-      await logAdminAction(req, 'ai.config', { targetType: 'AiConfig', details: Object.keys(set).map((k) => (k === 'apiKeyEnc' ? 'key saved' : `${k}=${set[k]}`)).join(', ') });
+      await logAdminAction(req, 'ai.config', { targetType: 'AiConfig', details: Object.keys(set).map((k) => (k === 'apiKeyEnc' || k === 'orKeyEnc' ? 'key saved' : `${k}=${set[k]}`)).join(', ') });
       res.json({ ok: true });
     } catch (e) { console.error('ai config:', e.message); res.status(500).json({ error: 'Could not save' }); }
+  });
+  app.delete('/api/admin/ai/config/or-key', requireAuth, requireAdmin, async (req, res) => {
+    await AiConfig.findByIdAndUpdate('ai', { $set: { orKeyEnc: null } }, { upsert: true });
+    await logAdminAction(req, 'ai.orkey.removed', { targetType: 'AiConfig' });
+    res.json({ ok: true });
   });
   app.delete('/api/admin/ai/config/key', requireAuth, requireAdmin, async (req, res) => {
     await AiConfig.findByIdAndUpdate('ai', { $set: { apiKeyEnc: null } }, { upsert: true });
@@ -289,7 +369,7 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
   app.post('/api/admin/ai/review-batch', requireAuth, requireAdmin, async (req, res) => {
     try {
       if ((await cfg()).reviewEnabled === false) return res.status(503).json({ error: 'Proof review by AI is switched off in AI Assistant.' });
-      await needKey();
+      if (!(await hasAnyKey())) throw Object.assign(new Error('AI not configured'), { code: 'NO_KEY' });
       const rows = await Submission.find({ status: 'pending', aiReview: { $exists: false } }).sort({ createdAt: 1 }).limit(8).select('_id').lean();
       const out = {};
       for (const r of rows) { try { out[r._id] = await reviewSubmission(r._id); } catch (e) { console.error('batch review:', e.message); } }
@@ -440,7 +520,7 @@ export function mountAi(app, { requireAuth, requireAdmin, logAdminAction, getPla
       const system = `You are the business assistant for the owner of TaskVerse Earn. ${APP_FACTS} Use the tools to look up real numbers before answering; never guess. Amounts are in π (Pi). Be concise and practical: lead with the answer, then 2-4 short points; under 150 words unless asked for detail. When the owner asks where something is or how to change it, call navigate. When a change would help, call propose_setting or propose_flag (the owner must tap Apply). Say plainly when data is missing. Today is ${day()} (Lagos). ${BASE_RULES}`;
       const reply = await askClaudeTools({ system, messages: [...history, { role: 'user', content: question }], tools, handlers: handlers(proposals, links), maxTokens: 900 });
       await logAdminAction(req, 'ai.admin.asked', { targetType: 'AI', details: question.slice(0, 120) });
-      res.json({ reply, proposals: proposals.slice(0, 4), links: links.slice(0, 3) });
+      res.json({ reply, proposals: proposals.filter((p, i, a) => a.findIndex((x) => JSON.stringify(x) === JSON.stringify(p)) === i).slice(0, 4), links: links.slice(0, 3) });
     } catch (e) { aiErr(res, e, 'admin ai:'); }
   });
   app.post('/api/admin/ai/apply', requireAuth, requireAdmin, async (req, res) => {
