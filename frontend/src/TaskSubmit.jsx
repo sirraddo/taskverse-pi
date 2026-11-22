@@ -23,6 +23,10 @@ const [error, setError] = useState(null);
 const [proofFileUrl, setProofFileUrl] = useState('');
 const [uploading, setUploading] = useState(false);
 const [fileName, setFileName] = useState('');
+const kind = activeTask.kind || 'standard';
+const choiceTask = kind === 'quiz' || kind === 'survey';
+const qs = activeTask.questions || [];
+const [answers, setAnswers] = useState(() => qs.map(() => null));
 
 const handleFileChange = async (e) => {
 const file = e.target.files[0];
@@ -43,11 +47,15 @@ setError(err.message || 'Image upload failed — please try again.');
 
 const handleSubmit = async () => {
 setError(null);
-if (!proofText.trim()) return setError('Please describe your proof of work.');
+if (choiceTask) {
+  if (answers.some((a) => a === null)) return setError('Please answer every question.');
+} else if (kind === 'written') {
+  if (proofText.trim().length < 20) return setError('Please write a fuller answer (at least 20 characters).');
+} else if (!proofText.trim()) return setError('Please describe your proof of work.');
 if (!isHuman) return setError('Please complete the security check.');
 setSending(true);
 try {
-const result = await submitProof(activeTask.id, {
+const result = await submitProof(activeTask.id, choiceTask ? { answers } : {
 proofText,
 ...(proofFileUrl.trim() ? { proofFileUrl: proofFileUrl.trim() } : {}),
 });
@@ -85,22 +93,40 @@ style={{ width: '100%', backgroundColor: '#047857', color: 'white', border: 'non
 </button>
 )}
 
-{/* Proof text */}
+{/* Quiz / survey: answer inside the app */}
+{choiceTask && (
 <div style={{ marginBottom: '12px' }}>
-<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '5px' }}>YOUR PROOF OF WORK</label>
+{kind === 'quiz' && <div style={{ fontSize: '0.74rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', padding: '7px 10px', borderRadius: '8px', marginBottom: '10px' }}>🧠 One try only — every answer must be right to earn the reward.</div>}
+{qs.map((q, i) => (
+<fieldset key={i} style={{ border: '1.5px solid var(--border)', borderRadius: '10px', padding: '10px 12px', margin: '0 0 10px' }}>
+<legend style={{ fontSize: '0.84rem', fontWeight: '700', color: 'var(--text)', padding: '0 4px' }}>{i + 1}. {q.q}</legend>
+{q.options.map((o, k) => (
+<label key={k} style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 4px', cursor: 'pointer', fontSize: '0.86rem', color: 'var(--text-secondary)' }}>
+<input type="radio" name={`q-${i}`} checked={answers[i] === k} onChange={() => setAnswers(answers.map((a, j) => (j === i ? k : a)))} style={{ width: '18px', height: '18px', accentColor: '#059669', flex: 'none' }} />
+{o}
+</label>
+))}
+</fieldset>
+))}
+</div>
+)}
+
+{/* Proof text */}
+{!choiceTask && <div style={{ marginBottom: '12px' }}>
+<label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-faint)', display: 'block', marginBottom: '5px' }}>{kind === 'written' ? 'YOUR ANSWER' : 'YOUR PROOF OF WORK'}</label>
 <textarea
 rows={4}
 value={proofText}
 onChange={(e) => setProofText(e.target.value)}
-placeholder="Describe exactly what you did (include links, usernames, screenshots)..."
+placeholder={kind === 'written' ? 'Write your answer here…' : 'Describe exactly what you did (include links, usernames, screenshots)...'}
 maxLength={4000}
 style={{ width: '100%', padding: '10px 12px', boxSizing: 'border-box', borderRadius: '10px', border: '1.5px solid var(--border)', fontSize: '0.86rem', color: 'var(--text-secondary)', backgroundColor: 'var(--surface)', resize: 'vertical', fontFamily: 'sans-serif', outline: 'none', lineHeight: 1.5 }}
 />
 <div style={{ fontSize: '0.65rem', color: 'var(--text-faintest)', textAlign: 'right', marginTop: '3px' }}>{proofText.length}/4000</div>
-</div>
+</div>}
 
 {/* Screenshot upload */}
-<div style={{ marginBottom: '14px' }}>
+{kind === 'standard' && <div style={{ marginBottom: '14px' }}>
 <label style={{ fontSize: '0.72rem', fontWeight: '700', color: activeTask.requireScreenshot ? '#c53030' : 'var(--text-faint)', display: 'block', marginBottom: '5px' }}>
 {activeTask.requireScreenshot ? 'SCREENSHOT (REQUIRED)' : 'SCREENSHOT (OPTIONAL)'}
 </label>
@@ -132,7 +158,7 @@ This task requires a screenshot. Submissions without one are rejected.
 <div style={{ marginTop: '5px', fontSize: '0.7rem', color: '#059669', fontWeight: '600' }}>✓ Screenshot uploaded</div>
 </div>
 )}
-</div>
+</div>}
 
 <CaptchaVerify onVerifySuccess={(val) => setIsHuman(val)} />
 
@@ -147,7 +173,7 @@ onClick={handleSubmit}
 disabled={!isHuman || sending}
 style={{ width: '100%', marginTop: '6px', backgroundColor: (!isHuman || sending) ? '#a0aec0' : '#059669', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: (!isHuman || sending) ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}
 >
-{sending ? '⏳ Submitting…' : '✓ Submit Work'}
+{sending ? '⏳ Submitting…' : choiceTask ? '✓ Submit answers' : kind === 'written' ? '✓ Submit answer' : '✓ Submit Work'}
 </button>
 </div>
 );

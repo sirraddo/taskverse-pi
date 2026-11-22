@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createTask, payForTaskFunding, fetchSettings, linkKindOf } from './piClient';
+import QuestionBuilder from './QuestionBuilder';
+import { questionsProblem, cleanQuestions } from './questionHelpers';
 import Receipt from './Receipt';
 
 // Display-only defaults — used until the real settings load (or if that
@@ -41,6 +43,8 @@ const [reward, setReward] = useState('');
 const [slots, setSlots] = useState('1');
 const [allowedCountries, setAllowedCountries] = useState([]); // [] = global
 const [requireScreenshot, setRequireScreenshot] = useState(false);
+const [kind, setKind] = useState('standard');
+const [questions, setQuestions] = useState([]);
 const [requireManualReview, setRequireManualReview] = useState(false);
 const [phase, setPhase] = useState('form'); // form | paying | done
 const [error, setError] = useState(null);
@@ -63,13 +67,17 @@ return { pool, fee, total: pool + fee };
 const handleSubmit = async (e) => {
 e.preventDefault();
 setError(null);
+const qProblem = questionsProblem(kind, questions);
+if (qProblem) { setError(qProblem); return; }
 setPhase('paying');
 try {
 // 1. Server creates the campaign and returns the exact amount due
 const { taskId, amountToPay, needsLinkApproval } = await createTask({
 title,
 description,
-  link,
+  link: kind === 'standard' ? link : '',
+kind,
+questions: cleanQuestions(kind, questions),
 rewardPi: parseFloat(reward),
 slots: parseInt(slots, 10),
 allowedCountries,
@@ -128,12 +136,14 @@ return (
 ) : (
 <div>
 <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-placeholder="Task title (e.g. Follow our Telegram channel)" required maxLength={120}
+placeholder="Task title (e.g. Test our Pi app and report one bug)" required maxLength={120}
 style={inputStyle} />
 
 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
 placeholder="Task description — tell workers exactly what to do and how to prove it…" maxLength={2000} rows={3}
 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight: 1.45 }} />
+  <QuestionBuilder kind={kind} setKind={setKind} questions={questions} setQuestions={setQuestions} />
+  {kind === 'standard' && <>
   <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link for workers to visit (optional)" maxLength={500} style={{ ...inputStyle, marginBottom: '4px' }} />
   <p style={{ fontSize: '0.72rem', margin: '0 0 12px', lineHeight: 1.45, color: linkKindOf(link) === 'outside' ? '#b45309' : 'var(--text-faint)' }}>
     {linkKindOf(link) === 'outside'
@@ -142,6 +152,7 @@ style={{ ...inputStyle, resize: 'vertical', fontFamily: 'sans-serif', lineHeight
         ? '✓ Link to a Pi app: your task goes live as soon as it is funded.'
         : 'Tip: links to Pi apps (pinet.com) go live straight away. Tasks done inside TaskVerse need no link at all.'}
   </p>
+  </>}
 
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '0' }}>
 <div>
@@ -199,14 +210,14 @@ placeholder="10" required style={inputStyle} />
 <div style={{ marginBottom: '14px', backgroundColor: 'var(--surface-alt)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '12px 14px' }}>
   <div style={{ fontSize: '0.72rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '9px', letterSpacing: '0.03em' }}>PROOF POLICY</div>
 
-  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer', marginBottom: '10px' }}>
+  {kind === 'standard' && <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer', marginBottom: '10px' }}>
     <input type="checkbox" checked={requireScreenshot} onChange={(e) => setRequireScreenshot(e.target.checked)}
       style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: '#059669', flexShrink: 0 }} />
     <span>
       <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'block' }}>Screenshot required</span>
       <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>Submissions without an image are rejected automatically.</span>
     </span>
-  </label>
+  </label>}
 
   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer' }}>
     <input type="checkbox" checked={requireManualReview} onChange={(e) => setRequireManualReview(e.target.checked)}

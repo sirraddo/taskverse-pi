@@ -301,6 +301,7 @@ export const reportTask = (id, reason, note = '') => api(`/api/tasks/${id}/repor
 export const fetchTaskReports = () => api('/api/admin/task-reports');
 export const dismissTaskReports = (taskId) => api(`/api/admin/task-reports/${taskId}/dismiss`, {});
 export const fetchAdminTasks = () => api('/api/admin/tasks');
+export const fetchTaskResults = (id) => api(`/api/tasks/${id}/results`);
 export const removeAdminTask = (id) => api(`/api/admin/tasks/${id}/remove`, {});
 /** Approve an outside-Pi task link, or take it off ('approve' | 'remove'). */
 export const setAdminTaskLink = (id, action) => api(`/api/admin/tasks/${id}/link`, { action });
