@@ -15,6 +15,7 @@
 #   bash vps-app.sh backup                                  # back up the databases now
 #   bash vps-app.sh restore DATABASE YYYY-MM-DD             # copy a backup into a NEW database (live data untouched)
 #   bash vps-app.sh dbuser NAME                             # switch an app to its own database user (tested first)
+#   bash vps-app.sh offsite                                 # also copy each night's backup to Cloudflare R2
 #
 # Run it as the same user you use for ZAPPI PAY's PM2 (if you log in as root, as root).
 set -euo pipefail
@@ -216,9 +217,36 @@ ROT
   echo "Done. See everything with: bash vps-app.sh status"
 }
 
+# Off-site copy of the nightly backups in a private Cloudflare R2 bucket (S3-compatible).
+offsite() {
+  [ -f "$OPS/backup.js" ] || die "Run 'bash vps-app.sh safety' first"
+  local here; here="$(cd "$(dirname "$0")" && pwd)"
+  if [ -f "$here/vps-backup.js" ]; then cp "$here/vps-backup.js" "$OPS/backup.js"; else curl -fsSL "$RAW/vps-backup.js" -o "$OPS/backup.js"; fi
+  local acct ak sk bucket
+  echo "From Cloudflare → R2 (see the steps Claude gave you):"
+  read -r -p "Account ID: " acct
+  read -r -p "Bucket name: " bucket
+  read -r -p "Access Key ID: " ak
+  read -r -s -p "Secret Access Key (typing is hidden): " sk; echo
+  [ -n "$acct" ] && [ -n "$bucket" ] && [ -n "$ak" ] && [ -n "$sk" ] || die "All four are needed. Nothing changed."
+  local f="$OPS/offsite.env" old="$OPS/offsite.env.old"
+  [ -f "$f" ] && cp -p "$f" "$old"
+  ( umask 077; printf 'R2_ACCOUNT_ID=%s\nR2_BUCKET=%s\nR2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nR2_KEEP_DAYS=14\n' "$acct" "$bucket" "$ak" "$sk" > "$f" )
+  say "Testing upload, read and delete"
+  if ! (cd "$OPS" && node backup.js offsite-test); then
+    if [ -f "$old" ]; then mv "$old" "$f"; else rm -f "$f"; fi
+    die "The test failed, so the settings were not kept. Check the four values and try again."
+  fi
+  rm -f "$old"
+  local last; last=$(ls -1 "$APPS/.backups" 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort | tail -1)
+  if [ -n "$last" ]; then say "Uploading the latest backup ($last)"; (cd "$OPS" && node backup.js upload "$last") || echo "Upload had a problem; it will try again tonight."; fi
+  echo "Done. From tonight each backup is also copied to R2 (last 14 days kept there)."
+}
+
 status() {
   say "Backups"; [ -f "$OPS/backup.js" ] && (cd "$OPS" && node backup.js list) || echo "Not set up yet: bash vps-app.sh safety"
   say "Monitor (last 10 events)"; tail -n 10 "$OPS/monitor.log" 2>/dev/null || echo "No events yet (no news is good news)."
+  if [ -f "$OPS/offsite.env" ]; then say "Off-site copies (Cloudflare R2)"; (cd "$OPS" && node backup.js remote) || echo "Could not reach R2"; else say "Off-site copies"; echo "Not set up yet: bash vps-app.sh offsite"; fi
   say "Disk"; df -h / | tail -1
   say "Scheduled jobs"; crontab -l 2>/dev/null | grep 'vps-app-safety' || echo "None. Run: bash vps-app.sh safety"
 }
@@ -292,5 +320,6 @@ case "${1:-help}" in
   backup) backupnow ;;
   restore) shift; restoredb "$@" ;;
   dbuser) shift; dbuser "$@" ;;
-  *) sed -n '2,20p' "$0" ;;
+  offsite) offsite ;;
+  *) sed -n '2,21p' "$0" ;;
 esac
