@@ -162,12 +162,14 @@ async function tgPollOnce(timeout = 25) {
   return updates.length;
 }
 async function tgLoop() {
+  let backoff = 30_000;
   while (tgOn()) {
-    try { await tgPollOnce(); }
+    try { await tgPollOnce(); backoff = 30_000; await sleep(1000); }
     catch (e) {
-      console.error('telegram poll:', e.message);
-      // Wait as long as Telegram asks (retrying sooner only extends the block), else 15 s.
-      await sleep(e.retryAfter ? (e.retryAfter + 2) * 1000 : 15_000);
+      console.error('telegram poll:', e.message, `(next try in ${Math.round(Math.max(backoff, (e.retryAfter + 2) * 1000 || 0) / 1000)} s)`);
+      // Back off: at least what Telegram asks, doubling up to 10 minutes while it keeps refusing.
+      await sleep(Math.max(backoff, (e.retryAfter + 2) * 1000 || 0));
+      backoff = Math.min(backoff * 2, 10 * 60_000);
     }
   }
 }
