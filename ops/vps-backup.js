@@ -6,11 +6,13 @@
  *
  *   node backup.js                     back up every app now (cron runs this nightly), keep the last 7 days
  *   node backup.js list                show the backups on disk
- *   node backup.js restore APP DATE    copy a backup into a NEW database called <db>_restore_<DATE>.
+ *   node backup.js restore DB DATE     copy one saved database into a NEW database called <DB>_restore_<DATE>.
  *                                      It never touches the live database: you look at the copy first, then
  *                                      point the app at it (MONGO_DB_NAME) only if you really need to.
  *
- * Files: /opt/apps/.backups/<DATE>/<app>/<db>/<collection>.jsonl.gz  (one MongoDB Extended JSON document per line)
+ * Files: /opt/apps/.backups/<DATE>/<db>/<collection>.jsonl.gz  (one MongoDB Extended JSON document per line)
+ * Each database is saved once even when several apps share a cluster; <DATE>/apps.json records which app's
+ * connection reaches it (used by restore).
  */
 const fs = require("fs");
 const path = require("path");
@@ -21,6 +23,7 @@ const APPS = process.env.APPS_DIR || "/opt/apps";
 const OUT = path.join(APPS, ".backups");
 const KEEP_DAYS = Number(process.env.BACKUP_KEEP_DAYS || 7);
 const SKIP_DBS = new Set(["admin", "local", "config"]);
+const skipDb = (n) => SKIP_DBS.has(n) || n.startsWith("sample_"); // Atlas demo data
 const today = () => new Date().toISOString().slice(0, 10);
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -55,23 +58,29 @@ function apps() {
 async function dbNames(client, app) {
   try {
     const { databases } = await client.db("admin").admin().listDatabases({ nameOnly: true });
-    return databases.map((d) => d.name).filter((n) => !SKIP_DBS.has(n));
+    return databases.map((d) => d.name).filter((n) => !skipDb(n));
   } catch {
     // Users with access to one database only can't list them all; back up the one the app uses.
     return [app.dbName || client.db().databaseName];
   }
 }
 
-async function backupApp(app, dayDir) {
+const clusterOf = (uri) => { try { return new URL(uri).host.toLowerCase(); } catch { return uri; } };
+
+async function backupApp(app, dayDir, done) {
   const { MongoClient, BSON } = app.mongo;
   const client = new MongoClient(app.uri, { serverSelectionTimeoutMS: 20000 });
   await client.connect();
   let docs = 0;
   try {
     for (const dbn of await dbNames(client, app)) {
+      // Apps on the same cluster see the same databases: save each database once.
+      const key = clusterOf(app.uri) + "/" + dbn;
+      if (done.has(key)) { log(`${app.name}: ${dbn} already saved with ${done.get(key)}`); continue; }
+      done.set(key, app.name);
       const db = client.db(dbn);
       const cols = (await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name).filter((c) => !c.startsWith("system."));
-      const dir = path.join(dayDir, app.name, dbn);
+      const dir = path.join(dayDir, dbn);
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       for (const col of cols) {
         const file = path.join(dir, `${col}.jsonl.gz`);
@@ -109,10 +118,12 @@ async function runBackup() {
   const dayDir = path.join(OUT, today());
   fs.mkdirSync(dayDir, { recursive: true, mode: 0o700 });
   let failed = 0;
+  const done = new Map();
   for (const app of list) {
-    try { const n = await backupApp(app, dayDir); log(`${app.name}: OK, ${n} documents`); }
+    try { const n = await backupApp(app, dayDir, done); log(`${app.name}: OK, ${n} documents`); }
     catch (e) { failed++; log(`${app.name}: FAILED ${e.message}`); }
   }
+  fs.writeFileSync(path.join(dayDir, "apps.json"), JSON.stringify(Object.fromEntries([...done].map(([k, a]) => [k.split("/").pop(), a])), null, 2));
   fs.writeFileSync(path.join(dayDir, failed ? "FAILED" : "OK"), new Date().toISOString() + "\n");
   prune();
   if (failed) process.exitCode = 1;
@@ -129,39 +140,39 @@ function list() {
   for (const d of fs.readdirSync(OUT).sort()) {
     const p = path.join(OUT, d);
     const ok = fs.existsSync(path.join(p, "OK")) ? "OK" : fs.existsSync(path.join(p, "FAILED")) ? "SOME FAILED" : "unfinished";
-    const appsIn = fs.readdirSync(p, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).join(", ");
+    const appsIn = fs.readdirSync(p, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).join(", "); // databases
     console.log(`${d}  ${(du(p) / 1048576).toFixed(1)} MB  ${ok}  ${appsIn}`);
   }
 }
 
-async function restore(appName, day) {
-  if (!appName || !/^\d{4}-\d{2}-\d{2}$/.test(day || "")) throw new Error("Usage: node backup.js restore APP YYYY-MM-DD   (see: node backup.js list)");
-  const app = apps().find((a) => a.name === appName);
-  if (!app) throw new Error(`No app called ${appName}`);
-  const src = path.join(OUT, day, appName);
-  if (!fs.existsSync(src)) throw new Error(`No backup of ${appName} on ${day}`);
+async function restore(dbn, day) {
+  if (!dbn || !/^\d{4}-\d{2}-\d{2}$/.test(day || "")) throw new Error("Usage: node backup.js restore DATABASE YYYY-MM-DD   (see: node backup.js list)");
+  const src = path.join(OUT, day, dbn);
+  if (!fs.existsSync(src)) throw new Error(`No backup of the database "${dbn}" on ${day}. See: bash vps-app.sh status`);
+  let owner = null;
+  try { owner = JSON.parse(fs.readFileSync(path.join(OUT, day, "apps.json"), "utf8"))[dbn]; } catch { /* older backup */ }
+  const app = apps().find((a) => a.name === owner) || apps()[0];
+  if (!app) throw new Error("No app with a MongoDB connection found");
   const { MongoClient, BSON } = app.mongo;
   const client = new MongoClient(app.uri, { serverSelectionTimeoutMS: 20000 });
   await client.connect();
   try {
-    for (const dbn of fs.readdirSync(src)) {
-      const target = `${dbn}_restore_${day.replace(/-/g, "")}`.slice(0, 63);
-      const db = client.db(target);
-      if ((await db.listCollections({}, { nameOnly: true }).toArray()).length) throw new Error(`${target} already exists; delete it in Atlas first or restore another day.`);
-      for (const f of fs.readdirSync(path.join(src, dbn)).filter((x) => x.endsWith(".jsonl.gz"))) {
-        const col = db.collection(f.replace(/\.jsonl\.gz$/, ""));
-        const rl = readline.createInterface({ input: fs.createReadStream(path.join(src, dbn, f)).pipe(zlib.createGunzip()), crlfDelay: Infinity });
-        let batch = [], n = 0;
-        for await (const line of rl) {
-          if (!line.trim()) continue;
-          batch.push(BSON.EJSON.parse(line, { relaxed: false }));
-          if (batch.length >= 500) { await col.insertMany(batch, { ordered: false }); n += batch.length; batch = []; }
-        }
-        if (batch.length) { await col.insertMany(batch, { ordered: false }); n += batch.length; }
-        log(`${target}.${col.collectionName}: ${n} documents`);
+    const target = `${dbn}_restore_${day.replace(/-/g, "")}`.slice(0, 63);
+    const db = client.db(target);
+    if ((await db.listCollections({}, { nameOnly: true }).toArray()).length) throw new Error(`${target} already exists; delete it in Atlas first or restore another day.`);
+    for (const f of fs.readdirSync(src).filter((x) => x.endsWith(".jsonl.gz"))) {
+      const col = db.collection(f.replace(/\.jsonl\.gz$/, ""));
+      const rl = readline.createInterface({ input: fs.createReadStream(path.join(src, f)).pipe(zlib.createGunzip()), crlfDelay: Infinity });
+      let batch = [], n = 0;
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        batch.push(BSON.EJSON.parse(line, { relaxed: false }));
+        if (batch.length >= 500) { await col.insertMany(batch, { ordered: false }); n += batch.length; batch = []; }
       }
-      console.log(`\nRestored into the NEW database "${target}". The live database "${dbn}" was not touched.`);
+      if (batch.length) { await col.insertMany(batch, { ordered: false }); n += batch.length; }
+      log(`${target}.${col.collectionName}: ${n} documents`);
     }
+    console.log(`\nRestored into the NEW database "${target}". The live database "${dbn}" was not touched.`);
   } finally { await client.close(); }
 }
 
