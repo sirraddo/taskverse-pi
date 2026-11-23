@@ -65,6 +65,101 @@ async function notifyAll(title, body, tag = 'sirraddo') {
   return sent;
 }
 
+/* ---------------- Telegram alerts (private bot) ----------------
+ * TELEGRAM_BOT_TOKEN in .env. The owner links his Telegram from the Owner page (one-time code, 15 min);
+ * only linked chats get alerts or answers. Commands: /status, /today. Linked chats: data/telegram.json. */
+const TG_FILE = path.join(DATA, 'telegram.json');
+let tg = null;
+function tgStore() {
+  if (tg) return tg;
+  try { tg = JSON.parse(fs.readFileSync(TG_FILE, 'utf8')); } catch { tg = { chats: [], offset: 0 }; }
+  return tg;
+}
+function saveTg() {
+  fs.mkdirSync(DATA, { recursive: true });
+  fs.writeFileSync(TG_FILE + '.tmp', JSON.stringify(tg), { mode: 0o600 });
+  fs.renameSync(TG_FILE + '.tmp', TG_FILE);
+}
+const tgOn = () => /^\d+:[\w-]{20,}$/.test(process.env.TELEGRAM_BOT_TOKEN || '');
+async function tgCall(method, body, timeoutMs = 20_000) {
+  const r = await fetch(`${process.env.TELEGRAM_API || 'https://api.telegram.org'}/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(timeoutMs),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.description || `Telegram HTTP ${r.status}`);
+  return j.result;
+}
+const tgSay = (chatId, text) => tgCall('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), disable_web_page_preview: true });
+async function tgSendAll(text) {
+  if (!tgOn()) return 0;
+  let n = 0;
+  for (const c of [...tgStore().chats]) {
+    try { await tgSay(c.id, text); n++; }
+    catch (e) {
+      console.error('telegram:', e.message);
+      if (/blocked|chat not found|kicked|deactivated/i.test(e.message)) { tg.chats = tg.chats.filter((x) => x.id !== c.id); saveTg(); }
+    }
+  }
+  return n;
+}
+let botName = null;
+async function tgBotName() { if (!botName) botName = (await tgCall('getMe')).username; return botName; }
+const linkCodes = new Map(); // code -> expiry
+
+function statusText() {
+  const gs = groups();
+  const lines = gs.map((g) => `${g.status === 'up' ? '🟢' : g.status === 'down' ? '🔴' : '⚪'} ${g.name}`);
+  const att = state.lastAttention || [];
+  return `SIRRADDO status\n${lines.join('\n')}${att.length ? `\n\nNeeds attention:\n${att.map((a) => '• ' + a).join('\n')}` : '\n\nNothing needs attention.'}`;
+}
+function todayText() {
+  const m = dailySummary(dayKey(), state.days?.[dayKey()], { attention: state.lastAttention || [] });
+  return `Today so far (updated every 5 min)\n${m.text}`;
+}
+
+async function tgHandle(u) {
+  const msg = u.message; if (!msg || !msg.chat) return;
+  const chatId = msg.chat.id, text = String(msg.text || '').trim();
+  const st = tgStore();
+  const linked = st.chats.some((c) => c.id === chatId);
+  const m = text.match(/^\/start\s+([A-Za-z0-9]{10,40})$/);
+  if (m) {
+    const exp = linkCodes.get(m[1]);
+    if (exp && exp > Date.now()) {
+      linkCodes.delete(m[1]);
+      if (!linked) { st.chats.push({ id: chatId, name: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.title || '', at: Date.now() }); saveTg(); }
+      return tgSay(chatId, '✅ Linked. You will get SIRRADDO alerts here and the summary every morning at 8:00.\n\nSend /status or /today any time.');
+    }
+    return tgSay(chatId, 'That link has expired. Open the Owner app and tap "Link Telegram" again.');
+  }
+  if (!linked) return tgSay(chatId, 'This is a private bot.');
+  if (/^\/status\b/.test(text)) return tgSay(chatId, statusText());
+  if (/^\/today\b/.test(text)) return tgSay(chatId, todayText());
+  return tgSay(chatId, 'Send /status or /today.');
+}
+
+async function tgPollOnce(timeout = 25) {
+  const st = tgStore();
+  const updates = await tgCall('getUpdates', { offset: st.offset || 0, timeout, allowed_updates: ['message'] }, (timeout + 10) * 1000);
+  for (const u of updates) {
+    st.offset = u.update_id + 1;
+    try { await tgHandle(u); } catch (e) { console.error('telegram reply:', e.message); }
+  }
+  if (updates.length) saveTg();
+  return updates.length;
+}
+async function tgLoop() {
+  while (tgOn()) {
+    try { await tgPollOnce(); } catch (e) { console.error('telegram poll:', e.message); await new Promise((r) => setTimeout(r, 15_000)); }
+  }
+}
+
+/** Every alert goes to the phone (web push) and to Telegram. */
+async function alertAll(title, body, tag) {
+  const [p, t] = await Promise.all([notifyAll(title, body, tag).catch(() => 0), tgSendAll(`${title}\n${body}`).catch(() => 0)]);
+  return p + t;
+}
+
 /* ---------------- checks ---------------- */
 async function checkOne(svc) {
   const t0 = Date.now();
@@ -100,8 +195,8 @@ async function runChecks() {
     const results = await Promise.all(SERVICES.map(async (s) => [s, await checkOne(s)]));
     for (const [svc, r] of results) {
       const change = applyResult(state, svc.id, r.ok, r.detail);
-      if (change === 'down') notifyAll(`🔴 ${svc.name} is down`, `Failed two checks in a row (${r.detail}).`, 'down-' + svc.id);
-      if (change === 'up') notifyAll(`🟢 ${svc.name} is back up`, 'Answering again.', 'down-' + svc.id);
+      if (change === 'down') alertAll(`🔴 ${svc.name} is down`, `Failed two checks in a row (${r.detail}).`, 'down-' + svc.id);
+      if (change === 'up') alertAll(`🟢 ${svc.name} is back up`, 'Answering again.', 'down-' + svc.id);
       if (change === 'down') sendEmail(`🔴 ${svc.name} is down`, `${svc.name} has failed two checks in a row (${r.detail}).\n${svc.url}\n\nStatus page: https://status.sirraddo.com.ng`);
       if (change === 'up') sendEmail(`🟢 ${svc.name} is back up`, `${svc.name} is answering again.\n\nStatus page: https://status.sirraddo.com.ng`);
     }
@@ -129,7 +224,7 @@ async function watchSummaries() {
   const fresh = newAttention(state, perGroup);
   state.lastAttention = Object.entries(perGroup).flatMap(([g, items]) => (items || []).map((a) => `${g}: ${a}`));
   save();
-  if (fresh.length) await notifyAll(fresh.length === 1 ? '⚠️ Needs attention' : `⚠️ ${fresh.length} things need attention`, fresh.join('\n'), 'attention');
+  if (fresh.length) await alertAll(fresh.length === 1 ? '⚠️ Needs attention' : `⚠️ ${fresh.length} things need attention`, fresh.join('\n'), 'attention');
 }
 
 const lagosHour = () => new Date(Date.now() + 3_600_000).getUTCHours();
@@ -143,7 +238,8 @@ async function maybeDailySummary(force = false) {
   const incidents = state.incidents.filter((i) => i.start >= from && i.start < to).length;
   const msg = dailySummary(yesterday, state.days?.[yesterday], { uptimeByGroup, incidents, attention: state.lastAttention || [] });
   if (!force) { state.lastDaily = today; save(); }
-  await notifyAll('📊 ' + msg.title, msg.body, 'daily');
+  await notifyAll('📊 ' + msg.title, msg.body, 'daily').catch(() => {});
+  await tgSendAll(`📊 ${msg.title}\n${msg.text}`).catch(() => {});
   await sendEmail(`SIRRADDO daily summary · ${msg.title}`, `${msg.text}\n\nOwner dashboard: https://status.sirraddo.com.ng/owner`);
   return msg;
 }
@@ -251,7 +347,8 @@ async function ownerPage(url) {
         <form method="post" action="/owner/push/test" style="flex:1"><button class="ghost" style="width:100%">Send a test alert</button></form>
         <form method="post" action="/owner/push/daily" style="flex:1"><button class="ghost" style="width:100%">Send the daily summary now</button></form>
       </div>
-      <p class="muted" style="margin-bottom:0">${pushStore().subs.length} phone(s) receiving alerts.${url && url.searchParams.get('sent') !== null ? ` · Sent to ${esc(url.searchParams.get('sent'))}.` : ''}</p></div>
+      ${tgOn() ? `<a href="/owner/telegram/link" style="display:block;text-align:center;margin-top:8px;padding:10px;border-radius:10px;background:#229ED9;color:#fff;font-weight:700;text-decoration:none">✈️ ${tgStore().chats.length ? 'Link another Telegram' : 'Link Telegram'}</a><p class="muted" style="margin:6px 0 0">Telegram: ${tgStore().chats.length ? `${tgStore().chats.length} chat(s) linked (${esc(tgStore().chats.map((c) => c.name).filter(Boolean).join(', '))})` : 'not linked yet'}. In Telegram, send /status or /today any time.</p>` : '<p class="muted" style="margin:8px 0 0">Telegram alerts: add TELEGRAM_BOT_TOKEN to turn them on.</p>'}
+      <p class="muted" style="margin-bottom:0">${pushStore().subs.length} phone(s) receiving app alerts.${url && url.searchParams.get('sent') !== null ? ` · Sent to ${esc(url.searchParams.get('sent'))}.` : ''}</p></div>
     <button id="install" hidden style="width:100%;margin-top:12px">📲 Install as an app</button>
     <form method="post" action="/owner/logout" style="margin-top:12px"><button class="ghost">Log out</button> <a href="/owner" style="margin-left:10px">Refresh</a></form>
     ${!process.env.RESEND_API_KEY || !process.env.ALERT_EMAIL ? '<p class="muted">Down/up emails are off (add RESEND_API_KEY and ALERT_EMAIL to turn them on).</p>' : ''}</main>`);
@@ -325,12 +422,21 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, '{"ok":true}', 'application/json');
     }
     if (url.pathname === '/owner/push/test' && req.method === 'POST') {
-      const n = await notifyAll('✅ Test alert', 'Phone alerts from the SIRRADDO Owner app work.', 'test');
+      const n = await alertAll('✅ Test alert', 'Alerts from the SIRRADDO Owner app work.', 'test');
       return send(res, 303, '', undefined, { Location: `/owner?sent=${n}` });
     }
     if (url.pathname === '/owner/push/daily' && req.method === 'POST') {
       await maybeDailySummary(true);
       return send(res, 303, '', undefined, { Location: `/owner?sent=${pushStore().subs.length}` });
+    }
+    if (url.pathname === '/owner/telegram/link' && req.method === 'GET') {
+      if (!authed(req)) return send(res, 303, '', undefined, { Location: '/owner' });
+      if (!tgOn()) return send(res, 400, page('Telegram', '<main><p>Telegram is not set up (TELEGRAM_BOT_TOKEN).</p><a href="/owner">Back</a></main>'));
+      const code = require('crypto').randomBytes(12).toString('hex');
+      linkCodes.set(code, Date.now() + 15 * 60_000);
+      for (const [c, e] of linkCodes) if (e < Date.now()) linkCodes.delete(c);
+      try { return send(res, 303, '', undefined, { Location: `https://t.me/${await tgBotName()}?start=${code}` }); }
+      catch (e) { return send(res, 502, page('Telegram', `<main><p>Could not reach Telegram: ${esc(e.message)}</p><a href="/owner">Back</a></main>`)); }
     }
     if (url.pathname === '/owner/logout' && req.method === 'POST') return send(res, 303, '', undefined, { Location: '/owner', 'Set-Cookie': COOKIE('', 0) });
     if (url.pathname === '/owner/notice' && req.method === 'POST') {
@@ -352,7 +458,8 @@ if (require.main === module) {
   pushStore();
   runChecks();
   setInterval(() => { runChecks().then(() => maybeDailySummary()).catch((e) => console.error(e.message)); }, CHECK_EVERY).unref?.();
+  if (tgOn()) tgLoop();
   setTimeout(() => watchSummaries().catch((e) => console.error('watch:', e.message)), 20_000);
   setInterval(() => watchSummaries().catch((e) => console.error('watch:', e.message)), 5 * 60_000).unref?.();
 }
-module.exports = { server, runChecks, watchSummaries, maybeDailySummary, notifyAll, pushStore, _state: () => state, _setState: (s) => { state = s; } };
+module.exports = { server, runChecks, watchSummaries, tgPollOnce, alertAll, tgStore, maybeDailySummary, notifyAll, pushStore, _state: () => state, _setState: (s) => { state = s; } };
