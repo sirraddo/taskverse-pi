@@ -18,7 +18,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const SERVICES = require('./services');
-const { esc, uptime, dailyBars, applyResult, makeSession, checkSession, passwordOk, cookies } = require('./lib');
+const { esc, uptime, dailyBars, applyResult, makeSession, checkSession, passwordOk, cookies, dayKey, newAttention, dailySummary } = require('./lib');
 
 const PORT = Number(process.env.PORT || 4103);
 const DATA = path.join(__dirname, 'data');
@@ -33,6 +33,36 @@ function save() {
   fs.mkdirSync(DATA, { recursive: true });
   fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state));
   fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
+}
+
+/* ---------------- phone alerts (web push) ----------------
+ * Keys are made on first start and kept in data/push.json with the phones that turned alerts on.
+ * Sent: an app going down / coming back, a new kind of problem in "Needs attention", and the 8am summary. */
+const PUSH_FILE = path.join(DATA, 'push.json');
+let pushData = null;
+function pushStore() {
+  if (pushData) return pushData;
+  try { pushData = JSON.parse(fs.readFileSync(PUSH_FILE, 'utf8')); } catch { pushData = { subs: [] }; }
+  if (!pushData.vapid) { pushData.vapid = require('web-push').generateVAPIDKeys(); savePush(); }
+  return pushData;
+}
+function savePush() {
+  fs.mkdirSync(DATA, { recursive: true });
+  fs.writeFileSync(PUSH_FILE + '.tmp', JSON.stringify(pushData), { mode: 0o600 });
+  fs.renameSync(PUSH_FILE + '.tmp', PUSH_FILE);
+}
+async function notifyAll(title, body, tag = 'sirraddo') {
+  const st = pushStore();
+  if (!st.subs.length) return 0;
+  const wp = require('web-push');
+  wp.setVapidDetails('mailto:' + (process.env.ALERT_EMAIL || 'info@sirraddo.com.ng').split(',')[0].trim(), st.vapid.publicKey, st.vapid.privateKey);
+  let sent = 0; const keep = [];
+  for (const sub of st.subs) {
+    try { await wp.sendNotification(sub, JSON.stringify({ title, body: String(body).slice(0, 900), tag, url: '/owner' }), { TTL: 6 * 3600, urgency: 'high' }); sent++; keep.push(sub); }
+    catch (e) { if (e.statusCode !== 404 && e.statusCode !== 410) keep.push(sub); else console.log('push: removed an old phone'); }
+  }
+  if (keep.length !== st.subs.length) { st.subs = keep; savePush(); }
+  return sent;
 }
 
 /* ---------------- checks ---------------- */
@@ -70,12 +100,52 @@ async function runChecks() {
     const results = await Promise.all(SERVICES.map(async (s) => [s, await checkOne(s)]));
     for (const [svc, r] of results) {
       const change = applyResult(state, svc.id, r.ok, r.detail);
+      if (change === 'down') notifyAll(`🔴 ${svc.name} is down`, `Failed two checks in a row (${r.detail}).`, 'down-' + svc.id);
+      if (change === 'up') notifyAll(`🟢 ${svc.name} is back up`, 'Answering again.', 'down-' + svc.id);
       if (change === 'down') sendEmail(`🔴 ${svc.name} is down`, `${svc.name} has failed two checks in a row (${r.detail}).\n${svc.url}\n\nStatus page: https://status.sirraddo.com.ng`);
       if (change === 'up') sendEmail(`🟢 ${svc.name} is back up`, `${svc.name} is answering again.\n\nStatus page: https://status.sirraddo.com.ng`);
     }
     save();
   } catch (e) { console.error('checks failed:', e.message); }
   finally { checking = false; }
+}
+
+/* ---------------- watching the apps' numbers ----------------
+ * Every 5 minutes: read each app's summary, keep the latest numbers for each Lagos day (for the 8am message),
+ * and alert when a new kind of problem shows up in "Needs attention". */
+async function watchSummaries() {
+  const svcs = SERVICES.filter((s) => s.summary);
+  const sums = await Promise.all(svcs.map(fetchSummary));
+  const day = dayKey();
+  state.days ||= {}; state.days[day] ||= {};
+  const perGroup = {};
+  svcs.forEach((svc, i) => {
+    const s = sums[i];
+    if (s.error) { perGroup[svc.group] = null; return; }
+    state.days[day][svc.group] = { today: s.today, users: s.users, payouts: s.payouts, balances: s.balances };
+    perGroup[svc.group] = s.attention || [];
+  });
+  for (const d of Object.keys(state.days)) if (d < dayKey(Date.now() - 14 * 86_400_000)) delete state.days[d];
+  const fresh = newAttention(state, perGroup);
+  state.lastAttention = Object.entries(perGroup).flatMap(([g, items]) => (items || []).map((a) => `${g}: ${a}`));
+  save();
+  if (fresh.length) await notifyAll(fresh.length === 1 ? '⚠️ Needs attention' : `⚠️ ${fresh.length} things need attention`, fresh.join('\n'), 'attention');
+}
+
+const lagosHour = () => new Date(Date.now() + 3_600_000).getUTCHours();
+async function maybeDailySummary(force = false) {
+  const today = dayKey();
+  if (!force && (lagosHour() < 8 || state.lastDaily === today)) return null;
+  const yesterday = dayKey(Date.now() - 86_400_000);
+  const groupsList = groups();
+  const uptimeByGroup = Object.fromEntries(groupsList.map((g) => { const b = dailyBars(state, g.svcs.map((s) => s.id), 2)[0]; return [g.name, b.pct]; }));
+  const from = Date.parse(yesterday + 'T00:00:00Z') - 3_600_000, to = from + 86_400_000;
+  const incidents = state.incidents.filter((i) => i.start >= from && i.start < to).length;
+  const msg = dailySummary(yesterday, state.days?.[yesterday], { uptimeByGroup, incidents, attention: state.lastAttention || [] });
+  if (!force) { state.lastDaily = today; save(); }
+  await notifyAll('📊 ' + msg.title, msg.body, 'daily');
+  await sendEmail(`SIRRADDO daily summary · ${msg.title}`, `${msg.text}\n\nOwner dashboard: https://status.sirraddo.com.ng/owner`);
+  return msg;
 }
 
 /* ---------------- views ---------------- */
@@ -164,7 +234,7 @@ function summaryCard(svc, s) {
     ${att ? `<div style="margin-top:10px"><b class="warn">Needs attention</b><ul>${att}</ul></div>` : '<p class="muted" style="margin:10px 0 0">Nothing needs attention.</p>'}</div>`;
 }
 
-async function ownerPage() {
+async function ownerPage(url) {
   const withSummary = SERVICES.filter((s) => s.summary);
   const sums = await Promise.all(withSummary.map(fetchSummary));
   const down = SERVICES.filter((s) => state.live[s.id]?.status === 'down');
@@ -174,7 +244,15 @@ async function ownerPage() {
     <div style="text-align:right">${down.length ? `<b class="bad">${down.length} service(s) down</b><div class="muted">${down.map((d) => esc(d.name)).join(', ')}</div>` : '<b style="color:#16a34a">All services up</b>'}<div class="muted"><a href="/">Status page</a></div></div></div></div>
     ${withSummary.map((svc, i) => summaryCard(svc, sums[i])).join('')}
     <h2>Notice on the status page</h2><form class="card" method="post" action="/owner/notice"><textarea name="notice" rows="2" maxlength="300" placeholder="e.g. Zappi NG is being updated, back by 9pm">${esc(state.notice)}</textarea><div class="row" style="margin-top:8px"><span class="muted">Leave empty to remove it.</span><button>Save notice</button></div></form>
-    <button id="install" hidden style="width:100%;margin-top:4px">📲 Install as an app</button>
+    <h2>Phone alerts</h2><div class="card">
+      <p class="muted" style="margin-top:0">Get a notification when an app goes down or comes back, when something new needs attention, and a summary of yesterday every morning at 8:00${process.env.RESEND_API_KEY && process.env.ALERT_EMAIL ? ' (also by email)' : ''}.</p>
+      <button id="alerts" hidden style="width:100%">🔔 Turn on phone alerts</button>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <form method="post" action="/owner/push/test" style="flex:1"><button class="ghost" style="width:100%">Send a test alert</button></form>
+        <form method="post" action="/owner/push/daily" style="flex:1"><button class="ghost" style="width:100%">Send the daily summary now</button></form>
+      </div>
+      <p class="muted" style="margin-bottom:0">${pushStore().subs.length} phone(s) receiving alerts.${url && url.searchParams.get('sent') !== null ? ` · Sent to ${esc(url.searchParams.get('sent'))}.` : ''}</p></div>
+    <button id="install" hidden style="width:100%;margin-top:12px">📲 Install as an app</button>
     <form method="post" action="/owner/logout" style="margin-top:12px"><button class="ghost">Log out</button> <a href="/owner" style="margin-left:10px">Refresh</a></form>
     ${!process.env.RESEND_API_KEY || !process.env.ALERT_EMAIL ? '<p class="muted">Down/up emails are off (add RESEND_API_KEY and ALERT_EMAIL to turn them on).</p>' : ''}</main>`);
 }
@@ -197,6 +275,7 @@ const STATIC = {
 };
 const attempts = new Map();
 const tooMany = (ip) => { const now = Date.now(); const a = (attempts.get(ip) || []).filter((t) => now - t < 15 * 60_000); attempts.set(ip, a); return a.length >= 5; };
+const readBody = (req, max) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > max) req.destroy(); }); req.on('end', () => resolve(b)); });
 const readForm = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 4000) req.destroy(); }); req.on('end', () => resolve(Object.fromEntries(new URLSearchParams(b)))); });
 const SEC = { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
 function send(res, code, body, type = 'text/html; charset=utf-8', extra = {}) { res.writeHead(code, { 'Content-Type': type, ...SEC, ...extra }); res.end(body); }
@@ -220,7 +299,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/owner' && req.method === 'GET') {
       if (!process.env.OWNER_PASSWORD || SECRET.length < 16) return send(res, 503, loginPage('The owner page is not set up yet (OWNER_PASSWORD and SESSION_SECRET).'));
-      return authed(req) ? send(res, 200, await ownerPage(), undefined, { 'Cache-Control': 'no-store' }) : send(res, 200, loginPage());
+      return authed(req) ? send(res, 200, await ownerPage(url), undefined, { 'Cache-Control': 'no-store' }) : send(res, 200, loginPage());
     }
     if (url.pathname === '/owner/login' && req.method === 'POST') {
       if (tooMany(ip)) return send(res, 429, loginPage('Too many tries. Wait 15 minutes.'));
@@ -231,6 +310,27 @@ const server = http.createServer(async (req, res) => {
       }
       attempts.get(ip).push(Date.now());
       return send(res, 401, loginPage('Wrong password.'));
+    }
+    if (url.pathname.startsWith('/owner/push/') && !authed(req)) return send(res, 401, '{"error":"log in first"}', 'application/json');
+    if (url.pathname === '/owner/push/key' && req.method === 'GET') return send(res, 200, JSON.stringify({ publicKey: pushStore().vapid.publicKey }), 'application/json', { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/owner/push/subscribe' && req.method === 'POST') {
+      const raw = await readBody(req, 4000);
+      let sub; try { sub = JSON.parse(raw); } catch { sub = null; }
+      if (!sub || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) return send(res, 400, '{"error":"bad subscription"}', 'application/json');
+      const st = pushStore();
+      const isNew = !st.subs.some((x) => x.endpoint === sub.endpoint);
+      st.subs = st.subs.filter((x) => x.endpoint !== sub.endpoint).concat([{ endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) } }]).slice(-10);
+      savePush();
+      if (isNew) notifyAll('🔔 Alerts are on', 'You will be told here when something needs your attention.', 'welcome');
+      return send(res, 200, '{"ok":true}', 'application/json');
+    }
+    if (url.pathname === '/owner/push/test' && req.method === 'POST') {
+      const n = await notifyAll('✅ Test alert', 'Phone alerts from the SIRRADDO Owner app work.', 'test');
+      return send(res, 303, '', undefined, { Location: `/owner?sent=${n}` });
+    }
+    if (url.pathname === '/owner/push/daily' && req.method === 'POST') {
+      await maybeDailySummary(true);
+      return send(res, 303, '', undefined, { Location: `/owner?sent=${pushStore().subs.length}` });
     }
     if (url.pathname === '/owner/logout' && req.method === 'POST') return send(res, 303, '', undefined, { Location: '/owner', 'Set-Cookie': COOKIE('', 0) });
     if (url.pathname === '/owner/notice' && req.method === 'POST') {
@@ -249,7 +349,10 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, '127.0.0.1', () => console.log(`owner-hub on 127.0.0.1:${PORT}`));
+  pushStore();
   runChecks();
-  setInterval(runChecks, CHECK_EVERY).unref?.();
+  setInterval(() => { runChecks().then(() => maybeDailySummary()).catch((e) => console.error(e.message)); }, CHECK_EVERY).unref?.();
+  setTimeout(() => watchSummaries().catch((e) => console.error('watch:', e.message)), 20_000);
+  setInterval(() => watchSummaries().catch((e) => console.error('watch:', e.message)), 5 * 60_000).unref?.();
 }
-module.exports = { server, runChecks, _state: () => state, _setState: (s) => { state = s; } };
+module.exports = { server, runChecks, watchSummaries, maybeDailySummary, notifyAll, pushStore, _state: () => state, _setState: (s) => { state = s; } };
