@@ -171,10 +171,12 @@ safety() {
 export HOME="$HOME" PATH="$(dirname "$node"):\$PATH"
 APPS="$APPS"; STATE="$OPS/.monitor"; mkdir -p "\$STATE"
 ts() { date -u +%FT%TZ; }
+# A check only counts as failed if it also fails again 10 seconds later (ignores short internet blips).
+ok() { curl -fsS -m 10 "\$1" >/dev/null 2>&1 || { sleep 10; curl -fsS -m 10 "\$1" >/dev/null 2>&1; }; }
 for meta in "\$APPS"/*/.vps-app; do
   [ -f "\$meta" ] || continue
   name=\$(basename "\$(dirname "\$meta")"); port=\$(sed -n 's/^PORT=//p' "\$meta")
-  if curl -fsS -m 10 "http://127.0.0.1:\$port/health" >/dev/null 2>&1; then
+  if ok "http://127.0.0.1:\$port/health"; then
     [ -s "\$STATE/\$name" ] && echo "\$(ts) \$name back to normal"; : > "\$STATE/\$name"
   else
     n=\$(( \$(cat "\$STATE/\$name" 2>/dev/null || echo 0) + 1 )); echo \$n > "\$STATE/\$name"
@@ -182,7 +184,7 @@ for meta in "\$APPS"/*/.vps-app; do
     if [ "\$n" -ge 2 ]; then "$pm2bin" restart "\$name" >/dev/null 2>&1 && echo "\$(ts) \$name restarted"; echo 0 > "\$STATE/\$name"; fi
   fi
 done
-curl -fsS -m 10 https://api.zappipay.com.ng/api/health >/dev/null 2>&1 || echo "\$(ts) zappi-pay health check failed (not restarted by this monitor)"
+ok https://api.zappipay.com.ng/api/health || echo "\$(ts) zappi-pay health check failed (not restarted by this monitor)"
 use=\$(df -P / | awk 'NR==2{gsub("%","",\$5); print \$5}')
 [ "\$use" -ge 85 ] && echo "\$(ts) disk is \${use}% full"
 exit 0

@@ -85,4 +85,57 @@ function passwordOk(given, want) {
 }
 const cookies = (req) => Object.fromEntries(String(req.headers.cookie || '').split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
 
-module.exports = { esc, hourKey, dayKey, recordCheck, uptime, dailyBars, applyResult, makeSession, checkSession, passwordOk, cookies };
+
+/* ---- alerts: only tell the owner when a kind of problem first appears ----
+ * "3 customer(s) owed a refund (π2.0159)" and "4 customer(s) owed…" are the same kind (numbers ignored),
+ * so the owner is told once; if it clears and comes back later, he is told again. */
+const attentionKey = (group, text) => `${group}|${String(text).replace(/[\d.,]+/g, '#')}`;
+function newAttention(state, perGroup, now = Date.now()) {
+  state.seen ||= {};
+  const current = new Set(), fresh = [];
+  for (const [group, items] of Object.entries(perGroup)) {
+    if (items === null) { for (const k of Object.keys(state.seen)) if (k.startsWith(group + '|')) current.add(k); continue; } // app not reachable: keep what we knew
+    for (const a of items) {
+      const k = attentionKey(group, a); current.add(k);
+      if (!state.seen[k]) { state.seen[k] = now; fresh.push(`${group}: ${a}`); }
+    }
+  }
+  for (const k of Object.keys(state.seen)) if (!current.has(k)) delete state.seen[k];
+  return fresh;
+}
+
+/* ---- the 8am message about yesterday ---- */
+const ngn = (n) => `₦${Math.round(Number(n) || 0).toLocaleString('en-NG')}`;
+function dailySummary(day, snap, { uptimeByGroup = {}, incidents = 0, attention = [] } = {}) {
+  const label = new Date(day + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const lines = [], short = [];
+  if (!snap || !Object.keys(snap).length) {
+    lines.push('No numbers were collected yesterday (the dashboard started later in the day).');
+  } else {
+    let total = 0, newUsers = 0;
+    for (const [g, s] of Object.entries(snap)) {
+      const t = s.today || {}; total += Number(t.salesNGN) || 0; newUsers += Number(s.users?.newToday) || 0;
+      const bits = [];
+      if (t.orders !== undefined) bits.push(`${t.orders} order${t.orders === 1 ? '' : 's'}`);
+      if (t.salesNGN !== undefined) bits.push(ngn(t.salesNGN));
+      if (t.salesPi) bits.push(`π${t.salesPi}`);
+      if (t.failed) bits.push(`${t.failed} failed`);
+      if (t.fundedNGN) bits.push(`${ngn(t.fundedNGN)} wallets funded`);
+      if (t.approved !== undefined) bits.push(`${t.approved} task${t.approved === 1 ? '' : 's'} approved`);
+      if (t.feesPi) bits.push(`π${t.feesPi} fees`);
+      if (s.users?.newToday) bits.push(`+${s.users.newToday} user${s.users.newToday === 1 ? '' : 's'}`);
+      lines.push(`${g}: ${bits.join(' · ') || 'no activity'}`);
+    }
+    lines.unshift(`Sales: ${ngn(total)} · New users: ${newUsers}`);
+    short.push(`Sales ${ngn(total)}`, `${newUsers} new user${newUsers === 1 ? '' : 's'}`);
+  }
+  const ups = Object.entries(uptimeByGroup).filter(([, v]) => v !== null);
+  const down = ups.filter(([, v]) => v < 99.9);
+  const upLine = !ups.length ? '' : down.length ? `Uptime: ${down.map(([g, v]) => `${g} ${v.toFixed(1)}%`).join(', ')} (others 100%)` : 'Uptime: all apps 100%';
+  if (upLine) lines.push(upLine + (incidents ? ` · ${incidents} incident${incidents === 1 ? '' : 's'}` : ''));
+  if (down.length) short.push(`${down.length} app${down.length === 1 ? '' : 's'} had downtime`);
+  if (attention.length) { lines.push('', 'Needs attention now:', ...attention.map((a) => `• ${a}`)); short.push(`${attention.length} thing${attention.length === 1 ? ' needs' : 's need'} attention`); }
+  return { title: `Yesterday (${label})`, body: short.join(' · ') || 'Quiet day', text: lines.join('\n') };
+}
+
+module.exports = { attentionKey, newAttention, dailySummary, esc, hourKey, dayKey, recordCheck, uptime, dailyBars, applyResult, makeSession, checkSession, passwordOk, cookies };

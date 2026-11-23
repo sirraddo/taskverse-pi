@@ -4,6 +4,14 @@
   "private": true,
   "description": "Public status page + private owner dashboard for Zappi NG, TaskVerse and ZAPPI PAY",
   "main": "server.js",
-  "scripts": { "start": "node server.js", "test": "node --test test/*.test.js" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
 }
