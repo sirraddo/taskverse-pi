@@ -1,4 +1,5 @@
 import axios from 'axios';
+import mongoose from 'mongoose';
 import PiNetworkPkg from 'pi-backend';
 const PiNetwork = PiNetworkPkg.default ?? PiNetworkPkg;
 
@@ -67,6 +68,58 @@ export async function getPayment(paymentId) {
   return data;
 }
 
+/* ── A2U payouts: one at a time, never twice ──────────────────────
+ * Several places can pay a worker (approval, admin batch, consolidated,
+ * auto-pay scheduler, cron). Two of them working from the same "unpaid" list
+ * could pay the same submission twice. So every send first CLAIMS what it pays
+ * for (submission ids, referral id) in the payout_claims collection, whose _id
+ * is unique: a second claim for the same thing fails and nothing is sent.
+ * Sends are also queued so only one is in flight in this process.
+ *
+ * Claim states: 'sending' → 'paid' (done) | released (deleted: Pi certainly
+ * didn't send, safe to try again) | 'check' (unclear whether Pi was sent, e.g.
+ * a timeout during submit/complete): never retried blindly; settleStuckPayouts()
+ * in autoPay.js looks it up on Pi and the blockchain and finishes or releases it.
+ */
+const claimsCol = () => mongoose.connection.collection('payout_claims');
+
+export function claimKeysFor(metadata = {}) {
+  const keys = [];
+  if (metadata.submissionId) keys.push('sub:' + metadata.submissionId);
+  for (const id of metadata.submissionIds || []) keys.push('sub:' + id);
+  if (metadata.referralId) keys.push('ref:' + metadata.referralId);
+  return [...new Set(keys)];
+}
+
+async function claim(keys, info) {
+  const done = [];
+  try {
+    for (const k of keys) {
+      await claimsCol().insertOne({ _id: k, state: 'sending', at: new Date(), ...info });
+      done.push(k);
+    }
+  } catch (e) {
+    if (done.length) await claimsCol().deleteMany({ _id: { $in: done } });
+    if (e.code === 11000) {
+      const err = new Error('Already paid or being paid (payout claim exists) — not sending again');
+      err.step = 'claim'; err.alreadyClaimed = true;
+      throw err;
+    }
+    throw e;
+  }
+}
+
+export async function releaseClaims(keys) { if (keys.length) await claimsCol().deleteMany({ _id: { $in: keys } }); }
+export async function listCheckClaims() { return claimsCol().find({ state: 'check' }).toArray(); }
+export async function markClaims(keys, set) { if (keys.length) await claimsCol().updateMany({ _id: { $in: keys } }, { $set: set }); }
+
+let sendQueue = Promise.resolve();
+function oneAtATime(fn) {
+  const run = sendQueue.then(fn, fn);
+  sendQueue = run.then(() => {}, () => {});
+  return run;
+}
+
 // A2U: uses pi-backend SDK for full create → blockchain submit → complete flow.
 // Each step is wrapped so a failure reports WHICH step failed, the HTTP status,
 // and Pi's raw response body — instead of a bare "Request failed with status 404".
@@ -81,7 +134,6 @@ export async function createA2UPayment({ uid, amountPi, memo, metadata }) {
       const status = e.response?.status ?? null;
       const body = e.response?.data ?? null;
       const detail = body ? JSON.stringify(body) : e.message;
-      // Log server-side so it appears in Render logs, and throw a rich error.
       console.error(`[A2U:${name}] failed uid=${uid} amount=${amountPi} status=${status} body=${detail}`);
       const err = new Error(`${name} failed (status ${status ?? '?'}): ${detail}`);
       err.step = name;
@@ -91,16 +143,29 @@ export async function createA2UPayment({ uid, amountPi, memo, metadata }) {
     }
   };
 
-  // Step 1: Create payment on Pi Platform
-  const paymentId = await step('createPayment', () => sdk.createPayment({ amount: amountPi, memo, metadata, uid }));
-
-  // Step 2: Sign & submit to Pi blockchain
-  const txid = await step('submitPayment', () => sdk.submitPayment(paymentId));
-
-  // Step 3: Mark complete on Pi Platform
-  const completed = await step('completePayment', () => sdk.completePayment(paymentId, txid));
-
-  return { identifier: paymentId, txid, completed };
+  const keys = claimKeysFor(metadata);
+  return oneAtATime(async () => {
+    await claim(keys, { uid, amountPi, memo, metadata });
+    let paymentId = null;
+    try {
+      // Step 1: Create payment on Pi Platform
+      paymentId = await step('createPayment', () => sdk.createPayment({ amount: amountPi, memo, metadata, uid }));
+      await markClaims(keys, { paymentId });
+      // Step 2: Sign & submit to Pi blockchain
+      const txid = await step('submitPayment', () => sdk.submitPayment(paymentId));
+      await markClaims(keys, { txid });
+      // Step 3: Mark complete on Pi Platform
+      const completed = await step('completePayment', () => sdk.completePayment(paymentId, txid));
+      await markClaims(keys, { state: 'paid', paidAt: new Date() });
+      return { identifier: paymentId, txid, completed };
+    } catch (e) {
+      // Nothing was created → certainly not sent: free the claim so it can be retried.
+      if (!paymentId) await releaseClaims(keys).catch(() => {});
+      // Created (maybe sent) → park it for settleStuckPayouts() to check. Never resend blindly.
+      else await markClaims(keys, { state: 'check', checkSince: new Date(), error: String(e.message).slice(0, 300) }).catch(() => {});
+      throw e;
+    }
+  });
 }
 
 /* ── Horizon (read-only blockchain reads) ────────────────────────

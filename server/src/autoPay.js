@@ -1,8 +1,107 @@
-import { Submission, Payment, User, FeatureFlag } from './models.js';
+import { Submission, Payment, User, FeatureFlag, Referral } from './models.js';
 import { Task } from './models.js';
 import * as pi from './piPlatform.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ── Finish or release payouts whose outcome was unclear ──────────
+ * createA2UPayment parks a payout as 'check' when a payment was created but the
+ * send/complete step failed (e.g. a timeout). It might have reached the worker.
+ * This looks each one up — on Pi, then on the blockchain by memo — and:
+ *   - sent      → completes it on Pi (if needed) and records it as paid (no new send)
+ *   - not sent  → cancels it on Pi once it is too old to still land, and frees
+ *                 the submissions so the normal payout runs can pay them
+ * Never sends Pi. Safe to run any time (scheduler, cron, admin button). */
+let appAddress = null;
+async function appWalletAddress() {
+  if (appAddress || !process.env.PI_WALLET_SEED) return appAddress;
+  try { const m = await import('stellar-sdk'); const Keypair = m.Keypair || m.default?.Keypair; appAddress = Keypair.fromSecret(process.env.PI_WALLET_SEED).publicKey(); } catch (_) { /* fall back to Pi's record */ }
+  return appAddress;
+}
+
+async function findOnChain(fromAddress, paymentId) {
+  fromAddress = fromAddress || await appWalletAddress();
+  if (!fromAddress) throw new Error('cannot tell the app wallet address to check the blockchain');
+  const HORIZON = (process.env.PI_HORIZON_URL || 'https://api.testnet.minepi.com').replace(/\/$/, '');
+  const r = await fetch(`${HORIZON}/accounts/${fromAddress}/transactions?order=desc&limit=100`);
+  if (!r.ok) return null;
+  const data = await r.json();
+  const hit = (data?._embedded?.records || []).find((t) => t.memo === paymentId && t.successful !== false);
+  return hit ? hit.hash : null;
+}
+
+async function recordPaid(keys, paymentId, txid) {
+  const subIds = keys.filter((k) => k.startsWith('sub:')).map((k) => k.slice(4));
+  const refIds = keys.filter((k) => k.startsWith('ref:')).map((k) => k.slice(4));
+  if (subIds.length) {
+    const subs = await Submission.find({ _id: { $in: subIds }, payout: { $exists: false } }).lean();
+    if (subs.length) {
+      const total = subs.reduce((a, s) => a + (s.rewardMicroPi || 0), 0);
+      const payment = await Payment.findOneAndUpdate(
+        { piPaymentId: paymentId },
+        { $setOnInsert: { piPaymentId: paymentId, direction: 'A2U', purpose: 'worker_payout', user: subs[0].worker, task: subs[0].task, submissions: subs.map((s) => s._id), amountMicroPi: total }, $set: { txid, status: 'completed' } },
+        { upsert: true, new: true },
+      );
+      await Submission.updateMany({ _id: { $in: subs.map((s) => s._id) } }, { $set: { payout: payment._id }, $unset: { payoutSkipped: 1 } });
+      const perWorker = {};
+      for (const s of subs) perWorker[s.worker] = (perWorker[s.worker] || 0) + (s.rewardMicroPi || 0);
+      for (const [w, micro] of Object.entries(perWorker)) {
+        await User.updateOne({ _id: w }, [{ $set: { balanceMicroPi: { $max: [0, { $subtract: ['$balanceMicroPi', micro] }] } } }]);
+      }
+    }
+  }
+  for (const id of refIds) {
+    const ref = await Referral.findById(id);
+    if (!ref || ref.status === 'paid') continue;
+    await Payment.findOneAndUpdate(
+      { piPaymentId: paymentId },
+      { $setOnInsert: { piPaymentId: paymentId, direction: 'A2U', purpose: 'referral_bonus', user: ref.referrer, amountMicroPi: ref.rewardMicroPi }, $set: { txid, status: 'completed' } },
+      { upsert: true, new: true },
+    );
+    await User.updateOne({ _id: ref.referrer }, [{ $set: { balanceMicroPi: { $max: [0, { $subtract: ['$balanceMicroPi', ref.rewardMicroPi || 0] }] } } }]);
+    ref.status = 'paid'; ref.paidAt = new Date(); ref.failureReason = undefined;
+    await ref.save();
+  }
+}
+
+export async function settleStuckPayouts({ minAgeMs = 4 * 60_000 } = {}) {
+  const out = { finished: 0, released: 0, waiting: 0, results: [] };
+  const claims = await pi.listCheckClaims();
+  const byPayment = new Map();
+  for (const c of claims) {
+    const k = c.paymentId || 'none';
+    if (!byPayment.has(k)) byPayment.set(k, []);
+    byPayment.get(k).push(c);
+  }
+  for (const [paymentId, group] of byPayment) {
+    const keys = group.map((c) => c._id);
+    try {
+      if (paymentId === 'none') { await pi.releaseClaims(keys); out.released++; continue; }
+      let rec = null;
+      try { rec = await pi.getPayment(paymentId); }
+      catch (e) { if (e.response?.status !== 404) throw e; }
+      let txid = rec?.transaction?.txid || group.find((c) => c.txid)?.txid || null;
+      // Look on the blockchain even if Pi shows it cancelled: a cancel does not stop a
+      // transaction that was already sent (or still landing).
+      if (!txid && rec) txid = await findOnChain(rec.from_address, paymentId);
+      if (txid) {
+        if (rec && !rec.status?.developer_completed) { try { await pi.completePayment(paymentId, txid); } catch (_) { /* already completed */ } }
+        await recordPaid(keys, paymentId, txid);
+        await pi.markClaims(keys, { state: 'paid', paidAt: new Date(), txid });
+        out.finished++; out.results.push({ paymentId, action: 'recorded as paid', txid, keys });
+        continue;
+      }
+      const since = Math.min(...group.map((c) => new Date(c.checkSince || c.at).getTime()));
+      if (rec && Date.now() - since < minAgeMs) { out.waiting++; out.results.push({ paymentId, action: 'waiting (may still land)', keys }); continue; }
+      if (rec && !rec.status?.cancelled) await pi.cancelPayment(paymentId);
+      await pi.releaseClaims(keys);
+      out.released++; out.results.push({ paymentId, action: 'not sent: cancelled and freed for a new payout', keys });
+    } catch (e) {
+      out.waiting++; out.results.push({ paymentId, action: 'could not check yet', error: e.message, keys });
+    }
+  }
+  return out;
+}
 
 // Same rule as the HTTP routes in index.js (duplicated here rather than
 // imported, since index.js imports THIS module — importing back would be
@@ -156,6 +255,8 @@ export async function archiveOldTasks({ days = 30 } = {}) {
 export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 } = {}) {
   const summary = { attempted: 0, succeeded: 0, skippedUnpayable: 0, failed: 0, rateLimited: 0, stoppedForCooldown: false, results: [] };
 
+  try { summary.settled = await settleStuckPayouts(); } catch (e) { summary.settleError = e.message; }
+
   // Blocker check — never stack a second incomplete A2U.
   try {
     const pre = await pi.getIncompleteServerPayments();
@@ -286,6 +387,8 @@ export async function runAutoBatch({ limit = 3, delayMs = 3000, maxRetries = 4 }
 // cooldown, respects one-at-a-time. `maxWorkers` caps how many workers per run.
 export async function runConsolidatedBatch({ maxWorkers = 5, delayMs = 3000, maxRetries = 4, includeSkipped = false } = {}) {
   const summary = { workersAttempted: 0, workersPaid: 0, submissionsPaid: 0, piPaid: 0, skipped: 0, failed: 0, rateLimited: 0, stoppedForCooldown: false, results: [] };
+
+  try { summary.settled = await settleStuckPayouts(); } catch (e) { summary.settleError = e.message; }
 
   // Blocker check first.
   try {
