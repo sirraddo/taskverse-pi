@@ -224,6 +224,13 @@ app.use(cors({
   credentials: true,
 }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/owner/summary', async (req, res) => {
+  const { ownerKeyOk, buildOwnerSummary } = await import('./ownerSummary.js');
+  if (!process.env.OWNER_KEY) return res.status(404).json({ error: 'Not found' });
+  if (!ownerKeyOk(req)) return res.status(401).json({ error: 'Wrong key' });
+  try { res.set('Cache-Control', 'no-store'); res.json(await buildOwnerSummary()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
