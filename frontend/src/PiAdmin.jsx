@@ -13,7 +13,7 @@ import AdminAuditLog from './AdminAuditLog';
 import AdminOverview from './AdminOverview';
 import AdminReferrals from './AdminReferrals';
 import AdminAi from './AdminAi';
-import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, adminRemoveAvatar, fetchAdminSupportUnreadCount, bulkApproveSubmissions, aiReviewSubmission, aiReviewBatch } from './piClient';
+import { fetchAdminQueue, approveSubmission, rejectSubmission, fetchRevenue, fetchDisputes, createAdminTask, reconcilePayouts, cancelStaleFunding, fetchWorkerPaymentLookup, fetchWalletOverview, reconcileA2U, fetchUnpayableSubmissions, reconcileConsolidated, fetchPayoutOverview, settleStuckPayouts, adminRemoveAvatar, fetchAdminSupportUnreadCount, bulkApproveSubmissions, aiReviewSubmission, aiReviewBatch } from './piClient';
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', boxSizing: 'border-box', borderRadius: '8px',
@@ -128,6 +128,18 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
   const [consBusy, setConsBusy] = useState(false);
   const [consConfirm, setConsConfirm] = useState(null); // { maxWorkers } | null
   const [consIncludeSkipped, setConsIncludeSkipped] = useState(false);
+  const [payOverview, setPayOverview] = useState(null);
+  const loadPayOverview = () => fetchPayoutOverview().then(setPayOverview).catch(() => {});
+  useEffect(() => { loadPayOverview(); }, []);
+  const handleSettleStuck = async () => {
+    setConsBusy(true);
+    try {
+      const r = await settleStuckPayouts();
+      notify(`🔎 Checked: ${r.finished} recorded as paid, ${r.released} freed to pay again, ${r.waiting} still waiting. No Pi was sent.`);
+      loadPayOverview();
+    } catch (err) { notify('⚠️ ' + err.message); }
+    finally { setConsBusy(false); }
+  };
 
   const handleCancelStale = () => setStaleConfirm(true);
 
@@ -226,6 +238,7 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
     try {
       const res = await reconcileConsolidated({ maxWorkers: pending.maxWorkers, includeSkipped: consIncludeSkipped });
       setConsResult(res);
+      loadPayOverview();
       if (res.stoppedForCooldown) {
         notify(`⏸ Rate-limited. ${res.workersPaid} worker(s) paid before cooldown.`);
       } else {
@@ -682,6 +695,18 @@ export default function PiAdmin({ onBack, onOpenDisputes, notify }) {
         <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0 0 10px' }}>
           Pays each worker ONE lump sum covering all their pending tasks — far fewer A2U calls, so it clears a backlog with minimal rate-limit hits. Preview pays nothing.
         </p>
+        {payOverview && (
+          <div style={{ background: 'white', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 10px', fontSize: '0.74rem', color: '#065f46', marginBottom: '10px', lineHeight: 1.5 }}>
+            <b>{payOverview.pending}</b> approved task{payOverview.pending === 1 ? '' : 's'} waiting for payout · <b>{payOverview.pendingPi}π</b> to <b>{payOverview.workers}</b> worker{payOverview.workers === 1 ? '' : 's'}
+            {payOverview.skippedUnpayable ? <> · {payOverview.skippedUnpayable} skipped (wallet not active)</> : null}
+            <br />Auto-pay: <b>{payOverview.autoPay ? 'on' : 'off'}</b>{!payOverview.walletReady && <> · <b style={{ color: '#b91c1c' }}>app wallet not set (PI_WALLET_SEED)</b></>}
+            {payOverview.stuck > 0 && <><br /><b style={{ color: '#b45309' }}>{payOverview.stuck} payout{payOverview.stuck === 1 ? '' : 's'} with an unclear result</b> — tap “Check stuck” (it never sends Pi twice).</>}
+          </div>
+        )}
+        <button onClick={handleSettleStuck} disabled={consBusy}
+          style={{ width: '100%', backgroundColor: 'white', color: '#047857', border: '1.5px solid #047857', padding: '8px', borderRadius: '8px', fontWeight: '700', cursor: consBusy ? 'not-allowed' : 'pointer', fontSize: '0.78rem', marginBottom: '8px' }}>
+          🔎 Check stuck payouts (sends nothing)
+        </button>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.72rem', color: '#047857', marginBottom: '10px', cursor: 'pointer' }}>
           <input type="checkbox" checked={consIncludeSkipped} onChange={e => { setConsIncludeSkipped(e.target.checked); setConsPreview(null); }} />

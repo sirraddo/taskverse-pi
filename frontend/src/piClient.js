@@ -329,6 +329,8 @@ export const fetchWalletOverview = () => api('/api/admin/wallet-overview');
 export const reconcileA2U = (opts = {}) => api('/api/admin/reconcile-a2u', opts);
 export const fetchUnpayableSubmissions = () => api('/api/admin/unpayable-submissions');
 export const reconcileConsolidated = (opts = {}) => api('/api/admin/reconcile-consolidated', opts);
+export const fetchPayoutOverview = () => api('/api/admin/payouts/overview');
+export const settleStuckPayouts = () => api('/api/admin/payouts/settle-stuck', {});
 
 /* ── Avatars ──
  * Pictures are resized + compressed in the browser BEFORE upload (see

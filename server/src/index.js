@@ -11,7 +11,7 @@ import webpush from 'web-push';
 import {
   User, Task, Submission, Dispute, Payment, PlatformLedger, Announcement, Banner, FeatureFlag, PlatformSettings, SupportTicket, AdminAuditLog, PushSubscription, Notification, Referral, microPi, toPi, TaskReport } from './models.js';
 import * as pi from './piPlatform.js';
-import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation } from './autoPay.js';
+import { runAutoBatch, startAutoPayScheduler, archiveOldTasks, runConsolidatedBatch, previewConsolidation, settleStuckPayouts } from './autoPay.js';
 import { evaluateSubmission } from './autoReview.js';
 import { mountAi, triageTicket } from './ai.js';
 
@@ -2518,6 +2518,9 @@ app.post('/api/admin/reconcile-a2u', requireAuth, requireAdmin, async (req, res,
       });
     }
 
+    // Finish or free any payout whose outcome was unclear (never sends Pi).
+    try { await settleStuckPayouts(); } catch (e) { console.warn('settleStuckPayouts:', e.message); }
+
     // GUARD: never start a send while Pi already has an incomplete A2U — that is
     // how the previous blocker formed. Bail out and report it instead.
     try {
@@ -2719,6 +2722,30 @@ app.post('/api/admin/auto-reconcile', async (req, res, next) => {
    Far fewer A2U calls than per-task payouts, so it clears a backlog with
    minimal rate-limit exposure. {dryRun:true} previews the grouping (pays
    nothing). Otherwise pays up to {maxWorkers} workers, paced + 429-aware. */
+/* ── Admin: payout catch-up overview + "check stuck payouts" ──
+   Pending = approved work not yet paid to the worker's wallet. Stuck = a send
+   whose outcome was unclear (timeout); checking it never sends Pi. */
+app.get('/api/admin/payouts/overview', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const base = { status: { $in: ['approved', 'auto_approved'] }, payout: { $exists: false } };
+    const [agg, skipped, workers, stuck] = await Promise.all([
+      Submission.aggregate([{ $match: { ...base, 'payoutSkipped.at': { $exists: false } } }, { $group: { _id: null, n: { $sum: 1 }, micro: { $sum: '$rewardMicroPi' } } }]),
+      Submission.countDocuments({ ...base, 'payoutSkipped.at': { $exists: true } }),
+      Submission.distinct('worker', { ...base, 'payoutSkipped.at': { $exists: false } }),
+      pi.listCheckClaims().catch(() => []),
+    ]);
+    res.json({ pending: agg[0]?.n || 0, pendingPi: (agg[0]?.micro || 0) / 1e6, workers: workers.length, skippedUnpayable: skipped, stuck: stuck.length, walletReady: !!process.env.PI_WALLET_SEED, autoPay: (process.env.AUTO_PAY || '').toLowerCase() === 'on' });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/admin/payouts/settle-stuck', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const out = await settleStuckPayouts();
+    await logAdminAction(req, 'payouts.settle_stuck', { details: `${out.finished} recorded as paid, ${out.released} freed, ${out.waiting} waiting` });
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 app.post('/api/admin/reconcile-consolidated', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     if (req.body?.dryRun) {
