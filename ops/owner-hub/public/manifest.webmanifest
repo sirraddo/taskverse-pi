@@ -1,6 +1,6 @@
 {
   "name": "SIRRADDO Owner",
-  "short_name": "SIRRADDO",
+  "short_name": "Owner",
   "description": "Today's numbers and status for Zappi NG, TaskVerse and ZAPPI PAY",
   "id": "/owner",
   "start_url": "/owner",
