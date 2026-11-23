@@ -14,6 +14,9 @@ require('fs').existsSync(__dirname + '/.env') && require('fs').readFileSync(__di
   const m = l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
   if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
 });
+// Prefer IPv4: if the VPS has no working IPv6 route, Node may otherwise try IPv6 first and time out
+// (e.g. reaching api.telegram.org).
+require('dns').setDefaultResultOrder('ipv4first');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -103,7 +106,7 @@ async function tgSendAll(text) {
   return n;
 }
 let botName = null;
-async function tgBotName() { if (!botName) botName = (await tgCall('getMe')).username; return botName; }
+async function tgBotName() { if (!botName) botName = (await tgCall('getMe', {}, 30_000)).username; return botName; }
 const linkCodes = new Map(); // code -> expiry
 
 function statusText() {
