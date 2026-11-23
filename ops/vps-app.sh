@@ -14,6 +14,7 @@
 #   bash vps-app.sh status                                  # backups, monitor and disk at a glance
 #   bash vps-app.sh backup                                  # back up the databases now
 #   bash vps-app.sh restore NAME YYYY-MM-DD                 # copy a backup into a NEW database (live data untouched)
+#   bash vps-app.sh dbuser NAME                             # switch an app to its own database user (tested first)
 #
 # Run it as the same user you use for ZAPPI PAY's PM2 (if you log in as root, as root).
 set -euo pipefail
@@ -225,6 +226,59 @@ status() {
 backupnow() { [ -f "$OPS/backup.js" ] || die "Run 'bash vps-app.sh safety' first"; (cd "$OPS" && node backup.js); }
 restoredb() { [ -f "$OPS/backup.js" ] || die "Run 'bash vps-app.sh safety' first"; (cd "$OPS" && node backup.js restore "$@"); }
 
+# Switch one app to a different MongoDB user. Only the user name and password inside the app's connection
+# string change (same cluster, same database, same options). The new login is tested first; .env is only
+# changed if it works, and the old file is kept as .env.before-dbuser.
+dbuser() {
+  local name="${1:-}"; [ -n "$name" ] || die "Usage: bash vps-app.sh dbuser NAME"
+  meta "$name" >/dev/null; . "$APPS/$name/.vps-app"
+  local dir="$APPS/$name/$SUB" envf="$APPS/$name/$SUB/.env"
+  [ -f "$envf" ] || die "No settings file for $name"
+  local u p
+  read -r -p "New database user name for $name: " u
+  read -r -s -p "Its password (typing is hidden): " p; echo
+  [ -n "$u" ] && [ -n "$p" ] || die "Both are needed. Nothing changed."
+  say "Testing the new login (read and write) before changing anything"
+  local out
+  out=$(cd "$dir" && DBU="$u" DBP="$p" ENVF="$envf" node -e '
+    const fs = require("fs");
+    const env = fs.readFileSync(process.env.ENVF, "utf8");
+    const m = env.match(/^(MONGODB_URI|MONGO_URI)=(.*)$/m);
+    if (!m) { console.error("No MONGODB_URI or MONGO_URI in .env"); process.exit(2); }
+    const key = m[1], old = m[2].trim().replace(/^(["\x27])(.*)\1$/, "$2");
+    const u = new URL(old);
+    u.username = encodeURIComponent(process.env.DBU); u.password = encodeURIComponent(process.env.DBP);
+    const next = u.toString();
+    const dbName = (env.match(/^MONGO_DB_NAME=(.*)$/m) || [])[1]?.trim() || decodeURIComponent(u.pathname.replace(/^\//, "")) || "test";
+    const { MongoClient } = require(require.resolve("mongoose", { paths: [process.cwd()] })).mongo;
+    (async () => {
+      const c = new MongoClient(next, { serverSelectionTimeoutMS: 15000 });
+      try {
+        await c.connect();
+        const db = c.db(dbName);
+        const cols = await db.listCollections({}, { nameOnly: true }).toArray();
+        const t = db.collection("_vps_app_check");
+        await t.insertOne({ at: new Date() }); await t.drop();
+        fs.writeFileSync(process.env.ENVF + ".new", env.replace(m[0], key + "=" + next), { mode: 0o600 });
+        console.log("OK " + dbName + " " + cols.length);
+      } catch (e) { console.error(e.codeName || e.message); process.exit(1); }
+      finally { await c.close().catch(() => {}); }
+    })();
+  ' 2>&1) || die "The new login did not work ($out). Check the user name, password and that it has readWrite on this app's database. Nothing changed."
+  set -- $out
+  echo "Login works: it can read and write the \"$2\" database ($3 collections)."
+  [ "$3" != "0" ] || { rm -f "$envf.new"; die "That database is empty, which is not what $name uses. Nothing changed."; }
+  cp -p "$envf" "$envf.before-dbuser" && chmod 600 "$envf.before-dbuser" && mv "$envf.new" "$envf" && chmod 600 "$envf"
+  pm2 restart "$name" --update-env >/dev/null && pm2 save >/dev/null
+  sleep 6
+  if curl -fsS -m 8 "http://127.0.0.1:$PORT/health" >/dev/null; then
+    echo "Done. $name now uses its own database user. The old settings are saved as .env.before-dbuser."
+  else
+    cp -p "$envf.before-dbuser" "$envf" && pm2 restart "$name" --update-env >/dev/null && pm2 save >/dev/null
+    die "$name did not answer after the change, so the old settings were put back."
+  fi
+}
+
 case "${1:-help}" in
   check) check ;;
   swap) swap ;;
@@ -237,5 +291,6 @@ case "${1:-help}" in
   status) status ;;
   backup) backupnow ;;
   restore) shift; restoredb "$@" ;;
-  *) sed -n '2,19p' "$0" ;;
+  dbuser) shift; dbuser "$@" ;;
+  *) sed -n '2,20p' "$0" ;;
 esac
