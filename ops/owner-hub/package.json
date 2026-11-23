@@ -1,0 +1,9 @@
+{
+  "name": "sirraddo-owner-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public status page + private owner dashboard for Zappi NG, TaskVerse and ZAPPI PAY",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node --test test/*.test.js" },
+  "engines": { "node": ">=18" }
+}
