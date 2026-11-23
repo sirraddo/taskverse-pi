@@ -89,10 +89,16 @@ async function tgCall(method, body, timeoutMs = 20_000) {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(timeoutMs),
   });
   const j = await r.json().catch(() => ({}));
-  if (!j.ok) throw new Error(j.description || `Telegram HTTP ${r.status}`);
+  if (!j.ok) throw Object.assign(new Error(j.description || `Telegram HTTP ${r.status}`), { retryAfter: Number(j.parameters?.retry_after) || 0 });
   return j.result;
 }
-const tgSay = (chatId, text) => tgCall('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), disable_web_page_preview: true });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Telegram says "retry after N seconds" when it is busy: wait that long and try once more.
+async function tgSay(chatId, text) {
+  const body = { chat_id: chatId, text: String(text).slice(0, 4000), disable_web_page_preview: true };
+  try { return await tgCall('sendMessage', body); }
+  catch (e) { if (!e.retryAfter || e.retryAfter > 60) throw e; await sleep((e.retryAfter + 1) * 1000); return tgCall('sendMessage', body); }
+}
 async function tgSendAll(text) {
   if (!tgOn()) return 0;
   let n = 0;
@@ -106,7 +112,11 @@ async function tgSendAll(text) {
   return n;
 }
 let botName = null;
-async function tgBotName() { if (!botName) botName = (await tgCall('getMe', {}, 30_000)).username; return botName; }
+async function tgBotName() {
+  if (!botName) botName = tgStore().botName || null;
+  if (!botName) { botName = (await tgCall('getMe', {}, 30_000)).username; tg.botName = botName; saveTg(); }
+  return botName;
+}
 const linkCodes = new Map(); // code -> expiry
 
 function statusText() {
@@ -153,7 +163,12 @@ async function tgPollOnce(timeout = 25) {
 }
 async function tgLoop() {
   while (tgOn()) {
-    try { await tgPollOnce(); } catch (e) { console.error('telegram poll:', e.message); await new Promise((r) => setTimeout(r, 15_000)); }
+    try { await tgPollOnce(); }
+    catch (e) {
+      console.error('telegram poll:', e.message);
+      // Wait as long as Telegram asks (retrying sooner only extends the block), else 15 s.
+      await sleep(e.retryAfter ? (e.retryAfter + 2) * 1000 : 15_000);
+    }
   }
 }
 
