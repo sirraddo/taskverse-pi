@@ -201,7 +201,9 @@ const readForm = (req) => new Promise((resolve) => { let b = ''; req.on('data', 
 const SEC = { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
 function send(res, code, body, type = 'text/html; charset=utf-8', extra = {}) { res.writeHead(code, { 'Content-Type': type, ...SEC, ...extra }); res.end(body); }
 const authed = (req) => SECRET.length >= 16 && checkSession(SECRET, cookies(req).oh);
-const COOKIE = (v, maxAge) => `oh=${v}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+// Lax (not Strict): when the installed app is opened from the home screen, Android starts it like a link from
+// another app, and Chrome would hold back a Strict cookie on that first page, logging you out every time.
+const COOKIE = (v, maxAge) => `oh=${v}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');

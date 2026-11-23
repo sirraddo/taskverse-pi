@@ -73,7 +73,7 @@ test('server: status page, JSON, owner login, notice, owner dashboard with app n
   assert.equal(r.status, 401);
   r = await fetch(H + '/owner/login', { method: 'POST', body: 'password=a-long-password', headers: { 'content-type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
   assert.equal(r.status, 303); const cookie = r.headers.get('set-cookie').split(';')[0];
-  assert.match(r.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(r.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Lax; Max-Age=2592000/, 'stays logged in 30 days, also when opened from the home screen');
   t = await (await fetch(H + '/owner', { headers: { cookie } })).text();
   assert.match(t, /Sales today \(all apps\)/); assert.match(t, /₦4,500/, 'three apps × ₦1,500');
   assert.match(t, /2 open support ticket\(s\) &lt;b&gt;/, 'app text escaped');
