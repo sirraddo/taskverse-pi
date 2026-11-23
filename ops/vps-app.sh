@@ -10,6 +10,10 @@
 #   bash vps-app.sh https NAME                              # free HTTPS certificate once DNS points here
 #   bash vps-app.sh update NAME                             # pull the latest code and restart
 #   bash vps-app.sh logs NAME                               # last 60 log lines
+#   bash vps-app.sh safety                                  # nightly backups, log clean-up, health monitor (once)
+#   bash vps-app.sh status                                  # backups, monitor and disk at a glance
+#   bash vps-app.sh backup                                  # back up the databases now
+#   bash vps-app.sh restore NAME YYYY-MM-DD                 # copy a backup into a NEW database (live data untouched)
 #
 # Run it as the same user you use for ZAPPI PAY's PM2 (if you log in as root, as root).
 set -euo pipefail
@@ -145,6 +149,82 @@ update() {
 
 logs() { local name="${1:-}"; [ -n "$name" ] || die "Usage: bash vps-app.sh logs NAME"; pm2 logs "$name" --lines 60 --nostream; }
 
+OPS="$APPS/.ops"
+RAW="https://raw.githubusercontent.com/sirraddo/taskverse-pi/main/ops"
+
+safety() {
+  local node pm2bin; node=$(command -v node) || die "Node not found"; pm2bin=$(command -v pm2) || die "PM2 not found"
+  $SUDO mkdir -p "$OPS" && $SUDO chown "$(id -u):$(id -g)" "$OPS" && chmod 700 "$OPS"
+
+  say "1/3 Database backups (every night at 03:30 Lagos time, last 7 kept)"
+  local here; here="$(cd "$(dirname "$0")" && pwd)"
+  if [ -f "$here/vps-backup.js" ]; then cp "$here/vps-backup.js" "$OPS/backup.js"; else curl -fsSL "$RAW/vps-backup.js" -o "$OPS/backup.js"; fi
+  chmod 700 "$OPS/backup.js"
+
+  say "2/3 Health monitor (every 5 minutes)"
+  cat > "$OPS/monitor.sh" <<MON
+#!/usr/bin/env bash
+# Written by vps-app.sh safety. Checks each vps-app backend every 5 minutes; after 2 failed checks in a row it
+# restarts that app. ZAPPI PAY is only checked and logged, never restarted.
+export HOME="$HOME" PATH="$(dirname "$node"):\$PATH"
+APPS="$APPS"; STATE="$OPS/.monitor"; mkdir -p "\$STATE"
+ts() { date -u +%FT%TZ; }
+for meta in "\$APPS"/*/.vps-app; do
+  [ -f "\$meta" ] || continue
+  name=\$(basename "\$(dirname "\$meta")"); port=\$(sed -n 's/^PORT=//p' "\$meta")
+  if curl -fsS -m 10 "http://127.0.0.1:\$port/health" >/dev/null 2>&1; then
+    [ -s "\$STATE/\$name" ] && echo "\$(ts) \$name back to normal"; : > "\$STATE/\$name"
+  else
+    n=\$(( \$(cat "\$STATE/\$name" 2>/dev/null || echo 0) + 1 )); echo \$n > "\$STATE/\$name"
+    echo "\$(ts) \$name health check failed (\$n in a row)"
+    if [ "\$n" -ge 2 ]; then "$pm2bin" restart "\$name" >/dev/null 2>&1 && echo "\$(ts) \$name restarted"; echo 0 > "\$STATE/\$name"; fi
+  fi
+done
+curl -fsS -m 10 https://api.zappipay.com.ng/api/health >/dev/null 2>&1 || echo "\$(ts) zappi-pay health check failed (not restarted by this monitor)"
+use=\$(df -P / | awk 'NR==2{gsub("%","",\$5); print \$5}')
+[ "\$use" -ge 85 ] && echo "\$(ts) disk is \${use}% full"
+exit 0
+MON
+  chmod 700 "$OPS/monitor.sh"
+
+  say "3/3 Log clean-up (app logs kept 7 days, compressed)"
+  $SUDO tee /etc/logrotate.d/vps-apps >/dev/null <<ROT
+$HOME/.pm2/logs/*.log $OPS/*.log {
+  daily
+  rotate 7
+  maxsize 20M
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+}
+ROT
+  if command -v logrotate >/dev/null && ! $SUDO logrotate -d /etc/logrotate.d/vps-apps >/dev/null 2>&1; then $SUDO rm -f /etc/logrotate.d/vps-apps; die "Log clean-up settings were rejected and removed again; nothing else changed."; fi
+
+  local tmp; tmp=$(mktemp)
+  { crontab -l 2>/dev/null || true; } | { grep -v '# vps-app-safety' || true; } > "$tmp"
+  echo "30 2 * * * cd $OPS && $node backup.js >> $OPS/backup.log 2>&1 # vps-app-safety" >> "$tmp"
+  echo "*/5 * * * * $OPS/monitor.sh >> $OPS/monitor.log 2>&1 # vps-app-safety" >> "$tmp"
+  crontab "$tmp" && rm -f "$tmp"
+
+  say "First backup now"
+  (cd "$OPS" && "$node" backup.js) || echo "The first backup had a problem; see the lines above."
+  "$OPS/monitor.sh"
+  echo
+  echo "Done. See everything with: bash vps-app.sh status"
+}
+
+status() {
+  say "Backups"; [ -f "$OPS/backup.js" ] && (cd "$OPS" && node backup.js list) || echo "Not set up yet: bash vps-app.sh safety"
+  say "Monitor (last 10 events)"; tail -n 10 "$OPS/monitor.log" 2>/dev/null || echo "No events yet (no news is good news)."
+  say "Disk"; df -h / | tail -1
+  say "Scheduled jobs"; crontab -l 2>/dev/null | grep 'vps-app-safety' || echo "None. Run: bash vps-app.sh safety"
+}
+
+backupnow() { [ -f "$OPS/backup.js" ] || die "Run 'bash vps-app.sh safety' first"; (cd "$OPS" && node backup.js); }
+restoredb() { [ -f "$OPS/backup.js" ] || die "Run 'bash vps-app.sh safety' first"; (cd "$OPS" && node backup.js restore "$@"); }
+
 case "${1:-help}" in
   check) check ;;
   swap) swap ;;
@@ -153,5 +233,9 @@ case "${1:-help}" in
   https) shift; https "$@" ;;
   update) shift; update "$@" ;;
   logs) shift; logs "$@" ;;
-  *) sed -n '2,15p' "$0" ;;
+  safety) safety ;;
+  status) status ;;
+  backup) backupnow ;;
+  restore) shift; restoredb "$@" ;;
+  *) sed -n '2,19p' "$0" ;;
 esac
