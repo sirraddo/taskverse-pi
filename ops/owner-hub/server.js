@@ -97,7 +97,7 @@ header small{display:block;opacity:.8;font-size:13px}main{padding:16px}
 ul{margin:6px 0 0;padding-left:18px}input,textarea,button{font:inherit}input,textarea{width:100%;padding:10px;border:1px solid #cbd3e3;border-radius:10px}
 button{background:#13254F;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700}button.ghost{background:#fff;color:#13254F;border:1px solid #13254F}
 h2{font-size:16px;margin:18px 0 8px}a{color:#13254F}.warn{color:#b45309}.bad{color:#b91c1c}`;
-const page = (title, body, { refresh } = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ''}<title>${esc(title)}</title><style>${CSS}</style></head><body>${body}</body></html>`;
+const page = (title, body, { refresh } = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ''}<title>${esc(title)}</title><meta name="theme-color" content="#13254F"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SIRRADDO"><style>${CSS}</style></head><body>${body}<script src="/app.js" defer></script></body></html>`;
 const fmtTime = (t) => t ? new Date(t).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const pct = (v) => (v === null ? '—' : `${v >= 99.995 ? '100' : v.toFixed(2)}%`);
 const dur = (ms) => { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} days`; };
@@ -174,6 +174,7 @@ async function ownerPage() {
     <div style="text-align:right">${down.length ? `<b class="bad">${down.length} service(s) down</b><div class="muted">${down.map((d) => esc(d.name)).join(', ')}</div>` : '<b style="color:#16a34a">All services up</b>'}<div class="muted"><a href="/">Status page</a></div></div></div></div>
     ${withSummary.map((svc, i) => summaryCard(svc, sums[i])).join('')}
     <h2>Notice on the status page</h2><form class="card" method="post" action="/owner/notice"><textarea name="notice" rows="2" maxlength="300" placeholder="e.g. Zappi NG is being updated, back by 9pm">${esc(state.notice)}</textarea><div class="row" style="margin-top:8px"><span class="muted">Leave empty to remove it.</span><button>Save notice</button></div></form>
+    <button id="install" hidden style="width:100%;margin-top:4px">📲 Install as an app</button>
     <form method="post" action="/owner/logout" style="margin-top:12px"><button class="ghost">Log out</button> <a href="/owner" style="margin-left:10px">Refresh</a></form>
     ${!process.env.RESEND_API_KEY || !process.env.ALERT_EMAIL ? '<p class="muted">Down/up emails are off (add RESEND_API_KEY and ALERT_EMAIL to turn them on).</p>' : ''}</main>`);
 }
@@ -183,10 +184,21 @@ const loginPage = (msg) => page('Owner login · SIRRADDO', `<header><div class="
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}<button style="width:100%">Log in</button></form></main>`);
 
 /* ---------------- http ---------------- */
+// Files that make the owner dashboard installable as an app on the phone.
+const STATIC = {
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json', 'no-cache'],
+  '/sw.js': ['sw.js', 'text/javascript; charset=utf-8', 'no-cache'],
+  '/app.js': ['app.js', 'text/javascript; charset=utf-8', 'no-cache'],
+  '/icon-192.png': ['icon-192.png', 'image/png', 'public, max-age=604800'],
+  '/icon-512.png': ['icon-512.png', 'image/png', 'public, max-age=604800'],
+  '/icon-maskable-512.png': ['icon-maskable-512.png', 'image/png', 'public, max-age=604800'],
+  '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png', 'public, max-age=604800'],
+  '/favicon.png': ['favicon.png', 'image/png', 'public, max-age=604800'],
+};
 const attempts = new Map();
 const tooMany = (ip) => { const now = Date.now(); const a = (attempts.get(ip) || []).filter((t) => now - t < 15 * 60_000); attempts.set(ip, a); return a.length >= 5; };
 const readForm = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 4000) req.destroy(); }); req.on('end', () => resolve(Object.fromEntries(new URLSearchParams(b)))); });
-const SEC = { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
+const SEC = { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
 function send(res, code, body, type = 'text/html; charset=utf-8', extra = {}) { res.writeHead(code, { 'Content-Type': type, ...SEC, ...extra }); res.end(body); }
 const authed = (req) => SECRET.length >= 16 && checkSession(SECRET, cookies(req).oh);
 const COOKIE = (v, maxAge) => `oh=${v}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
@@ -196,6 +208,10 @@ const server = http.createServer(async (req, res) => {
   const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   try {
     if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, '{"ok":true}', 'application/json');
+    if (req.method === 'GET' && STATIC[url.pathname]) {
+      const [file, type, cache] = STATIC[url.pathname];
+      return send(res, 200, fs.readFileSync(path.join(__dirname, 'public', file)), type, { 'Cache-Control': cache });
+    }
     if (req.method === 'GET' && url.pathname === '/') return send(res, 200, statusPage(), undefined, { 'Cache-Control': 'no-store' });
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return send(res, 200, JSON.stringify({ notice: state.notice || null, groups: groups().map((g) => ({ name: g.name, status: g.status, uptime24h: g.up24, uptime30d: g.up30 })) }), 'application/json', { 'Cache-Control': 'no-store' });
@@ -209,7 +225,7 @@ const server = http.createServer(async (req, res) => {
       const f = await readForm(req);
       if (SECRET.length >= 16 && passwordOk(f.password, process.env.OWNER_PASSWORD)) {
         attempts.delete(ip);
-        return send(res, 303, '', undefined, { Location: '/owner', 'Set-Cookie': COOKIE(makeSession(SECRET), 7 * 86400) });
+        return send(res, 303, '', undefined, { Location: '/owner', 'Set-Cookie': COOKIE(makeSession(SECRET, 30), 30 * 86400) });
       }
       attempts.get(ip).push(Date.now());
       return send(res, 401, loginPage('Wrong password.'));
