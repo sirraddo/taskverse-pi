@@ -179,7 +179,8 @@ const me = await fetchMe();
 const prev = lastApprovedRef.current;
 if (me.approvedCount > prev) {
 const earned = me.approvedCount - prev;
-triggerNotification('Payout received! ' + earned + ' task' + (earned > 1 ? 's' : '') + ' approved. Balance: ' + Number(me.balance).toFixed(2) + ' pi');
+// Approval adds to the in-app balance; the Pi payout to the wallet comes later (see Receipts), so don't say "received".
+triggerNotification('✅ ' + earned + ' task' + (earned > 1 ? 's' : '') + ' approved! Balance: ' + Number(me.balance).toFixed(2) + ' π. Payout status is in Receipts.');
 lastApprovedRef.current = me.approvedCount;
 }
 setUser(prev => (me && me.username) ? ({ ...prev, ...me, isAdmin: me.isAdmin ?? prev?.isAdmin }) : prev);
