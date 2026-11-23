@@ -13,7 +13,7 @@
 #   bash vps-app.sh safety                                  # nightly backups, log clean-up, health monitor (once)
 #   bash vps-app.sh status                                  # backups, monitor and disk at a glance
 #   bash vps-app.sh backup                                  # back up the databases now
-#   bash vps-app.sh restore NAME YYYY-MM-DD                 # copy a backup into a NEW database (live data untouched)
+#   bash vps-app.sh restore DATABASE YYYY-MM-DD             # copy a backup into a NEW database (live data untouched)
 #   bash vps-app.sh dbuser NAME                             # switch an app to its own database user (tested first)
 #
 # Run it as the same user you use for ZAPPI PAY's PM2 (if you log in as root, as root).
