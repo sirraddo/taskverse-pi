@@ -5,7 +5,7 @@
 #
 #   bash vps-app.sh check                                   # memory, swap, what's running
 #   bash vps-app.sh swap                                    # add a 1 GB swap file (only if there is none)
-#   bash vps-app.sh add NAME PORT DOMAIN REPO [SUBFOLDER]   # first install of one backend
+#   bash vps-app.sh add NAME PORT DOMAIN REPO [SUBFOLDER]   # first install of one app (DOMAIN can be a,b for two names)
 #   bash vps-app.sh env NAME                                # edit its settings (.env), then restart it
 #   bash vps-app.sh https NAME                              # free HTTPS certificate once DNS points here
 #   bash vps-app.sh update NAME                             # pull the latest code and restart
@@ -16,6 +16,7 @@
 #   bash vps-app.sh restore DATABASE YYYY-MM-DD             # copy a backup into a NEW database (live data untouched)
 #   bash vps-app.sh dbuser NAME                             # switch an app to its own database user (tested first)
 #   bash vps-app.sh offsite                                 # also copy each night's backup to Cloudflare R2
+#   bash vps-app.sh bgremover                               # install / update the website's background remover (Design studio)
 #
 # Run it as the same user you use for ZAPPI PAY's PM2 (if you log in as root, as root).
 set -euo pipefail
@@ -97,12 +98,14 @@ add() {
   sleep 4
   curl -fsS -m 5 "http://127.0.0.1:$port/health" >/dev/null 2>&1 && echo "Health check: OK" || echo "Health check didn't answer yet; see: bash vps-app.sh logs $name"
 
-  say "Nginx site for $domain"
+  say "Nginx site for ${domain//,/ and }"
   $SUDO tee "/etc/nginx/sites-available/$name" >/dev/null <<NGINX
 server {
   listen 80;
-  server_name $domain;
-  client_max_body_size 5m;
+  server_name ${domain//,/ };
+  client_max_body_size ${BODY_MAX:-5m};
+  gzip on;
+  gzip_types text/css application/javascript text/javascript application/json image/svg+xml application/manifest+json text/plain application/xml;
   location / {
     proxy_pass http://127.0.0.1:$port;
     proxy_http_version 1.1;
@@ -120,7 +123,7 @@ NGINX
   fi
   echo
   echo "Done. Next:"
-  echo "  1. In Cloudflare DNS add: A  ${domain%%.*}  →  $(curl -fsS -m 5 https://api.ipify.org 2>/dev/null || echo 'this server IP')  (grey cloud, DNS only)"
+  echo "  1. In Cloudflare DNS point ${domain//,/ and } (A record) →  $(curl -fsS -m 5 https://api.ipify.org 2>/dev/null || echo 'this server IP')  (grey cloud, DNS only)"
   echo "  2. Then run: bash vps-app.sh https $name"
 }
 
@@ -135,8 +138,10 @@ https() {
   local name="${1:-}"; [ -n "$name" ] || die "Usage: bash vps-app.sh https NAME"
   meta "$name" >/dev/null; . "$APPS/$name/.vps-app"
   command -v certbot >/dev/null || { say "Installing certbot"; $SUDO apt-get update -qq && $SUDO apt-get install -y -qq certbot python3-certbot-nginx; }
-  $SUDO certbot --nginx -d "$DOMAIN" --redirect --non-interactive --agree-tos --register-unsafely-without-email
-  curl -fsS -m 8 "https://$DOMAIN/health" && echo && echo "HTTPS works: https://$DOMAIN"
+  local ds=() d; IFS=',' read -ra ds <<< "$DOMAIN"
+  local args=(); for d in "${ds[@]}"; do args+=(-d "$d"); done
+  $SUDO certbot --nginx "${args[@]}" --redirect --non-interactive --agree-tos --register-unsafely-without-email
+  curl -fsS -m 8 "https://${ds[0]}/health" && echo && echo "HTTPS works: https://${ds[0]}"
 }
 
 update() {
@@ -245,6 +250,31 @@ offsite() {
   echo "Done. From tonight each backup is also copied to R2 (last 14 days kept there)."
 }
 
+# The website's background remover (Design studio → Remove background). Runs from the website's folder as its own
+# PM2 app on 127.0.0.1:4105 (never public). Safe to run again: it updates the packages and restarts it.
+bgremover() {
+  local site="$APPS/sirraddo-website" dir="$APPS/sirraddo-website/services/bg-remover"
+  [ -d "$dir" ] || die "Install the website first (bash vps-app.sh add sirraddo-website …), then run this."
+  say "Installing the background remover's packages (about 300 MB, once)"
+  (cd "$dir" && ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install --omit=dev --no-audit --no-fund)
+  if [ ! -s "$dir/models/isnet-general-use.onnx" ]; then
+    say "Downloading the background model (about 180 MB, once)"
+    (cd "$dir" && npm run model)
+  fi
+  if ! grep -q '^BG_KEY=' "$site/.env"; then
+    echo "BG_KEY=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)" >> "$site/.env"
+    echo "Added a private BG_KEY to the website's settings."
+  fi
+  say "Starting bg-remover (it only uses memory while you remove backgrounds)"
+  if pm2 describe bg-remover >/dev/null 2>&1; then pm2 restart bg-remover --update-env; else
+    (cd "$dir" && pm2 start npm --name bg-remover --max-memory-restart 1200M --time -- start)
+  fi
+  pm2 restart sirraddo-website --update-env >/dev/null 2>&1 || true
+  pm2 save
+  sleep 3
+  curl -fsS -m 5 http://127.0.0.1:4105/health >/dev/null && echo "Background remover: OK" || echo "No answer yet; see: pm2 logs bg-remover --lines 30 --nostream"
+}
+
 status() {
   say "Backups"; [ -f "$OPS/backup.js" ] && (cd "$OPS" && node backup.js list) || echo "Not set up yet: bash vps-app.sh safety"
   say "Monitor (last 10 events)"; tail -n 10 "$OPS/monitor.log" 2>/dev/null || echo "No events yet (no news is good news)."
@@ -323,5 +353,6 @@ case "${1:-help}" in
   restore) shift; restoredb "$@" ;;
   dbuser) shift; dbuser "$@" ;;
   offsite) offsite ;;
-  *) sed -n '2,21p' "$0" ;;
+  bgremover) bgremover ;;
+  *) sed -n '2,22p' "$0" ;;
 esac
