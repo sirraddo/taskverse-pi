@@ -151,7 +151,9 @@ update() {
   git -C "$APPS/$name" pull --ff-only
   (cd "$APPS/$name/$SUB" && npm ci --omit=dev --no-audit --no-fund)
   pm2 restart "$name" --update-env && pm2 save
-  sleep 3; curl -fsS -m 5 "http://127.0.0.1:$PORT/health" >/dev/null && echo "Health check: OK" || echo "No answer yet; see: bash vps-app.sh logs $name"
+  # Give it up to 30 seconds to start (the website builds its pages first).
+  local i; for i in $(seq 1 15); do sleep 2; curl -fsS -m 5 "http://127.0.0.1:$PORT/health" >/dev/null && { echo "Health check: OK"; return 0; }; done
+  echo "No answer after 30 seconds; see: bash vps-app.sh logs $name"
 }
 
 logs() { local name="${1:-}"; [ -n "$name" ] || die "Usage: bash vps-app.sh logs NAME"; pm2 logs "$name" --lines 60 --nostream; }
